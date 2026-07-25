@@ -1,0 +1,24 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+env/
+
+# Database - keep this, binary merge conflicts are miserable
+*.db
+*.sqlite
+*.sqlite3
+
+# Secrets
+.env
+*.key
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
