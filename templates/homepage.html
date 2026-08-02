@@ -4,11 +4,88 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="../static/styles/homepage.css">
-    <title>Home</title>
+    <title>DiresQ</title>
 </head>
 <body>
-    <!-- Code here -->
 
-    <script src="../static/scripts/homepage.js"></script>
+<div class="container">
+
+    <main>
+
+        <div class="topbar">
+
+            <input
+                id="search"
+                type="text"
+                placeholder="Search reports..."
+            >
+
+            <button class="mobile-filter" id="filterBtn" aria-label="Open filters">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+
+        </div>
+
+        <div class="reports">
+
+            {% for report in reports %}
+
+            <article
+                class="report-card"
+                data-title="{{ report.title|lower }}"
+                data-priority="{{ report.priority }}">
+
+                <h2>{{ report.title }}</h2>
+
+                <span class="priority {{ report.priority|lower }}">
+                    {{ report.priority }}
+                </span>
+
+                <p>
+                    {{ report.description[:120] }}...
+                </p>
+
+            </article>
+
+            {% endfor %}
+
+        </div>
+
+    </main>
+
+    <aside id="sidebar">
+
+        <a href="/create-report" class="create-btn">
+            + Create Report
+        </a>
+
+        <div class="filter-box">
+
+            <h3>Priority</h3>
+
+            <label>
+                <input type="checkbox" value="HIGH" checked>
+                High
+            </label>
+
+            <label>
+                <input type="checkbox" value="MEDIUM" checked>
+                Medium
+            </label>
+
+            <label>
+                <input type="checkbox" value="LOW" checked>
+                Low
+            </label>
+
+        </div>
+
+    </aside>
+
+</div>
+
+<script src="../static/scripts/homepage.js"></script>
 </body>
 </html>
