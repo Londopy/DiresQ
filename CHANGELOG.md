@@ -34,6 +34,9 @@ All notable changes to this project are documented here. Format follows
   touching the screen. It renders server-side first, so it still works with
   JavaScript switched off.
 - Check in to reset your timer and update your position.
+- The number of overdue responders is available to every page, so navigation
+  can carry the alarm. You find out somebody is late without having to be
+  looking at the board.
 - Report cards say how many people are on their way and how many have arrived,
   and carry the staffing signal when someone on scene has set one. A report
   nobody has gone to reads "0 responding".

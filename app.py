@@ -109,6 +109,21 @@ def inject_user():
     return {"current_user": current_user()}
 
 
+@app.context_processor
+def inject_overdue_count():
+    """How many responders are late, available on every page.
+
+    Lets the nav carry the alarm, so you find out someone is overdue without
+    having to be looking at the board. Costs one query per page render, which
+    is fine at this scale and would need caching at a real one.
+    """
+    def overdue_count() -> int:
+        if current_user() is None:
+            return 0
+        return sum(1 for r in fetch_responders() if r["overdue"])
+    return {"overdue_count": overdue_count}
+
+
 def resolve_staffing(votes) -> str:
     """Most cautious vote from anyone on scene, or 'unstaffed' if nobody voted."""
     ranked = [v for v in votes if v in STAFFING_ORDER]

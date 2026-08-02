@@ -623,6 +623,43 @@ class TestBoardPage:
         assert anon.get("/board").status_code == 200
 
 
+class TestOverdueCountInNav:
+    @staticmethod
+    def count():
+        with diresq.app.test_request_context():
+            return diresq.inject_overdue_count()["overdue_count"]()
+
+    def test_zero_when_nobody_is_late(self, client):
+        assert self.count() == 0
+
+    def test_counts_only_the_overdue(self, client):
+        client.post("/report/1/rescue")
+        assert self.count() == 0, "counted someone who is not late yet"
+
+        stale = (datetime.now(timezone.utc) - timedelta(minutes=90)).isoformat(
+            timespec="seconds")
+        with diresq.app.app_context():
+            db = diresq.get_db()
+            db.execute("UPDATE assignments SET joined_at = ?", (stale,))
+            db.commit()
+        assert self.count() == 1
+
+    def test_a_checkin_clears_it(self, client):
+        client.post("/report/1/rescue")
+        stale = (datetime.now(timezone.utc) - timedelta(minutes=90)).isoformat(
+            timespec="seconds")
+        with diresq.app.app_context():
+            db = diresq.get_db()
+            db.execute("UPDATE assignments SET joined_at = ?", (stale,))
+            db.commit()
+        assert self.count() == 1
+        client.post("/api/checkin", json={"lat": 29.78, "lng": -95.82})
+        assert self.count() == 0
+
+    def test_zero_for_anonymous_visitors(self, anon):
+        assert self.count() == 0
+
+
 class TestFeedReordersOnStaffing:
     def on_scene_and_vote(self, client, report_id, vote):
         client.post(f"/report/{report_id}/rescue")
