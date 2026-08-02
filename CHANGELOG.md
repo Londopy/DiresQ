@@ -92,7 +92,8 @@ All notable changes to this project are documented here. Format follows
   Every assignment, arrival, check-in and automatic alert, in time order.
 - A documentation site under `site/`, built from the same `docs/` files that
   live in the repo, so the two can never disagree. Twelve pages, including why
-  this was built, how to run it, and what the accessibility audit found, with
+  this was built, how to run it, what the security model does and does not
+  cover, and what the accessibility audit found, with
   a light that follows the cursor and transitions between pages that leave the
   header where it is. All of the movement switches off for anyone who has
   asked their system for less of it.
@@ -163,6 +164,23 @@ All notable changes to this project are documented here. Format follows
   every browser produces ends in `Z`, which Python only learned to parse in
   3.11 — so every queued check-in would have worked on the machine this was
   written on and been rejected anywhere older.
+- The app could not be used by keyboard alone. Six stylesheets defined no
+  focus outline at all, so tabbing through the accountability board gave no
+  indication of where you were. There is now a visible focus ring on every
+  control on every page.
+- Sign-in, sign-up and both search boxes had no labels, only placeholder text
+  — which disappears the moment you type and may never be announced by a
+  screen reader at all. Every input has a real label now.
+- Two colours were effectively unreadable: capability tags at 1.8:1 against
+  their background, and the footer at 3.4:1. Both moved to a tone that passes.
+- No page could be skipped into, and nine of ten had no main landmark, so
+  reaching the content meant tabbing the whole header every time.
+- The board replaced its contents every three seconds without telling anyone.
+  It now announces changes politely, so a screen reader is not interrupted
+  mid-sentence on every refresh.
+- Buttons and links that get tapped in the rain were under the size a thumb
+  can reliably hit.
+- Movement did not stop for anyone whose system asks for less of it.
 - Pressing resolve twice said "only the reporter or someone on scene can
   resolve this" — because resolving clears you off the report, and so takes
   away the right you had just used. It now says it is already resolved, which
@@ -171,22 +189,6 @@ All notable changes to this project are documented here. Format follows
   in pieces, because a table had been added without a matching drop. The tables
   are now torn down in the order their foreign keys allow, and a test reads the
   schema and fails if anything is created that is never dropped.
-
-### Accessibility
-
-- Every page can be skipped straight into with one keypress, has a main
-  landmark, and declares its language.
-- A visible focus outline on every control, on every page. Six stylesheets had
-  none at all, which makes the app unusable by keyboard without a mouse to
-  guess with.
-- Every input has a real label. Several relied on a placeholder, which
-  disappears the moment you type and may never be announced at all.
-- Two colours were unreadable — capability tags at 1.8:1 against their
-  background, and the footer at 3.4:1. Both moved to a tone that passes.
-- The board announces changes politely rather than assertively, so a screen
-  reader is not interrupted mid-sentence every three seconds.
-- Buttons and links people tap in the rain are at least 44 by 44 pixels.
-- All movement stops for anyone whose system asks for reduced motion.
 
 ### Security
 

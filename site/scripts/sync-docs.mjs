@@ -28,6 +28,8 @@ const SITE = {
     "What actually happened, including the parts that broke."],
   offline: ["offline.md", "Offline and LoRa",
     "The radio packet, the gateway, and a blunt table of what isn't built."],
+  security: ["security.md", "Security",
+    "The threat model, the radio signatures, and the one we got properly wrong."],
   accessibility: ["accessibility.md", "Accessibility",
     "Nine issues found, three critical, all fixed and held by tests."],
   limits: ["limits.md", "Limits",

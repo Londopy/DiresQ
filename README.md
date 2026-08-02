@@ -10,11 +10,21 @@ DiresQ tracks the people going into it.**
 [![CI](https://github.com/Skythe7/DiresQ/actions/workflows/ci.yml/badge.svg)](https://github.com/Skythe7/DiresQ/actions/workflows/ci.yml)
 [![Security](https://github.com/Skythe7/DiresQ/actions/workflows/security.yml/badge.svg)](https://github.com/Skythe7/DiresQ/actions/workflows/security.yml)
 [![Changelog](https://github.com/Skythe7/DiresQ/actions/workflows/changelog.yml/badge.svg)](https://github.com/Skythe7/DiresQ/actions/workflows/changelog.yml)
+[![Pages](https://github.com/Skythe7/DiresQ/actions/workflows/pages.yml/badge.svg)](https://github.com/Skythe7/DiresQ/actions/workflows/pages.yml)
 
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
 [![Flask](https://img.shields.io/badge/flask-3.1-black)](https://flask.palletsprojects.com)
+[![SQLite](https://img.shields.io/badge/sqlite-3-003B57)](https://sqlite.org)
 [![Tests](https://img.shields.io/badge/tests-268%20passing-brightgreen)](tests/test_app.py)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+
+[![Accessibility](https://img.shields.io/badge/accessibility-WCAG_2.1_AA_audited-a6e3a1)](docs/accessibility.md)
+[![Works offline](https://img.shields.io/badge/check--ins-work_offline-fab387)](docs/offline.md)
+[![No JS required](https://img.shields.io/badge/works_without-JavaScript-89b4fa)](docs/architecture.md)
+[![Limitations](https://img.shields.io/badge/limitations-written_down-f38ba8)](docs/limits.md)
+
 [![Changelog](https://img.shields.io/badge/changelog-keep--a--changelog-orange)](CHANGELOG.md)
+[![Docs](https://img.shields.io/badge/docs-12_pages-cba6f7)](https://skythe7.github.io/DiresQ)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
 Built at **Katy Youth Hacks 2026** · Theme: Tech for Humanity
@@ -225,7 +235,11 @@ schema.sql          accounts · reports · assignments · checkins
 templates/          Jinja pages
 static/             CSS, JS, images
 tests/              pytest suite
-docs/               decisions, process, offline, limits, api
+docs/               twelve pages: why, install, architecture, decisions,
+                    process, offline, security, accessibility, limits,
+                    disclaimer, api, errata — plus the video script and
+                    Devpost draft, which are working notes rather than
+                    published pages
 site/               Astro docs site, built from docs/
 .github/workflows/  ci · security · changelog · pages
 ```
@@ -279,6 +293,8 @@ git push --tags
 - [Process](docs/process.md) — the build log, including what broke
 - [Offline and LoRa](docs/offline.md) — the radio packet, the gateway, and an
   honest table of what is and isn't built
+- [Security](docs/security.md) — the threat model, packet signing, and the
+  open redirect we shipped by accident
 - [Accessibility](docs/accessibility.md) — the WCAG 2.1 AA audit: nine issues
   found, three critical, all fixed and held in place by tests
 - [Limits](docs/limits.md) — what this doesn't do

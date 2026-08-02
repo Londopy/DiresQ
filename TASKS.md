@@ -50,9 +50,23 @@ like.
 - [ ] `/triage` — `triage.css`. Four questions, wants to feel calm and fast.
 - [ ] `/credits` — `credits.css`. The hidden page.
 - [ ] `nav.css` — the Board link and its overdue badge, on every page.
+- [ ] `banner.css` — the coverage gap banner at the top of the feed, and the
+      `auto` badge on a report the server filed itself.
+- [ ] `authform.css` — Caps Lock warning, the show/hide password button, the
+      hint lines under the sign-up fields.
+- [ ] `disclaimer.css` — the `/disclaimer` page, plus the red safety note
+      above the report form and beside the triage result.
 - [ ] Responder pins on the map. Data is already in `/api/responders`.
 - [ ] Phone width, everywhere. Nobody has looked.
 - [ ] Role picker on signup — everyone is a responder right now.
+
+**Two things that changed under her feet, both additive:**
+
+- `templates/report.html` loads `report.js` as `type="module"` now, because it
+  imports the offline queue. Nothing else changed about it.
+- `a11y.css` is linked on every page and is the one stylesheet not to freely
+  restyle — it holds the focus rings, the skip link and two contrast fixes.
+  Overriding a colour in it will fail a test, on purpose.
 
 ## Still unbuilt
 

@@ -2,10 +2,10 @@
 // Movement, kept quiet.
 //
 // A documentation site about a disaster tool shouldn't be doing somersaults,
-// so this is deliberately restrained: an orb that trails the cursor, a wide
-// soft wash behind it, content that rises as you reach it, and a fade between
-// pages. Everything switches off completely under prefers-reduced-motion, and
-// nothing here affects layout — it can't push text around while you read.
+// so this is deliberately restrained: one small orb that trails the cursor,
+// content that rises as you reach it, and a fade between pages. Everything
+// switches off completely under prefers-reduced-motion, and nothing here
+// affects layout — it can't push text around while you read.
 //
 // Same approach as the orb on londopy.github.io, retuned for this palette:
 // blue and lavender rather than green, because green already means "on scene"
@@ -13,19 +13,30 @@
 ---
 
 <div id="orb" aria-hidden="true"></div>
-<div id="wash" aria-hidden="true"></div>
 
 <style is:global>
   /* The bright core. Small and sharp — a big faint gradient reads as a
      smudge on a dark background, which is the mistake the first version of
      this made. mix-blend-mode: screen is what makes it glow rather than sit
      on top like a sticker. */
+  /* The one number. The script measures the element rather than carrying its
+     own copy, so changing this can't leave the orb centred on the wrong
+     point.
+
+     There was a second, much wider "wash" layer here. It was the thing that
+     made the page look smudged rather than lit — a big soft gradient reads as
+     a stain on a dark background no matter how faint you make it. One small
+     bright orb is the whole effect. */
+  :root {
+    --orb-size: 14px;
+  }
+
   #orb {
     position: fixed;
     top: 0;
     left: 0;
-    width: 26px;
-    height: 26px;
+    width: var(--orb-size);
+    height: var(--orb-size);
     border-radius: 50%;
     pointer-events: none;
     /* Above everything. The page content sits in its own stacking context
@@ -42,39 +53,15 @@
       rgba(137, 180, 250, 0) 70%
     );
     box-shadow:
-      0 0 24px 9px rgba(137, 180, 250, 0.20),
-      0 0 7px 2px rgba(203, 214, 244, 0.35);
+      0 0 16px 5px rgba(137, 180, 250, 0.18),
+      0 0 5px 1px rgba(203, 214, 244, 0.30);
   }
 
-  /* A much wider, much slower wash. Lags well behind the orb, which is what
-     gives the page a sense of depth without anything obviously "animating". */
-  #wash {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 620px;
-    height: 620px;
-    margin: -310px 0 0 -310px;
-    border-radius: 50%;
-    pointer-events: none;
-    z-index: 0;
-    opacity: 0;
-    transition: opacity 900ms ease;
-    will-change: transform;
-    background: radial-gradient(
-      circle,
-      rgba(137, 180, 250, 0.10) 0%,
-      rgba(203, 166, 247, 0.05) 45%,
-      transparent 72%
-    );
-  }
-
-  /* Content above the wash, below the orb. */
   header, main, footer { position: relative; z-index: 1; }
 
   /* No orb on anything you touch rather than point at. */
   @media (hover: none), (pointer: coarse) {
-    #orb, #wash { display: none; }
+    #orb { display: none; }
   }
 
   /* Sections start slightly low and settle as they come into view. `.lift`
@@ -125,7 +112,7 @@
   /* Somebody who has asked their system to stop moving things gets a still
      page. Not a slower one — a still one. */
   @media (prefers-reduced-motion: reduce) {
-    #orb, #wash { display: none; }
+    #orb { display: none; }
     .lift, .lift.seen { opacity: 1; transform: none; transition: none; }
     main { animation: none; }
     nav a::after { transition: none; }
@@ -145,43 +132,40 @@
     const fine = matchMedia("(hover: hover) and (pointer: fine)").matches;
 
     const orb = document.getElementById("orb");
-    const wash = document.getElementById("wash");
 
-    if (orb && wash && fine && !still) {
-      const HALF = 13;
+    if (orb && fine && !still) {
+      // Measured, not hardcoded, so changing --orb-size in the CSS above is
+      // the only edit needed. A stale constant here would quietly offset the
+      // orb from the actual cursor.
+      const half = () => orb.offsetWidth / 2;
       let tx = innerWidth / 2, ty = innerHeight / 2;
-      let ox = tx, oy = ty;   // orb, quick
-      let wx = tx, wy = ty;   // wash, slow
+      let ox = tx, oy = ty;
 
       addEventListener("pointermove", (e) => {
         tx = e.clientX;
         ty = e.clientY;
         orb.style.opacity = "1";
-        wash.style.opacity = "1";
       }, { passive: true });
 
       // Fade out when the pointer leaves rather than stranding it in a corner.
       document.addEventListener("mouseleave", () => {
         orb.style.opacity = "0";
-        wash.style.opacity = "0";
       });
 
-      // One rAF loop for both, easing towards the target. Writing transforms
-      // inside the mousemove handler instead would mean several writes per
-      // frame for no visible gain.
+      // Eased towards the target in a rAF loop. Writing the transform inside
+      // the pointermove handler instead would mean several writes per frame
+      // for no visible gain — pointer events fire faster than the screen
+      // refreshes.
       const step = () => {
         ox += (tx - ox) * 0.18;
         oy += (ty - oy) * 0.18;
-        wx += (tx - wx) * 0.055;
-        wy += (ty - wy) * 0.055;
-        orb.style.transform = `translate(${ox - HALF}px, ${oy - HALF}px)`;
-        wash.style.transform = `translate(${wx}px, ${wy}px)`;
+        const h = half();
+        orb.style.transform = `translate(${ox - h}px, ${oy - h}px)`;
         running = requestAnimationFrame(step);
       };
       step();
     } else {
       orb?.remove();
-      wash?.remove();
     }
 
     if (still) return;
