@@ -27,9 +27,14 @@ DiresQ tracks the people going into it.**
 [![Docs](https://img.shields.io/badge/docs-14_pages-cba6f7)](https://skythe7.github.io/DiresQ)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
+**[Try it live →](https://diresq.onrender.com)**
+&nbsp;&nbsp;·&nbsp;&nbsp;
 **[Read the docs →](https://skythe7.github.io/DiresQ)**
 &nbsp;&nbsp;·&nbsp;&nbsp;
 **[Watch the demo →](https://youtu.be/T0Udg9WgRYA)**
+
+<sub>Sign in as `londo` / `diresq`. Free tier — it sleeps after 15 idle minutes,
+so the first load can take about a minute.</sub>
 
 Built at **Katy Youth Hacks 2026** (Tech for Humanity)
 · also submitted to **STEMist Hacks IV**
