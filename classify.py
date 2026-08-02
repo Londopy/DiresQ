@@ -5,17 +5,19 @@ priority from a dropdown and tick which equipment is needed. They don't know.
 They're not trained, they're frightened, and the honest answer to "how severe
 is this" is "you tell me".
 
-So this reads what they wrote and suggests. Two models, both trained at import
-from the corpus at the bottom of this file:
+So this reads what they wrote and suggests. Three pieces, deliberately of
+different sophistication:
 
-  * a multinomial naive Bayes classifier over HIGH / MEDIUM / LOW
-  * one binary scorer per capability — boat, chainsaw, medical, truck,
-    generator
-
-And a TF-IDF cosine similarity, used for something different: spotting that a
-new report describes an incident somebody has already filed. Duplicate reports
-are how six people end up at one address while a street nearby has nobody,
-which is the failure this whole project exists to make visible.
+  * **priority** — a multinomial naive Bayes classifier over HIGH / MEDIUM /
+    LOW, trained at import from the corpus at the bottom of this file
+  * **equipment** — a lexicon, not a model. We built it as five binary
+    classifiers first and they were worse; the reasoning is above
+    EQUIPMENT_WORDS and it is the most useful thing in this file
+  * **duplicates** — TF-IDF cosine similarity against open reports, for
+    spotting that a new report describes an incident somebody has already
+    filed. Duplicate reports are how six people end up at one address while a
+    street nearby has nobody, which is the failure this whole project exists
+    to make visible.
 
 WHY NOT A LANGUAGE MODEL
 ------------------------
@@ -47,6 +49,44 @@ from dataclasses import dataclass, field
 PRIORITIES = ("HIGH", "MEDIUM", "LOW")
 
 CAPABILITIES = ("boat", "chainsaw", "medical", "truck", "generator")
+
+# Equipment is matched by vocabulary, not by the classifier, and that is a
+# deliberate step *down* in sophistication.
+#
+# We built it as five binary naive Bayes models first. With 65 examples split
+# five ways the positive class for each capability is a handful of sentences,
+# and a long description swamps the signal: "power line down across both lanes,
+# still arcing" came back needing a chainsaw at 100% confidence, because one
+# training line happened to mention a branch on a power line.
+#
+# A lexicon cannot do that. It is transparent, it names the word that matched,
+# and when it is wrong it is wrong in a way you can see and fix in one line.
+# Priority stays on naive Bayes, where 65 examples across three classes is
+# enough and it measures 80-99% confident on held-out phrasings.
+#
+# Tokens are stemmed the same way the text is, so "flooding" and "flooded"
+# both reach "flood".
+EQUIPMENT_WORDS = {
+    "boat": ("water", "flood", "rising", "ris", "upstair", "attic", "roof",
+             "swept", "submerg", "wade", "current", "swiftwater", "creek",
+             "bayou", "drown", "neck", "waist", "deep"),
+    "chainsaw": ("tree", "branch", "limb", "trunk", "fallen", "fell", "cut",
+                 "blocking", "block", "driveway", "timber"),
+    "medical": ("hurt", "injur", "bleed", "unrespons", "unconsciou",
+                "breath", "collaps", "pulse", "wound", "chest", "pain",
+                "oxygen", "dialysi", "insulin", "medic", "casualt",
+                "pinned", "trapp"),
+    "truck": ("debri", "haul", "supplie", "supply", "water", "food",
+              "tarp", "generator", "move", "clear", "road", "washed"),
+    "generator": ("power", "outag", "electricit", "freezer", "fridge",
+                  "oxygen", "concentrat", "ventilator", "medical", "fuel"),
+}
+
+# Words that mean the equipment is explicitly *not* wanted, or that the report
+# is a note rather than a request. Checked first.
+STAND_DOWN_WORDS = ("do not send", "dont send", "no need", "not urgent",
+                    "for the record", "nobody hurt", "no damage",
+                    "reporting in case", "please do not")
 
 # Words carrying no signal about severity. Deliberately short — aggressive
 # stopword lists throw away "no", "not" and "can't", which are exactly the
@@ -103,6 +143,7 @@ class Suggestion:
     priority: str
     confidence: float
     capabilities: list[str]
+    equipment_reasons: dict[str, str] = field(default_factory=dict)
     reasons: list[str] = field(default_factory=list)
     confident: bool = True
 
@@ -111,6 +152,7 @@ class Suggestion:
             "priority": self.priority,
             "confidence": round(self.confidence, 3),
             "capabilities": self.capabilities,
+            "equipment_reasons": self.equipment_reasons,
             "reasons": self.reasons,
             "confident": self.confident,
         }
@@ -343,24 +385,49 @@ CORPUS: list[tuple[str, str, tuple[str, ...]]] = [
 ]
 
 
+def equipment_for(text: str) -> list[tuple[str, str]]:
+    """Equipment the wording implies, with the word that implied it.
+
+    At most two. A report that appears to need everything is a report the
+    model has not understood, and saying "boat, chainsaw, medical, truck,
+    generator" is the same as saying nothing while looking confident.
+
+    Returns [(capability, matched word)], strongest first, so the interface
+    can show its reasoning the same way the priority suggestion does.
+    """
+    lowered = (text or "").lower()
+    if any(phrase in lowered for phrase in STAND_DOWN_WORDS):
+        return []
+
+    tokens = set(tokenise(text))
+    scored = []
+    for capability, words in EQUIPMENT_WORDS.items():
+        hits = [word for word in words if word in tokens]
+        if hits:
+            scored.append((len(hits), capability, hits[0]))
+
+    scored.sort(reverse=True)
+    # One clear winner beats two weak ones: only include a second if it has
+    # real support of its own.
+    keep = [(cap, word) for count, cap, word in scored if count >= 2][:2]
+    return keep or [(cap, word) for _, cap, word in scored[:1]]
+
+
 def _train():
     priority = NaiveBayes(PRIORITIES)
-    capability = {name: NaiveBayes(("yes", "no")) for name in CAPABILITIES}
     similarity = Similarity()
 
-    for text, label, needed in CORPUS:
+    for text, label, _needed in CORPUS:
         priority.learn(text, label)
         similarity.learn(text)
-        for name, model in capability.items():
-            model.learn(text, "yes" if name in needed else "no")
 
-    return priority, capability, similarity
+    return priority, similarity
 
 
-# Trained once, at import. The whole corpus is sixty short strings, so this
-# costs about a millisecond and there is no model file to ship, version, or
-# forget to commit.
-_PRIORITY, _CAPABILITY, _SIMILARITY = _train()
+# Trained once, at import. The whole corpus is sixty-five short strings, so
+# this costs about a millisecond and there is no model file to ship, version,
+# or forget to commit.
+_PRIORITY, _SIMILARITY = _train()
 
 
 def suggest(text: str) -> Suggestion:
@@ -372,21 +439,17 @@ def suggest(text: str) -> Suggestion:
     if len(tokenise(text)) < 3:
         # Two words is not enough to be confident about anything, and being
         # confidently wrong is worse than saying nothing.
-        return Suggestion("MEDIUM", 0.0, [], [], confident=False)
+        return Suggestion("MEDIUM", 0.0, [], {}, [], confident=False)
 
     label, confidence = _PRIORITY.predict(text)
     reasons = _PRIORITY.why(text, label)
-
-    needed = []
-    for name, model in _CAPABILITY.items():
-        guess, sure = model.predict(text)
-        if guess == "yes" and sure > 0.6:
-            needed.append(name)
+    equipment = equipment_for(text)
 
     return Suggestion(
         priority=label,
         confidence=confidence,
-        capabilities=needed,
+        capabilities=[capability for capability, _ in equipment],
+        equipment_reasons={cap: word for cap, word in equipment},
         reasons=reasons,
         confident=confidence >= MIN_CONFIDENCE,
     )

@@ -100,6 +100,13 @@ All notable changes to this project are documented here. Format follows
 - Tagging a version builds a GitHub release, with the notes taken from the
   changelog rather than from commit subjects, and refuses to publish if the
   tests or the changelog check fail.
+- It can be hosted from one file in the repo, so the deployment is reviewable
+  rather than living in somebody's dashboard. The database is rebuilt on every
+  boot, which means every visitor arrives at the same incident with somebody
+  already overdue instead of whatever the last person left behind.
+- A banner on every page of the hosted copy, saying it is a demo, that nothing
+  in it is real, and asking people not to type a real address into something
+  that looks like an emergency service and is not one.
 - A disclaimer, readable without an account, saying plainly that DiresQ does
   not contact emergency services and that the triage helper orders attention
   rather than giving medical advice. The report form carries the warning above

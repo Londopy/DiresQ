@@ -13,6 +13,16 @@
 </head>
 <body>
 
+{% if demo_mode %}
+<p class="demo-banner">
+    <strong>Public demo.</strong> Anyone can sign in as
+    <code>londo</code> / <code>diresq</code>. Nothing here is real, and
+    everything resets when the server sleeps &mdash; please don't type a real
+    address into it.
+</p>
+{% endif %}
+
+
 <a class="skip-link" href="#main">Skip to content</a>
 
 <div class="container" id="main" role="main">

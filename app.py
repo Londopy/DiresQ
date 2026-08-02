@@ -289,6 +289,18 @@ def coverage_gaps(reports: list[dict] | None = None) -> list[dict]:
 
 
 @app.context_processor
+def inject_demo_mode():
+    """True on the hosted demo.
+
+    A public instance of something that looks like an emergency service needs
+    to say what it is, on the page, not only in the docs. It also warns that
+    anything filed here is thrown away, so nobody types a real address into a
+    database that resets when the server sleeps.
+    """
+    return {"demo_mode": os.environ.get("DIRESQ_DEMO") == "1"}
+
+
+@app.context_processor
 def inject_coverage_gap():
     # A callable, not a value: pages that don't show the banner shouldn't pay
     # for the query.
@@ -297,6 +309,38 @@ def inject_coverage_gap():
             return 0
         return len(coverage_gaps())
     return {"coverage_gap_count": coverage_gap_count}
+
+
+def who_can_help(capabilities: list[str]) -> list[dict]:
+    """Available responders who have each of these capabilities.
+
+    "Available" means no assignment they haven't cleared. Somebody already on
+    a job is not an answer to "who can take this one", and offering them as
+    one is how you end up pulling a person off a scene they were needed at.
+
+    This is the other half of what the classifier does. It reads a description
+    and says *a boat is needed*; without this, that fact and the fact that
+    three people have boats never meet, and a coordinator has to hold both in
+    their head at two in the morning.
+    """
+    if not capabilities:
+        return []
+
+    rows = get_db().execute("""
+        SELECT acc.username, acc.capabilities
+        FROM accounts acc
+        LEFT JOIN assignments asg
+               ON asg.responder = acc.id AND asg.status != 'cleared'
+        WHERE acc.role = 'responder' AND asg.id IS NULL
+        ORDER BY acc.username
+    """).fetchall()
+
+    matches = []
+    for capability in capabilities:
+        free = [row["username"] for row in rows
+                if capability in (row["capabilities"] or "").split(",")]
+        matches.append({"capability": capability, "responders": free})
+    return matches
 
 
 def fetch_report(report_id: int) -> dict | None:
@@ -344,6 +388,14 @@ def fetch_report(report_id: int) -> dict | None:
         item["sender"] == user["id"]
         or (mine is not None and mine["status"] == "on_scene")
     )
+
+    # What the description implies is needed, and who is free who has it.
+    # Costs a classifier run — about a tenth of a millisecond — and one query.
+    needed = classify.suggest(
+        f"{item['subject']} {item['description']}").capabilities
+    item["needs"] = needed
+    item["matches"] = who_can_help(needed)
+
     return item
 
 
@@ -1477,6 +1529,11 @@ SEED_ACCOUNTS = [
     ("d.nguyen", "responder", "medical"),
     ("s.reyes",  "responder", "boat,medical"),
     ("a.whitlock", "reporter", ""),
+    # Two responders deliberately left unassigned. A board where everybody is
+    # busy has nothing to say when a report needs a boat, and a real one
+    # always has somebody between jobs.
+    ("r.castillo", "responder", "boat,swiftwater,medical"),
+    ("t.oyelaran", "responder", "chainsaw,truck,generator"),
 ]
 
 # subject, description, priority, lat, lng, filed_by, minutes_ago

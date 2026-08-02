@@ -2145,6 +2145,118 @@ class TestClassifier:
         assert min(counts.values()) >= len(classify.CORPUS) / 6
 
 
+class TestEquipmentLexicon:
+    """Equipment is matched by vocabulary, not by the classifier. These are
+    the cases that made us change approach."""
+
+    def needs(self, text):
+        return classify.suggest(text).capabilities
+
+    def test_water_means_a_boat(self):
+        assert "boat" in self.needs(
+            "water rising, two adults have gone upstairs")
+
+    def test_a_tree_means_a_chainsaw(self):
+        assert "chainsaw" in self.needs("tree down across the driveway")
+
+    def test_a_power_cut_means_a_generator(self):
+        assert "generator" in self.needs(
+            "no power since last night, freezer thawing")
+
+    def test_a_power_line_does_not_mean_a_chainsaw(self):
+        # The bug that killed the per-capability classifier: one training
+        # line mentioned a branch on a power line, so "power line down,
+        # sparking" came back needing a chainsaw at 100% confidence.
+        assert "chainsaw" not in self.needs(
+            "power line down across both lanes, still arcing, no trees")
+
+    def test_it_never_asks_for_everything(self):
+        # A report that appears to need all five is a report the model has
+        # not understood.
+        long_report = ("water rising and a tree came down and the power is "
+                       "out and somebody is hurt and we need supplies")
+        assert len(self.needs(long_report)) <= 2
+
+    def test_do_not_send_anyone_means_nothing_is_needed(self):
+        assert self.needs(
+            "fence down, two dogs loose. Please do not send anyone.") == []
+
+    def test_it_names_the_word_that_matched(self):
+        result = classify.suggest("tree across the driveway, chainsaw job")
+        assert result.equipment_reasons.get("chainsaw")
+
+
+class TestCapabilityMatching:
+    """The classifier says a boat is needed; the board knows who has one.
+    Before this they never met."""
+
+    def test_it_names_available_responders_with_the_equipment(self, client):
+        with diresq.app.app_context():
+            db = diresq.get_db()
+            db.execute("UPDATE accounts SET capabilities = 'boat' "
+                       "WHERE username = 'skythe'")
+            db.commit()
+        with diresq.app.test_request_context("/"):
+            diresq.session["user_id"] = 1
+            report = diresq.fetch_report(1)
+        boats = next((m for m in report["matches"]
+                      if m["capability"] == "boat"), None)
+        assert boats and "skythe" in boats["responders"]
+
+    def test_somebody_already_out_is_not_offered(self, client):
+        # Offering a person who is on another job is how you pull somebody
+        # off a scene they were needed at.
+        with diresq.app.app_context():
+            db = diresq.get_db()
+            db.execute("UPDATE accounts SET capabilities = 'boat' "
+                       "WHERE username = 'skythe'")
+            db.commit()
+        client.post("/report/2/rescue")   # londo takes report 2
+
+        with diresq.app.test_request_context("/"):
+            diresq.session["user_id"] = 1
+            report = diresq.fetch_report(1)
+        for match in report["matches"]:
+            assert "londo" not in match["responders"]
+
+    def test_nobody_free_is_reported_rather_than_hidden(self, client):
+        with diresq.app.app_context():
+            db = diresq.get_db()
+            db.execute("UPDATE accounts SET capabilities = ''")
+            db.commit()
+        body = client.get("/report/1").get_data(as_text=True)
+        if "What this needs" in body:
+            assert "nobody free has this" in body
+
+    def test_reporters_are_never_offered(self, client):
+        # kiyan is a reporter, not a responder, whatever their capabilities
+        # column happens to say.
+        with diresq.app.app_context():
+            db = diresq.get_db()
+            db.execute("UPDATE accounts SET capabilities = 'boat' "
+                       "WHERE username = 'kiyan'")
+            db.commit()
+        with diresq.app.test_request_context("/"):
+            diresq.session["user_id"] = 1
+            report = diresq.fetch_report(1)
+        for match in report["matches"]:
+            assert "kiyan" not in match["responders"]
+
+    def test_it_says_it_is_a_suggestion(self, client):
+        body = client.get("/report/1").get_data(as_text=True)
+        if "What this needs" in body:
+            assert "not an assignment" in " ".join(body.split())
+
+    def test_no_equipment_means_no_block(self, client):
+        with diresq.app.app_context():
+            db = diresq.get_db()
+            db.execute("UPDATE reports SET subject = 'Note', "
+                       "description = 'Reporting for the record only.' "
+                       "WHERE id = 1")
+            db.commit()
+        assert client.get("/report/1").status_code == 200
+
+
 class TestSuggestEndpoint:
     def test_it_answers_with_a_suggestion(self, client):
         body = client.post("/api/suggest", json={
@@ -2182,6 +2294,62 @@ class TestSuggestEndpoint:
 
     def test_the_report_form_loads_it(self, client):
         assert "suggest.js" in client.get("/report/new").get_data(as_text=True)
+
+
+class TestDemoMode:
+    """The hosted instance looks like an emergency service and isn't one."""
+
+    @pytest.fixture
+    def demo(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(diresq, "DATABASE", str(tmp_path / "demo.db"))
+        monkeypatch.setenv("DIRESQ_DEV_USER", "londo")
+        monkeypatch.setenv("DIRESQ_DEMO", "1")
+        diresq.init_db()
+        with diresq.app.app_context():
+            diresq.seed_minimal()
+        return diresq.app.test_client()
+
+    @pytest.mark.parametrize("page", ["/", "/board", "/map", "/triage",
+                                     "/login", "/signup", "/report/1",
+                                     "/report/new"])
+    def test_every_page_says_it_is_a_demo(self, demo, page):
+        assert "demo-banner" in demo.get(page).get_data(as_text=True)
+
+    def test_it_warns_against_typing_a_real_address(self, demo):
+        # Collapsed, because the template wraps and a phrase can land either
+        # side of a line break.
+        body = " ".join(demo.get("/").get_data(as_text=True).split())
+        assert "real address" in body
+        assert "resets" in body
+
+    def test_the_banner_is_off_by_default(self, client):
+        # Nothing on a developer's machine or in CI should show it.
+        assert "demo-banner" not in client.get("/").get_data(as_text=True)
+
+    def test_the_deploy_config_does_not_bypass_auth(self):
+        # DIRESQ_DEV_USER on a public instance signs every visitor in as the
+        # same person. It must never appear in the hosting config.
+        blueprint = (diresq.SCHEMA.parent / "render.yaml").read_text(
+            encoding="utf-8")
+        assert "DIRESQ_DEV_USER" not in blueprint
+        assert "DIRESQ_HTTPS_ONLY" in blueprint
+        assert "generateValue: true" in blueprint, "secret key must be generated"
+
+    def test_the_deploy_config_has_no_hardcoded_secret(self):
+        blueprint = (diresq.SCHEMA.parent / "render.yaml").read_text(
+            encoding="utf-8")
+        for line in blueprint.splitlines():
+            if "DIRESQ_SECRET_KEY" in line:
+                continue
+            assert "secret" not in line.lower() or "generateValue" in line
+
+    def test_the_health_check_needs_no_login(self, anon):
+        # Render polls it unauthenticated. If it ever needs a session the
+        # deploy never goes green.
+        blueprint = (diresq.SCHEMA.parent / "render.yaml").read_text(
+            encoding="utf-8")
+        path = re.search(r"healthCheckPath:\s*(\S+)", blueprint).group(1)
+        assert anon.get(path).status_code == 200
 
 
 class TestSafetyNotices:

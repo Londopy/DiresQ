@@ -181,3 +181,50 @@
 }
 
 .queue-pill[hidden]{display:none;}
+
+/* What a report needs, and who is free who has it. The classifier reads the
+   need out of the description; the board already knows who is idle. Before
+   this, those two facts never met. */
+.match-block{
+    margin:18px 0;
+    padding:16px 18px;
+    border-radius:10px;
+    background:#181825;
+    border-left:3px solid #a6e3a1;
+}
+
+.match-block h2{margin:0 0 12px;font-size:0.95rem;color:#a6e3a1;}
+
+.match{
+    display:flex;
+    align-items:baseline;
+    gap:12px;
+    flex-wrap:wrap;
+    padding:7px 0;
+    border-top:1px solid #313244;
+}
+
+.match:first-of-type{border-top:0;}
+
+.need{
+    padding:3px 10px;
+    border-radius:99px;
+    background:#313244;
+    color:#89b4fa;
+    font-size:0.75rem;
+    letter-spacing:0.05em;
+    text-transform:uppercase;
+}
+
+.match .free{font-size:0.85rem;color:#a6adc8;}
+.match .free strong{color:#cdd6f4;}
+
+/* Nobody free with this equipment is information, not an error — but it is
+   the answer a coordinator most needs to see. */
+.match .free.none{color:#fab387;}
+
+.match-block .hint{
+    margin:12px 0 0;
+    font-size:0.75rem;
+    color:#6c7086;
+}

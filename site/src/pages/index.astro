@@ -45,6 +45,18 @@ const PAGES = [
       content="Every disaster app tells you where the disaster is. DiresQ tracks the people going into it."
     />
     <link rel="icon" href={`${base}/favicon.ico`} />
+
+    <!-- Absolute URLs: every scraper resolves these against nothing. -->
+    <meta property="og:title" content="DiresQ" />
+    <meta
+      property="og:description"
+      content="Every disaster app tells you where the disaster is. DiresQ tracks the people going into it."
+    />
+    <meta property="og:image" content={new URL("og.png", Astro.site + "DiresQ/").href} />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={Astro.url.href} />
+    <meta name="twitter:card" content="summary_large_image" />
+
     <ClientRouter />
   </head>
 

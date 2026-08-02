@@ -1,0 +1,2 @@
+# Only needed to host it. Not required to run or test locally.
+gunicorn==23.0.0

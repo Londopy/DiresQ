@@ -15,7 +15,7 @@ DiresQ tracks the people going into it.**
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
 [![Flask](https://img.shields.io/badge/flask-3.1-black)](https://flask.palletsprojects.com)
 [![SQLite](https://img.shields.io/badge/sqlite-3-003B57)](https://sqlite.org)
-[![Tests](https://img.shields.io/badge/tests-291%20passing-brightgreen)](tests/test_app.py)
+[![Tests](https://img.shields.io/badge/tests-310%20passing-brightgreen)](tests/test_app.py)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 [![Accessibility](https://img.shields.io/badge/accessibility-WCAG_2.1_AA_audited-a6e3a1)](docs/accessibility.md)
@@ -24,7 +24,7 @@ DiresQ tracks the people going into it.**
 [![Limitations](https://img.shields.io/badge/limitations-written_down-f38ba8)](docs/limits.md)
 
 [![Changelog](https://img.shields.io/badge/changelog-keep--a--changelog-orange)](CHANGELOG.md)
-[![Docs](https://img.shields.io/badge/docs-13_pages-cba6f7)](https://skythe7.github.io/DiresQ)
+[![Docs](https://img.shields.io/badge/docs-14_pages-cba6f7)](https://skythe7.github.io/DiresQ)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
 Built at **Katy Youth Hacks 2026** (Tech for Humanity)
@@ -161,6 +161,7 @@ override the file, so your shell and CI always win.
 | `DIRESQ_DEV_USER` | Stay signed in as this user without logging in. **Development only — it is a full auth bypass.** Leave unset for the real login flow. |
 | `DIRESQ_DB` | Path to the SQLite file. Defaults to `diresq.db`. |
 | `DIRESQ_HTTPS_ONLY` | Set to `1` when the site is served over HTTPS, so session cookies are marked Secure. Leave unset on localhost or you will not stay signed in. |
+| `DIRESQ_DEMO` | Set to `1` on a public instance. Puts a banner on every page saying it is a demo, the data resets, and not to type a real address into it. |
 
 ## API
 
@@ -223,7 +224,7 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
-291 test functions covering every route, the permission rules, feed ordering,
+310 test functions covering every route, the permission rules, feed ordering,
 staffing resolution, ETA parsing, overdue calculation, packet signing, the
 offline queue, the auth guardrails and an adversarial pass. CI runs them on
 every push, along with a boot check against a real server.
@@ -302,6 +303,8 @@ git push --tags
 - [Process](docs/process.md) — the build log, including what broke
 - [Offline and LoRa](docs/offline.md) — the radio packet, the gateway, and an
   honest table of what is and isn't built
+- [Hosting it](docs/deploy.md) — one file, one click, free, and what the cold
+  start means for anyone you send the link to
 - [The classifier](docs/model.md) — naive Bayes over 65 labelled reports, the
   measured duplicate threshold, and why it isn't a language model
 - [Security](docs/security.md) — the threat model, packet signing, and the

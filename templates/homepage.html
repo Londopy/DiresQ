@@ -9,8 +9,23 @@
     <link rel="stylesheet" href="../static/styles/banner.css">
     <link rel="stylesheet" href="../static/styles/disclaimer.css">
     <link rel="stylesheet" href="../static/styles/a11y.css">
+    <meta property="og:title" content="DiresQ — tracking the people going in">
+    <meta property="og:description" content="Every disaster app tells you where the disaster is. DiresQ tracks the people going into it.">
+    <meta property="og:image" content="/static/images/og.png">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
 </head>
 <body>
+
+{% if demo_mode %}
+<p class="demo-banner">
+    <strong>Public demo.</strong> Anyone can sign in as
+    <code>londo</code> / <code>diresq</code>. Nothing here is real, and
+    everything resets when the server sleeps &mdash; please don't type a real
+    address into it.
+</p>
+{% endif %}
+
 
 <a class="skip-link" href="#main">Skip to content</a>
 

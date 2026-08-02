@@ -43,6 +43,12 @@ const links = NAV.map(([href, label]) => ({
     <title>{frontmatter.title} — DiresQ</title>
     <meta name="description" content={frontmatter.description} />
     <link rel="icon" href={`${base}/favicon.ico`} />
+
+    <meta property="og:title" content={`${frontmatter.title} — DiresQ`} />
+    <meta property="og:description" content={frontmatter.description} />
+    <meta property="og:image" content={new URL("og.png", Astro.site + "DiresQ/").href} />
+    <meta property="og:type" content="article" />
+    <meta name="twitter:card" content="summary_large_image" />
     <!-- Cross-document view transitions: the header stays put while the
          article swaps, so moving between pages reads as one document rather
          than nine. Degrades to ordinary navigation where unsupported. -->
