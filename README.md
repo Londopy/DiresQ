@@ -9,12 +9,6 @@ DiresQ tracks the people going into it.**
 
 [![CI](https://github.com/Skythe7/DiresQ/actions/workflows/ci.yml/badge.svg)](https://github.com/Skythe7/DiresQ/actions/workflows/ci.yml)
 [![Security](https://github.com/Skythe7/DiresQ/actions/workflows/security.yml/badge.svg)](https://github.com/Skythe7/DiresQ/actions/workflows/security.yml)
-[![Changelog](https://github.com/Skythe7/DiresQ/actions/workflows/changelog.yml/badge.svg)](https://github.com/Skythe7/DiresQ/actions/workflows/changelog.yml)
-[![Pages](https://github.com/Skythe7/DiresQ/actions/workflows/pages.yml/badge.svg)](https://github.com/Skythe7/DiresQ/actions/workflows/pages.yml)
-
-[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
-[![Flask](https://img.shields.io/badge/flask-3.1-black)](https://flask.palletsprojects.com)
-[![SQLite](https://img.shields.io/badge/sqlite-3-003B57)](https://sqlite.org)
 [![Tests](https://img.shields.io/badge/tests-349%20passing-brightgreen)](tests/test_app.py)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
@@ -23,18 +17,17 @@ DiresQ tracks the people going into it.**
 [![No JS required](https://img.shields.io/badge/works_without-JavaScript-89b4fa)](docs/architecture.md)
 [![Limitations](https://img.shields.io/badge/limitations-written_down-f38ba8)](docs/limits.md)
 
-[![Changelog](https://img.shields.io/badge/changelog-keep--a--changelog-orange)](CHANGELOG.md)
-[![Docs](https://img.shields.io/badge/docs-14_pages-cba6f7)](https://skythe7.github.io/DiresQ)
+[![Docs](https://img.shields.io/badge/docs-16_pages-cba6f7)](https://skythe7.github.io/DiresQ)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
 **[Try it live →](https://diresq.onrender.com)**
 &nbsp;&nbsp;·&nbsp;&nbsp;
-**[Read the docs →](https://skythe7.github.io/DiresQ)**
-&nbsp;&nbsp;·&nbsp;&nbsp;
 **[Watch the demo →](https://youtu.be/T0Udg9WgRYA)**
+&nbsp;&nbsp;·&nbsp;&nbsp;
+**[Read the docs →](https://skythe7.github.io/DiresQ)**
 
-<sub>Sign in as `londo` / `diresq`. Free tier — it sleeps after 15 idle minutes,
-so the first load can take about a minute.</sub>
+<sub>Sign in as `londo` / `diresq`. Free tier — it sleeps after 15 idle
+minutes, so the first load can take about a minute.</sub>
 
 Built at **Katy Youth Hacks 2026** (Tech for Humanity)
 · also submitted to **STEMist Hacks IV**
@@ -54,6 +47,23 @@ board turns red; the report on the right filed itself.</sub>
 
 ---
 
+## Built in one night
+
+14 hours: 6:00pm–8:00am for Londo, 8:00am–10:00pm for Skythe.
+
+| | |
+| --- | --- |
+| **70 commits** | 65 of them inside the 14-hour window |
+| **12,579 lines of code** | Python, JavaScript, CSS, HTML, SQL |
+| **349 test functions** | 454 cases after parametrisation — every route, an adversarial pass |
+| **16 documentation pages** | including the one listing what we didn't build |
+| **No background jobs** | overdue is computed on read — nothing to forget to start, no timer that can silently die |
+
+Everything in this README is running, tested and deployed. The parts that
+aren't have their own page saying so.
+
+---
+
 ## The problem
 
 During Hurricane Harvey, civilians in fishing boats rescued thousands of
@@ -69,9 +79,9 @@ check in on a timer, you check out. Miss a check-in and the board turns red.
 Every report shows how many people are already on it, so help spreads out
 instead of piling up.
 
-## What it actually looks like
+## One hour on the app
 
-A storm comes through Katy. Here is one hour on the app.
+A storm comes through Katy.
 
 **A neighbour files a report.** Her street is flooding. She opens DiresQ, taps
 the spot on the map, and writes *"Water rising, 2 trapped."* Marks it HIGH. It
@@ -101,6 +111,36 @@ on its own, and now somebody knows where to start looking.
 
 **That last part is the product.** Everything else is how you get there.
 
+## What we can prove
+
+Four claims, each with the measurement behind it.
+
+**The classifier is 75% accurate, and we know because we tried to fool it.**
+Run over its own training corpus it scored 100% — a worthless number, it had
+memorised its 55 examples. Measured properly (hold one out, retrain on 54,
+predict the unseen one, 55 times) naive Bayes alone got 45% against a 36%
+always-guess-the-commonest baseline. Nine points. The severity lexicon took it
+to 75%. That measurement runs in CI and fails the build if it regresses.
+[Full write-up →](docs/model.md)
+
+**The radio packet resists replay, not just corruption.** A check-in packs into
+22 signed bytes. Every packet is verified against that responder's key, and a
+strictly-increasing counter is persisted *before* the check-in is written — so
+a crash between the two loses a check-in rather than reopening the window. The
+packet carries an age rather than a timestamp, because a node running off a
+battery in a flood is the last clock you want to trust.
+[The threat model →](docs/security.md)
+
+**The accessibility audit found nine issues and we fixed all nine.** Three were
+critical. Every fix is held in place by a test, so they can't quietly come
+back. [The audit →](docs/accessibility.md)
+
+**We wrote down what's broken before anyone asked.** `/api/uplink` is
+unauthenticated. Location is self-reported. The radio firmware does not exist,
+because we have no hardware. A system with no stated limitations isn't a system
+without limitations — it's one nobody checked.
+[All of them →](docs/limits.md)
+
 ## What it does
 
 - **File a report** — what, how bad, and where, with the location pinned on a
@@ -115,14 +155,13 @@ on its own, and now somebody knows where to start looking.
   the most cautious signal wins.
 - **It reads what you wrote** — a classifier suggests the priority and what
   equipment is needed from the description, and shows you the words that
-  caused it. Naive Bayes, trained at import, 0.1 ms, no network. It also
-  spots when somebody has already reported the same incident, which is how
-  six people end up at one address. You always decide; touch the dropdown
-  and it stops touching it. [How it works, and why it isn't an
-  LLM](docs/model.md).
+  caused it. Naive Bayes, trained at import, 0.1 ms, no network. It also spots
+  when somebody has already reported the same incident, which is how six people
+  end up at one address. You always decide; touch the dropdown and it stops
+  touching it.
 - **Triage it properly** — if you can't judge how bad something is, four
-  questions run START, the protocol used at real multiple-casualty scenes,
-  and pick the severity for you.
+  questions run START, the protocol used at real multiple-casualty scenes, and
+  pick the severity for you.
 - **Check in** — resets your timer and updates your last known position. Works
   with no signal: it's kept on your phone, sent when there's a connection, and
   judged on when you pressed the button rather than when it arrived.
@@ -135,13 +174,11 @@ on its own, and now somebody knows where to start looking.
   nobody going to them at all. Not the same as understaffed.
 - **ICS-214 export** — the activity log agencies already keep, built from
   records rather than from memory.
-- **Check-ins over a radio** — a check-in packs into 22 signed bytes, small
-  enough for LoRa, and `tools/gateway.py` forwards them from a pipe or a
-  serial port to `/api/uplink`. Every packet is verified against that
-  responder's key before anything is written.
-  **The radio itself is not built** — we have no hardware, so there is no
-  firmware. [docs/offline.md](docs/offline.md) is the full accounting of which
-  parts exist.
+- **Check-ins over a radio** — 22 signed bytes, small enough for LoRa, and
+  `tools/gateway.py` forwards them from a pipe or a serial port to
+  `/api/uplink`. **The radio itself is not built** — we have no hardware, so
+  there is no firmware. [docs/offline.md](docs/offline.md) is the full
+  accounting of which parts exist.
 
 ## Quickstart
 
@@ -169,6 +206,36 @@ Seeded accounts, all with the password `diresq`:
 | `londo` | responder | boat, medical |
 | `skythe` | responder | truck, chainsaw |
 | `kiyan` | reporter | — |
+
+## Design notes
+
+**Overdue is computed when the board is read**, never stored. There is no
+background job to forget to start, and no timer process that can silently die.
+
+**Staffing is derived from votes, not stored on the report.** Where two people
+on scene disagree, the most conservative signal wins — `need_more` always beats
+`adequate`. An optimistic report must never be able to suppress a call for
+help.
+
+**Staffing reorders the feed inside a severity band, never across one.** A
+minor report asking for help cannot bury a critical one nobody has reached.
+
+**Free-text ETAs are refused rather than guessed.** `eta.py` wraps
+[timefuzz](https://github.com/Londopy/timefuzz) with a confidence floor, a
+four-hour cap and a five-minute minimum. If the parser isn't sure what you
+meant you get the default interval and a message — a safety timer set from a
+bad guess is worse than no timer at all.
+
+**Severity can come from a protocol instead of a guess.** `triage.py` runs
+START via [vitalscore](https://pypi.org/project/vitalscore/) — can they walk,
+are they breathing, how fast, is there a pulse, do they respond — and maps the
+category onto a severity band. It orders who gets reached first. It is not
+medical advice.
+
+**Mismatch detection is generous on purpose.** Marking yourself on scene when
+your last check-in was more than 500 metres away raises a flag. The radius is
+wide because phone GPS is poor in bad weather, and a false accusation is worse
+than a missed one.
 
 ## Configuration
 
@@ -214,66 +281,6 @@ Pages are server-rendered; everything under `/api` returns JSON.
 Status codes: `200` ok · `201` created · `302` redirect · `400` bad input ·
 `401` not signed in · `403` not yours · `404` not found.
 
-## Design notes
-
-**Overdue is computed when the board is read**, never stored. There is no
-background job to forget to start, and no timer process that can silently die.
-
-**Staffing is derived from votes, not stored on the report.** Where two people
-on scene disagree, the most conservative signal wins — `need_more` always beats
-`adequate`. An optimistic report must never be able to suppress a call for
-help.
-
-**Staffing reorders the feed inside a severity band, never across one.** A
-minor report asking for help cannot bury a critical one nobody has reached.
-
-**Free-text ETAs are refused rather than guessed.** `eta.py` wraps
-[timefuzz](https://github.com/Londopy/timefuzz) with a confidence floor, a
-four-hour cap and a five-minute minimum. If the parser isn't sure what you
-meant you get the default interval and a message — a safety timer set from a
-bad guess is worse than no timer at all.
-
-**Severity can come from a protocol instead of a guess.** `triage.py` runs
-START via [vitalscore](https://pypi.org/project/vitalscore/) — can they walk,
-are they breathing, how fast, is there a pulse, do they respond — and maps the
-category onto a severity band. It orders who gets reached first. It is not
-medical advice.
-
-## The classifier, and the number we nearly published
-
-DiresQ reads what you typed and suggests a priority. It is a hand-written
-multinomial naive Bayes classifier — 250 lines, no dependencies, no model
-file, no network, 0.1 ms — paired with a phrase lexicon.
-
-We checked it the obvious way first: run it over the corpus it was trained on.
-It scored **100%**, and that number is worthless. It had memorised its 55
-examples.
-
-Measured properly — hold one report out, retrain on the other 54, predict the
-one it has never seen, repeat 55 times:
-
-| | Held out |
-| --- | --- |
-| Always guess the commonest label | 36% |
-| Naive Bayes alone | **45%** |
-| Naive Bayes + severity lexicon | **75%** |
-
-Nine points above guessing, and wrong in the worst direction — *"child not
-breathing properly"* came back MEDIUM, *"gas smell, whole street evacuating"*
-came back LOW.
-
-The fix was the same one that had already rescued equipment detection: a
-lexicon of the categories a triage protocol calls immediate, written from the
-START protocol rather than from our own failures, checked by a test that it
-never contradicts a label. The measurement now runs in CI and fails the build
-if it regresses.
-
-It still gets one report in four wrong. That is survivable because it lands in
-a dropdown you control, next to the words that caused it, and stops adjusting
-the moment you touch it — and unacceptable if it were deciding anything.
-
-**[The full write-up, including why it isn't an LLM →](docs/model.md)**
-
 ## Tests
 
 ```bash
@@ -281,13 +288,11 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
-349 test functions covering every route, the permission rules, feed ordering,
-staffing resolution, ETA parsing, overdue calculation, packet signing, the
-offline queue, the auth guardrails and an adversarial pass. CI runs them on
-every push, along with a boot check against a real server.
-
-That number is itself checked by a test, because a README that lies about its
-own test count is worse than one that doesn't mention it.
+349 test functions, which parametrisation expands into 454 cases, covering
+every route, the permission rules, feed ordering, staffing resolution, ETA
+parsing, overdue calculation, packet signing, the offline queue, the auth
+guardrails and an adversarial pass. CI runs them on every push, along with a
+boot check against a real server and the held-out accuracy measurement.
 
 ## Layout
 
@@ -303,14 +308,14 @@ tools/make_og.py    draws the social preview card
 schema.sql          accounts · reports · assignments · checkins
 templates/          Jinja pages
 static/             CSS, JS, images
-tests/              pytest suite
-docs/               twelve pages: why, install, architecture, decisions,
-                    process, offline, security, accessibility, limits,
-                    disclaimer, api, errata — plus the video script and
-                    Devpost draft, which are working notes rather than
-                    published pages
-site/               Astro docs site, built from docs/
 static/scripts/sw.js  caches map tiles you have already seen
+tests/              pytest suite
+docs/               sixteen pages: why, install, architecture, decisions,
+                    process, offline, security, accessibility, limits,
+                    disclaimer, api, model, deploy, errata — plus the video
+                    script and Devpost draft, which are working notes rather
+                    than published pages
+site/               Astro docs site, built from docs/
 SECURITY.md         what's in scope, what we know is wrong
 render.yaml         one-file deployment, plus start.sh
 .github/workflows/  ci · security · changelog · pages · release
@@ -374,9 +379,11 @@ fork, offline, or if Pages is down.
   honest table of what is and isn't built
 - [Hosting it](docs/deploy.md) — one file, one click, free, and what the cold
   start means for anyone you send the link to
-- [The classifier](docs/model.md) — naive Bayes over 55 labelled reports, measured held-out at 75%,, the
-  measured duplicate threshold, and why it isn't a language model
-- [SECURITY.md](SECURITY.md) — disclosure policy, scope, and what we already know is wrong
+- [The classifier](docs/model.md) — naive Bayes over 55 labelled reports,
+  measured held-out at 75%, the measured duplicate threshold, and why it isn't
+  a language model
+- [SECURITY.md](SECURITY.md) — disclosure policy, scope, and what we already
+  know is wrong
 - [Security](docs/security.md) — the threat model, packet signing, and the
   open redirect we shipped by accident
 - [Accessibility](docs/accessibility.md) — the WCAG 2.1 AA audit: nine issues
@@ -403,6 +410,9 @@ fork, offline, or if Pages is down.
 - **The dead man's switch runs on page loads, not a timer.** If nobody has
   DiresQ open, nothing is swept. One tab on the board is enough, but that's a
   dependency, not a guarantee.
+- **The classifier is wrong one time in four.** Survivable because it lands in
+  a dropdown you control, next to the words that caused it, and stops adjusting
+  the moment you touch it. Unacceptable if it were deciding anything.
 
 ## Team
 
