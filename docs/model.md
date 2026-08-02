@@ -110,11 +110,56 @@ under that class than under the best alternative. A word common everywhere
 explains nothing, and this ranking drops it automatically. Top three are
 shown.
 
-### Equipment
+### Equipment — where we went backwards on purpose
 
-One binary classifier per capability — boat, chainsaw, medical, truck,
-generator — each trained on the same corpus with the capability labels. Shown
-only above 60% confidence.
+This started as five binary naive Bayes classifiers, one per capability, and
+**we deleted them.** The story is the most useful thing on this page.
+
+Running them over the seeded reports:
+
+| Report | Predicted | Right? |
+| --- | --- | --- |
+| *"Power line down across both lanes, still arcing"* | chainsaw, **100% confident** | No |
+| *"Roof peeled back, family of four inside"* | boat, chainsaw, medical, truck, generator | Meaningless |
+
+The chainsaw one had a cause: a single training line reads *"large branch
+leaning on the power line to the house"*, so `power` and `line` became
+chainsaw evidence. With 65 examples split five ways, each capability's
+positive class is a handful of sentences, and a long description drowns the
+signal in ordinary words.
+
+Raising the threshold didn't fix it — the *wrong* answer was the confident one
+and a true positive (`chainsaw` on a tree report, 67%) fell below the cut
+first.
+
+So equipment is now a **lexicon**: a curated set of words per capability,
+stemmed the same way the text is, capped at two matches.
+
+```python
+"boat": ("water", "flood", "rising", "upstair", "attic", "swept", ...)
+"chainsaw": ("tree", "branch", "limb", "trunk", "fallen", ...)
+```
+
+| Report | Now |
+| --- | --- |
+| Power line down, arcing | `generator`, from *"power"* |
+| Water rising, upstairs | `boat`, from *"water"* |
+| Tree across driveway | `chainsaw`, from *"tree"* |
+| *"Please do not send anyone"* | **nothing** |
+
+Capped at two, because a report that appears to need all five is a report the
+model has not understood — and saying so at length is the same as saying
+nothing while looking confident. There's a phrase check first, so *"please do
+not send anyone"* and *"for the record"* return nothing at all.
+
+**Less sophisticated, and better.** It names the word that matched, it is
+wrong in ways you can see, and a wrong answer is a one-line fix instead of a
+retraining problem. Priority stays on naive Bayes because there the maths
+earns its place: three classes, 65 examples, and 80–99% confidence on
+phrasings it has never seen.
+
+The general lesson, which cost us an hour to learn: **measure the clever
+version before keeping it.** We would have shipped the confident, wrong one.
 
 ### Duplicates
 
@@ -150,6 +195,12 @@ threshold. Catching it needs embeddings, and embeddings need a model file.
 **Sixty-five examples is a demonstration, not a dataset.** Real deployment
 would need thousands of real reports, and real reports contain names and
 addresses, which is its own problem.
+
+**The equipment lexicon is hand-written, so it only knows the words we
+thought of.** "Pirogue" and "jon boat" are what people in south Louisiana
+actually say and neither is in it. A word list is honest about being a word
+list, but it does not generalise, and every gap is invisible until somebody
+hits it.
 
 **English only.** Katy is not an English-only town, and that is a real gap
 rather than a technicality.

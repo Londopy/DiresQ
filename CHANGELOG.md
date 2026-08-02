@@ -120,6 +120,14 @@ All notable changes to this project are documented here. Format follows
 - It also notices when a description matches a report somebody has already
   filed, and offers a link to it. Duplicate reports are how six people end up
   at one address while a street nearby has nobody.
+- A report page now says what the job needs and who is free who has it —
+  "boat: 1 available, r.castillo". The description is read for the equipment,
+  the board already knows who is idle, and before this those two facts never
+  met. Anybody already out is excluded, because offering them is how you pull
+  somebody off a scene they were needed at. When nobody free has the
+  equipment, it says that instead of staying quiet.
+- A social preview card, drawn from the palette by a script rather than by
+  hand, so it can be regenerated when the wording changes.
 - `GET /api/model` says what the classifier is, what it was trained on, and
   what it is bad at. Public and unauthenticated, because anyone should be able
   to find out what the software is doing to their report.
@@ -156,6 +164,16 @@ All notable changes to this project are documented here. Format follows
   to-do list.
 
 ### Changed
+
+- Equipment is now read from the wording with a word list rather than a
+  classifier. The classifier version was confidently wrong — "power line down,
+  still arcing" came back needing a chainsaw, because one training example
+  mentioned a branch on a power line — and it asked for all five kinds of
+  equipment on any long report. The word list is less clever, names the word
+  that matched, and is wrong in ways somebody can see and fix. Priority is
+  still classified, where the maths earns its place.
+- Two responders in the seeded incident are deliberately left free. A board
+  where everybody is busy has nothing to say when a report needs a boat.
 
 - Staffing reorders the feed. Within a severity band, a report asking for help
   sorts first, one with nobody on it next, then covered, then overstaffed.
