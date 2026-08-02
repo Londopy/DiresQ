@@ -79,6 +79,17 @@ That's community moderation, not verification. Three coordinated accounts can
 bury a real report, and one determined person with three accounts is not a
 hard problem to have.
 
+## Triage answers are never stored
+
+The helper runs START on four observations and returns a category. The answers
+themselves are computed and discarded — never written to the database, never
+attached to an account.
+
+They are health observations about a third person who is in no position to
+consent to being recorded, so the safest amount to keep is none. There are
+tests that fail if any request to `/api/triage` writes a row, and if the
+schema ever grows a column that looks like one of the answers.
+
 ## START triage orders attention, not treatment
 
 The triage helper runs a real protocol and gives a real category. It decides

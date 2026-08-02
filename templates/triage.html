@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="../static/styles/triage.css">
     <link rel="stylesheet" href="../static/styles/nav.css">
+    <link rel="stylesheet" href="../static/styles/disclaimer.css">
     <title>Triage</title>
 </head>
 <body>
@@ -63,6 +64,16 @@
             Files this report as <strong id="r-severity"></strong>.
         </p>
         <a href="/report/new" class="use-btn" id="r-use">Use this and file the report</a>
+
+        <!-- Sits with the result, not at the bottom of the page. Somebody
+             reading a category needs to know what it does and doesn't mean
+             at the moment they read it. -->
+        <p class="safety-note">
+            <strong>This orders attention, not treatment.</strong>
+            It does not diagnose anyone and does not replace a clinician. Your
+            answers are not stored.
+            <a href="/disclaimer">Read the full disclaimer</a>
+        </p>
     </div>
 
     <p class="footnote">

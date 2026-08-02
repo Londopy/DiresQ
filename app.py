@@ -1065,6 +1065,14 @@ def report_flag(report_id: int):
                   200, "Flagged. Thanks.", report_id)
 
 
+# No login wall. Someone should be able to read what this is and isn't before
+# they hand it any information, and a person who has just found the app in a
+# real emergency should reach "call 911" without making an account first.
+@app.get("/disclaimer")
+def disclaimer_page():
+    return render_template("disclaimer.html")
+
+
 @app.get("/triage")
 @login_required
 def triage_page():

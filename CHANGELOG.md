@@ -92,6 +92,10 @@ All notable changes to this project are documented here. Format follows
   Every assignment, arrival, check-in and automatic alert, in time order.
 - A documentation site under `site/`, built from the same `docs/` files that
   live in the repo, so the two can never disagree.
+- A disclaimer, readable without an account, saying plainly that DiresQ does
+  not contact emergency services and that the triage helper orders attention
+  rather than giving medical advice. The report form carries the warning above
+  its first field, and the triage result carries it beside the category.
 - Written decisions, build log, architecture notes, known limits and API
   reference under `docs/`. The architecture notes name the point at which each
   design stops working, rather than only what it does.

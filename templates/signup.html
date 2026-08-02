@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="../static/styles/signup.css">
     <link rel="stylesheet" href="../static/styles/authform.css">
+    <link rel="stylesheet" href="../static/styles/disclaimer.css">
     <title>Sign Up</title>
 </head>
 <body>
@@ -74,6 +75,16 @@
                 maxlength="128"
                 required
             >
+
+            <!-- A statement, not a checkbox. A tickbox implies a contract we
+                 are not in a position to offer, and people tick those without
+                 reading. This has to be read to be got past. -->
+            <p class="safety-note">
+                <strong>DiresQ does not contact emergency services.</strong>
+                Signing up does not make you a verified or trained responder —
+                nobody here is checked.
+                <a href="/disclaimer">What this is and isn't</a>
+            </p>
 
             <button type="submit">
                 Sign Up

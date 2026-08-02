@@ -1,0 +1,66 @@
+# How to cite DiresQ.
+#
+# GitHub reads this and puts a "Cite this repository" button on the repo page.
+# Zenodo reads it when it archives a release and uses it to fill in the record.
+#
+# BEFORE THE FIRST ZENODO RELEASE, two things must be real:
+#   * every author's legal name (a bibliography entry reading "Londopy &
+#     Skythe7" will not be accepted anywhere)
+#   * the doi field below, which can only be filled in AFTER Zenodo mints one,
+#     because a DOI cannot be reserved ahead of a GitHub release
+#
+# Validate with: pip install cffconvert && cffconvert --validate
+
+cff-version: 1.2.0
+message: If you use this software, please cite it as below.
+type: software
+
+title: "DiresQ: tracking the responders, not just the disaster"
+
+abstract: >-
+  A disaster response tracker built on the observation that existing tools map
+  incidents while leaving the volunteers who self-deploy into them unlogged.
+  DiresQ records who went where, holds each responder to a check-in interval,
+  and escalates automatically when somebody stops answering: after a bounded
+  silence the server files a report at their last known position. Reports are
+  ordered so that an incident nobody has committed to outranks one that is
+  merely understaffed, and staffing state is resolved by taking the most
+  cautious signal from responders on scene rather than a majority. Includes a
+  START triage helper, an ICS-214 activity log export, an offline check-in
+  queue with idempotent retries, and a signed low-bandwidth packet format
+  intended for LoRa transport.
+
+authors:
+  # TODO: replace with legal names before any academic submission.
+  # Handles are kept in `alias` so both forms survive.
+  - given-names: FIRSTNAME
+    family-names: LASTNAME
+    alias: Londopy
+    # orcid: "https://orcid.org/0000-0000-0000-0000"
+  - given-names: FIRSTNAME
+    family-names: LASTNAME
+    alias: Skythe7
+    # orcid: "https://orcid.org/0000-0000-0000-0000"
+
+repository-code: "https://github.com/Skythe7/DiresQ"
+url: "https://skythe7.github.io/DiresQ"
+
+license: Apache-2.0
+version: 0.1.0
+date-released: 2026-08-03
+
+keywords:
+  - disaster response
+  - emergency management
+  - volunteer coordination
+  - accountability
+  - crisis informatics
+  - START triage
+  - ICS-214
+  - LoRa
+  - offline first
+
+# Filled in after the first Zenodo release. Use the *concept* DOI (the one
+# that always points at the newest version), not a version-specific one,
+# unless you are citing a specific release on purpose.
+# doi: "10.5281/zenodo.XXXXXXX"

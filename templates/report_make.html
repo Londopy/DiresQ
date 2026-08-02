@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="../static/styles/report_make.css">
+    <link rel="stylesheet" href="../static/styles/disclaimer.css">
     <link
     rel="stylesheet"
     href="https://unpkg.com/leaflet/dist/leaflet.css">
@@ -30,6 +31,16 @@
 {% endif %}
 {% endwith %}
         <h1>Create Report</h1>
+
+        <!-- First thing in reading order, above every field. The failure this
+             prevents is somebody filing a report and believing help is now
+             coming. -->
+        <p class="safety-note">
+            <strong>This does not contact emergency services.</strong>
+            If someone is in danger, call 911 first. This tells nearby
+            volunteers, who may or may not be looking.
+            <a href="/disclaimer">What else this can't do</a>
+        </p>
 
         <label>Subject</label>
         <input

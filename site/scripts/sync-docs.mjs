@@ -26,6 +26,8 @@ const SITE = {
     "The radio packet, the gateway, and a blunt table of what isn't built."],
   limits: ["limits.md", "Limits",
     "What this does not do. Written down rather than hoped over."],
+  disclaimer: ["disclaimer.md", "Disclaimer",
+    "It does not call for help, and the triage helper is not medical advice."],
   api: ["api.md", "API",
     "Every endpoint, what it takes, and what comes back."],
 };

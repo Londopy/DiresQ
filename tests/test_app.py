@@ -1906,6 +1906,147 @@ class TestQueuedCheckinIds:
         assert mine["overdue"] is True
 
 
+class TestTheDocsAreNotOutOfDate:
+    """Numbers in prose rot silently. Every one of these was wrong at least
+    once before this test existed."""
+
+    def counted(self, name):
+        """Pull "251 test functions" or "24 routes" out of the docs."""
+        readme = (diresq.SCHEMA.parent / "README.md").read_text(encoding="utf-8")
+        arch = (diresq.SCHEMA.parent / "docs" / "architecture.md").read_text(
+            encoding="utf-8")
+        found = re.findall(rf"(\d+)\s+{name}", readme + arch)
+        assert found, f"no '<number> {name}' claim found in the docs"
+        return {int(n) for n in found}
+
+    def test_the_test_count_is_true(self):
+        source = Path(__file__).read_text(encoding="utf-8")
+        actual = len(re.findall(r"^\s*def test_", source, re.M))
+        assert self.counted("test functions") == {actual}, (
+            f"docs claim a test count that isn't {actual}")
+
+    def test_the_badge_agrees_with_the_prose(self):
+        # The badge is an image URL, so it doesn't match the prose pattern and
+        # sat at 159 for a hundred commits.
+        source = Path(__file__).read_text(encoding="utf-8")
+        actual = len(re.findall(r"^\s*def test_", source, re.M))
+        readme = (diresq.SCHEMA.parent / "README.md").read_text(encoding="utf-8")
+        badge = re.search(r"badge/tests-(\d+)%20passing", readme)
+        assert badge, "the tests badge is gone from the README"
+        assert int(badge.group(1)) == actual, (
+            f"badge says {badge.group(1)}, there are {actual}")
+
+    def test_the_readme_does_not_still_deny_features_that_exist(self):
+        # Every one of these shipped after the sentence claiming it hadn't.
+        readme = (diresq.SCHEMA.parent / "README.md").read_text(encoding="utf-8")
+        for gone in ["neither is the browser offline queue",
+                     "The offline queue is not"]:
+            assert gone not in readme, f"README still says: {gone}"
+
+    def test_the_route_count_is_true(self):
+        source = (diresq.SCHEMA.parent / "app.py").read_text(encoding="utf-8")
+        actual = len(re.findall(r"^@app\.(?:get|post|route)", source, re.M))
+        assert self.counted("routes") == {actual}, (
+            f"docs claim a route count that isn't {actual}")
+
+    def test_the_table_count_is_true(self):
+        sql = diresq.SCHEMA.read_text(encoding="utf-8")
+        actual = len(re.findall(r"CREATE TABLE (\w+)", sql))
+        assert actual == 5, "docs say five tables in several places"
+
+    def test_the_licence_is_named_consistently(self):
+        # The licence changed from MIT to Apache-2.0 before the hackathon and
+        # two files went on saying MIT for a week.
+        root = diresq.SCHEMA.parent
+        assert "Apache License" in (root / "LICENSE").read_text(encoding="utf-8")
+        for name in ["docs/disclaimer.md", "templates/disclaimer.html",
+                     "CITATION.cff"]:
+            body = (root / name).read_text(encoding="utf-8")
+            assert "MIT" not in body, f"{name} still says MIT"
+
+
+class TestSafetyNotices:
+    """The app runs a real medical protocol and looks like an emergency
+    service. Both of those need saying out loud, in the app, not only in a
+    file on GitHub."""
+
+    def test_the_disclaimer_is_readable_without_an_account(self, anon):
+        # Somebody who has just found this in a real emergency should reach
+        # "call 911" without signing up first.
+        res = anon.get("/disclaimer")
+        assert res.status_code == 200
+        assert "call 911" in res.get_data(as_text=True)
+
+    def test_it_says_it_does_not_call_for_help(self, anon):
+        body = anon.get("/disclaimer").get_data(as_text=True)
+        assert "does not contact 911" in body
+
+    def test_the_report_form_warns_before_any_field(self, client):
+        body = client.get("/report/new").get_data(as_text=True)
+        assert "does not contact emergency services" in body
+        # Before the first input, or nobody reads it.
+        assert body.index("safety-note") < body.index('name="subject"')
+
+    def test_the_triage_page_says_what_the_result_is_not(self, client):
+        body = client.get("/triage").get_data(as_text=True)
+        assert "orders attention, not treatment" in body
+        assert "does not diagnose" in body
+
+    @pytest.mark.parametrize("page", ["/", "/report/1", "/login", "/signup"])
+    def test_the_pages_people_land_on_link_to_it(self, client, page):
+        assert 'href="/disclaimer"' in client.get(page).get_data(as_text=True)
+
+    def test_signing_up_says_it_does_not_make_you_verified(self, anon):
+        body = anon.get("/signup").get_data(as_text=True)
+        assert "does not contact emergency services" in body
+        assert "nobody here is checked" in body
+
+    def test_the_notice_is_a_statement_not_a_tickbox(self, anon):
+        # A tickbox implies a contract we're in no position to offer, and
+        # people tick those without reading.
+        body = anon.get("/signup").get_data(as_text=True)
+        assert 'type="checkbox"' not in body
+
+
+class TestTriageStoresNothing:
+    """Triage answers are health observations about somebody who is in no
+    position to consent to being recorded. They are computed and thrown away,
+    and this test exists so that stays true by accident of nobody noticing."""
+
+    ANSWERS = {"can_walk": "false", "breathing": "true",
+               "respiratory_rate": "34", "has_radial_pulse": "true",
+               "follows_commands": "false"}
+
+    def test_it_still_returns_a_category(self, client):
+        body = client.post("/api/triage", json=self.ANSWERS).get_json()
+        assert body["priority"] == "Immediate"
+
+    def test_nothing_is_written_anywhere(self, client):
+        with diresq.app.app_context():
+            db = diresq.get_db()
+            tables = [r["name"] for r in db.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'")]
+            before = {t: db.execute(f"SELECT COUNT(*) c FROM {t}").fetchone()["c"]
+                      for t in tables}
+
+        for _ in range(5):
+            client.post("/api/triage", json=self.ANSWERS)
+
+        with diresq.app.app_context():
+            db = diresq.get_db()
+            after = {t: db.execute(f"SELECT COUNT(*) c FROM {t}").fetchone()["c"]
+                     for t in tables}
+        assert before == after, "triage wrote something to the database"
+
+    def test_no_table_has_a_column_that_looks_like_a_triage_answer(self):
+        # A future change would most likely arrive as a column, so fail on the
+        # schema rather than waiting for a row.
+        sql = diresq.SCHEMA.read_text(encoding="utf-8").lower()
+        for word in ["respiratory", "radial_pulse", "follows_commands",
+                     "can_walk", "breathing"]:
+            assert word not in sql, f"schema now stores {word}"
+
+
 class TestSweepCommand:
     """The dead man's switch without anyone having a tab open."""
 

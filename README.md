@@ -13,7 +13,7 @@ DiresQ tracks the people going into it.**
 
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
 [![Flask](https://img.shields.io/badge/flask-3.1-black)](https://flask.palletsprojects.com)
-[![Tests](https://img.shields.io/badge/tests-159%20passing-brightgreen)](tests/test_app.py)
+[![Tests](https://img.shields.io/badge/tests-259%20passing-brightgreen)](tests/test_app.py)
 [![Changelog](https://img.shields.io/badge/changelog-keep--a--changelog-orange)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
@@ -101,9 +101,9 @@ on its own, and now somebody knows where to start looking.
   enough for LoRa, and `tools/gateway.py` forwards them from a pipe or a
   serial port to `/api/uplink`. Every packet is verified against that
   responder's key before anything is written.
-  **The radio itself is not built, and neither is the browser offline queue.**
-  [docs/offline.md](docs/offline.md) is the full accounting of which parts
-  exist.
+  **The radio itself is not built** — we have no hardware, so there is no
+  firmware. [docs/offline.md](docs/offline.md) is the full accounting of which
+  parts exist.
 
 ## Quickstart
 
@@ -153,6 +153,7 @@ Pages are server-rendered; everything under `/api` returns JSON.
 | `GET` | `/` | Report feed |
 | `GET` | `/board` | Accountability board. Refreshes itself every 3s |
 | `GET` | `/triage` | START triage helper |
+| `GET` | `/disclaimer` | What this is and isn't. No login required |
 | `GET` | `/map` | Map of located reports |
 | `GET` `POST` | `/login` · `/signup` | Auth |
 | `POST` | `/logout` | |
@@ -204,10 +205,13 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
-234 tests covering every route, the permission rules, feed ordering, staffing
-resolution, ETA parsing, overdue calculation, packet encoding and the auth
-guardrails. CI runs them on every push, along with a boot check against a real
-server.
+259 test functions covering every route, the permission rules, feed ordering,
+staffing resolution, ETA parsing, overdue calculation, packet signing, the
+offline queue, the auth guardrails and an adversarial pass. CI runs them on
+every push, along with a boot check against a real server.
+
+That number is itself checked by a test, because a README that lies about its
+own test count is worse than one that doesn't mention it.
 
 ## Layout
 
@@ -272,6 +276,8 @@ git push --tags
 - [Offline and LoRa](docs/offline.md) — the radio packet, the gateway, and an
   honest table of what is and isn't built
 - [Limits](docs/limits.md) — what this doesn't do
+- [Disclaimer](docs/disclaimer.md) — it does not call for help, and the triage
+  helper is not medical advice
 - [API](docs/api.md) — full reference
 - [Project doc errata](docs/project-doc-errata.md) — where the planning doc
   and the code disagree, and which one won
