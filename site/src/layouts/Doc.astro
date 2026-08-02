@@ -2,10 +2,15 @@
 // A markdown page's frontmatter arrives as a prop, not on the Astro global.
 // Astro.frontmatter does not exist, and reading .title off undefined fails
 // the build rather than rendering an empty heading.
+import { ClientRouter } from "astro:transitions";
+import Ambience from "../components/Ambience.astro";
+
 const { frontmatter } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 const NAV = [
+  ["/why", "Why"],
+  ["/install", "Run it"],
   ["/architecture", "Architecture"],
   ["/decisions", "Decisions"],
   ["/process", "Process"],
@@ -34,10 +39,15 @@ const links = NAV.map(([href, label]) => ({
     <title>{frontmatter.title} — DiresQ</title>
     <meta name="description" content={frontmatter.description} />
     <link rel="icon" href={`${base}/favicon.ico`} />
+    <!-- Cross-document view transitions: the header stays put while the
+         article swaps, so moving between pages reads as one document rather
+         than nine. Degrades to ordinary navigation where unsupported. -->
+    <ClientRouter />
   </head>
 
   <body>
-    <header>
+    <Ambience />
+    <header transition:persist>
       <a class="wordmark" href={base || "/"}>DiresQ</a>
       <nav>
         {links.map((link) => (

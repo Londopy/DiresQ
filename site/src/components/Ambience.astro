@@ -1,0 +1,163 @@
+---
+// Movement, kept quiet.
+//
+// A documentation site about a disaster tool should not be doing somersaults.
+// Three things only: a soft light that follows the cursor, content that rises
+// as you reach it, and a page-to-page fade. All of them switch off entirely
+// under prefers-reduced-motion, and none of them affect layout, so nothing
+// here can push text around while somebody is reading it.
+---
+
+<div class="glow" aria-hidden="true"></div>
+
+<style is:global>
+  .glow {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 520px;
+    height: 520px;
+    margin: -260px 0 0 -260px;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0;
+    background: radial-gradient(
+      circle,
+      rgba(137, 180, 250, 0.13) 0%,
+      rgba(166, 227, 161, 0.06) 42%,
+      transparent 70%
+    );
+    /* Composited on the GPU. Animating top/left instead would repaint the
+       whole page on every mouse move. */
+    transform: translate3d(-50%, -50%, 0);
+    transition: opacity 500ms ease;
+    will-change: transform;
+  }
+
+  /* Everything real sits above it. */
+  header, main, footer { position: relative; z-index: 1; }
+
+  /* Sections start slightly low and transparent, then settle as they come
+     into view. `.lift` is only added by JS, so with JS off everything is
+     simply visible. */
+  .lift {
+    opacity: 0;
+    transform: translateY(14px);
+    transition: opacity 620ms cubic-bezier(0.22, 1, 0.36, 1),
+                transform 620ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .lift.seen { opacity: 1; transform: none; }
+
+  /* The whole page on arrival. Astro's view transitions drive this on
+     navigation; on a cold load it just runs once. */
+  @keyframes page-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  main { animation: page-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+  /* Nav links get an underline that grows from the left rather than
+     appearing. Cheap, and it makes the header feel responsive. */
+  nav a {
+    position: relative;
+    padding-bottom: 2px;
+  }
+
+  nav a::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    height: 1px;
+    width: 100%;
+    background: currentColor;
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 220ms ease;
+  }
+
+  nav a:hover::after,
+  nav a[aria-current="page"]::after { transform: scaleX(1); }
+
+  .cards a {
+    transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+                border-left-color 220ms ease,
+                background 220ms ease;
+  }
+
+  .cards a:hover { transform: translateY(-3px); }
+
+  /* Someone who has asked their operating system to stop moving things gets
+     a completely still page. Not a slower one — a still one. */
+  @media (prefers-reduced-motion: reduce) {
+    .glow { display: none; }
+    .lift, .lift.seen { opacity: 1; transform: none; transition: none; }
+    main { animation: none; }
+    nav a::after { transition: none; }
+    .cards a:hover { transform: none; }
+  }
+</style>
+
+<script>
+  // Runs after the document is parsed. Re-runs on every view transition,
+  // because Astro swaps the DOM out from under us on navigation.
+  function ambience() {
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (still) return;
+
+    const glow = document.querySelector(".glow");
+
+    if (glow && window.matchMedia("(pointer: fine)").matches) {
+      let x = 0, y = 0, drawn = false;
+
+      // Position is written in a rAF rather than in the mousemove handler.
+      // Mouse events fire far more often than the screen refreshes, and
+      // writing a transform per event is how you drop frames for no gain.
+      function paint() {
+        glow.style.transform =
+          `translate3d(${x}px, ${y}px, 0) translate(-50%, -50%)`;
+        drawn = false;
+      }
+
+      window.addEventListener("pointermove", (e) => {
+        x = e.clientX;
+        y = e.clientY;
+        glow.style.opacity = "1";
+        if (!drawn) {
+          drawn = true;
+          requestAnimationFrame(paint);
+        }
+      }, { passive: true });
+
+      // Fade out when the cursor leaves, so it isn't stranded in a corner.
+      document.addEventListener("mouseleave", () => {
+        glow.style.opacity = "0";
+      });
+    }
+
+    // Reveal on scroll. IntersectionObserver rather than a scroll handler:
+    // the browser does the work off the main thread.
+    const targets = document.querySelectorAll("article > h2, article > h3, article > table, article > pre, .cards a");
+    if (!("IntersectionObserver" in window) || !targets.length) return;
+
+    const watcher = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        entry.target.classList.add("seen");
+        // One-shot. Re-animating on the way back up is irritating.
+        watcher.unobserve(entry.target);
+      }
+    }, { rootMargin: "0px 0px -8% 0px", threshold: 0.05 });
+
+    targets.forEach((el) => {
+      el.classList.add("lift");
+      watcher.observe(el);
+    });
+  }
+
+  ambience();
+  document.addEventListener("astro:page-load", ambience);
+</script>

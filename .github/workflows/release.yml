@@ -1,0 +1,79 @@
+name: Release
+
+# Fires on a version tag. Builds the notes from CHANGELOG.md rather than from
+# commit subjects, because the changelog is written for humans and a list of
+# commit messages is not.
+#
+#     patchnotes CHANGELOG.md bump 1.0.0
+#     git tag v1.0.0 && git push --tags
+#
+# If the Zenodo integration is switched on for this repo, publishing the
+# release is also what mints the DOI.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build notes for, e.g. v1.0.0"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements-dev.txt patchnotes==2.4.0
+
+      # A tagged release that doesn't pass its own tests is worse than no
+      # release, because it's the version people will actually download.
+      - name: Tests
+        run: pytest -q
+
+      - name: Validate CHANGELOG.md
+        run: patchnotes CHANGELOG.md validate --strict
+
+      - name: Pull the notes for this version out of the changelog
+        id: notes
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION="${TAG#v}"
+          python - "$VERSION" <<'PY' > release-notes.md
+          import re, sys
+          from pathlib import Path
+
+          version = sys.argv[1]
+          text = Path("CHANGELOG.md").read_text(encoding="utf-8")
+
+          # Everything between this version's heading and the next one.
+          pattern = rf"^## \[{re.escape(version)}\].*?$(.*?)(?=^## \[|\Z)"
+          found = re.search(pattern, text, re.M | re.S)
+
+          if found:
+              print(found.group(1).strip())
+          else:
+              # Don't invent notes. Say the section is missing and point at
+              # the file, so a wrong release is obvious rather than plausible.
+              print(f"No `## [{version}]` section in CHANGELOG.md.")
+              print()
+              print("See [CHANGELOG.md](CHANGELOG.md).")
+          PY
+          echo "Built notes for $VERSION"
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: release-notes.md
+          generate_release_notes: false
+          draft: false

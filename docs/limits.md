@@ -50,23 +50,23 @@ Someone with a dead battery flags identically to someone in a flooded
 basement. Someone hurt but able to tap a button doesn't flag at all. The timer
 tells you when to *start asking*, and that's all we claim for it.
 
-## Nothing works offline in the browser yet
+## Only check-ins work offline
 
-Check-ins, reports and the board all need a connection. In a disaster, that's
-exactly what you don't have.
+Check-ins survive having no signal. They are kept on the phone with the time
+they were made, sent when a connection returns, and carry an id so a retry is
+recognised rather than logged twice.
 
-The server side is ready: a check-in can say when it was really made, and the
-overdue timer uses that rather than when it arrived, so a queued one can't
-clear a red row it never earned. There is also a signed radio packet and a
-gateway that forwards it.
+**Everything else still needs a connection.** You cannot file a report
+offline, the feed will not load, and the board will not update. Reports are
+the harder half — one filed offline may need reconciling against one somebody
+else already filed for the same thing, and we have not solved that.
 
-**The queue itself is not built.** Close the tab with no signal and the
-check-in is gone. Neither are cached map tiles, and a tile cache can only ever
-cover where you've already been — it can't pre-fetch somewhere you have never
-looked, which is often where the disaster is.
+Map tiles are not cached either, and a tile cache can only ever cover where
+you have already been. It cannot pre-fetch somewhere you have never looked,
+which is often exactly where the disaster is.
 
-The full accounting of which parts exist is in [offline.md](offline.md), and
-it is deliberately blunt.
+The full accounting is in [offline.md](offline.md), and it is deliberately
+blunt about which parts exist.
 
 ## Spam control is flagging, not verification
 
@@ -149,6 +149,28 @@ shared if you ever run more than one worker.
 That's deliberate at this size: a lockout that survives restarts is a lockout
 an attacker can make permanent by guessing at somebody on purpose. It is
 still not real rate limiting, and it does nothing about a distributed attempt.
+
+## Anyone can sign up at any age
+
+There is no age gate. Nothing asks, and nothing stops a child creating an
+account and marking themselves a responder.
+
+For a hackathon demo that is a non-issue. Deployed publicly it is a real one —
+both because of what it would mean to send a minor towards a flood, and
+because collecting personal data from under-13s in the US brings obligations
+we have not met.
+
+## Limits we closed, and how
+
+Kept here rather than deleted, because a limitations page that only ever grows
+is not being maintained.
+
+| Was | Now |
+| --- | --- |
+| Nothing worked offline | Check-ins queue on the phone and sync with the time they were made |
+| The radio endpoint was unauthenticated | Every packet is signed per node and verified before anything is written |
+| The dead man's switch needed somebody to have a tab open | `flask --app app sweep` runs it from cron |
+| Signing in could bounce you to another website | Only same-site paths accepted |
 
 ## It has never been used in a real disaster
 

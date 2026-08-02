@@ -269,6 +269,10 @@ git push --tags
 
 ## Read more
 
+- [Why](docs/why.md) — the gap this exists to fill, and what we refused to
+  build
+- [Running it](docs/install.md) — setup, the commands, and how to see each
+  feature working
 - [Architecture](docs/architecture.md) — the data model, what runs on a
   request, and the point at which each design stops working
 - [Decisions](docs/decisions.md) — what we argued about and what we picked

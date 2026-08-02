@@ -9,34 +9,51 @@ log, it's marketing.
 ## How we split it
 
 Skythe took `/templates` and `/static`. Londo took `app.py`, the schema and
-the API. Kiyan took testing, demo and content.
+the API. Testing, demo and content were a third share that ended up
+unclaimed partway through, and got absorbed into the other two.
 
 The rule was: own your files, say something in Discord before touching
 someone else's. That held for most of the build. The two times it didn't are
 below.
+
+Worth saying plainly, because it's the thing a two-person team learns fastest:
+a three-way split that quietly becomes a two-way split is not a crisis, it's
+Tuesday. What matters is noticing early enough to re-plan rather than
+discovering it at the deadline.
 
 ## The plan didn't survive contact
 
 Our doc said the backend would push stub endpoints returning fake JSON in the
 first hour, and the frontend would build against those so nobody was blocked.
 
-That's not what happened. Skythe built five complete pages before the backend
-existed — and built them as **server-rendered Jinja templates**, not as
-JavaScript fetching from an API. So the stubs would have been ignored.
+The backend didn't push those stubs. That's on Londo — the plan had one
+dependency, it pointed at him, and he went and built the real thing instead of
+the thing everyone else was waiting on.
 
-She unblocked herself by guessing variable names and carrying on, which
-worked, but it meant the contract was assumed rather than agreed. We paid for
-that in three separate mismatches:
+Skythe, quite reasonably, did not sit and wait. She built five complete pages
+in the time it would have taken to ask, and built them as **server-rendered
+Jinja templates** rather than JavaScript fetching from an API — which, as it
+turned out, was the better architecture, and is what the app still uses today.
+The stubs would have been thrown away regardless.
 
-| She wrote | Backend had |
+The cost was that the contract ended up assumed on both sides rather than
+agreed by either. Three names came out different:
+
+| Frontend | Backend |
 | --- | --- |
 | `HIGH` / `MEDIUM` / `LOW` | integers 1–4 |
 | `report.latitude` / `.longitude` | `lat` / `lng` |
 | `staffing: needs_more` | `need_more` |
 
-All three were found by reading her templates against the schema, not by
-anything breaking. We took her names in every case — the templates were real
-and working, the schema was still just a document.
+Found by reading the templates against the schema, not by anything breaking.
+The frontend names won all three times, and that was the right call: the
+templates were real, working software, and the schema was still a document
+nobody had run. `HIGH`/`MEDIUM`/`LOW` is also just better than integers 1–4 —
+nothing ever rendered a `3` to a human being.
+
+The honest lesson isn't "the frontend should have waited." It's that the one
+person who could have unblocked everybody didn't, and then the fix was to
+adopt what she'd already got right.
 
 ## Five bugs found by tooling, not by reading code
 
@@ -144,3 +161,23 @@ like working features.
 Run it against a database that already has something in it. Tests start from
 empty every time, so anything that only breaks on the *second* run — which is
 every run the judges will do — is invisible to them by construction.
+
+**Unblock other people before you build your own favourite part.** Every
+mismatch in this document traces back to one person building the interesting
+thing instead of the thing somebody else was waiting on. The stub endpoints
+would have taken twenty minutes. Nobody was owed them by a schedule; they were
+owed by the fact that another person's next four hours depended on them.
+
+## What we'd keep
+
+Owning files rather than owning features. Two people editing `app.py` and
+`homepage.css` in parallel never once conflicted, because the boundary was a
+path and not a job title.
+
+Writing the limitations down while building, not afterwards. Half of
+`limits.md` was written in the same hour as the code it describes, which is
+the only time you actually remember what you decided not to handle.
+
+Taking the other person's naming when theirs is already working. It cost the
+backend three renames and settled an argument that could have run all
+weekend.

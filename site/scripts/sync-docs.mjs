@@ -16,6 +16,10 @@ const pages = join(here, "..", "src", "pages");
 
 // slug -> [source file, title, one-line description]
 const SITE = {
+  why: ["why.md", "Why",
+    "The gap this exists to fill, and what we refused to build."],
+  install: ["install.md", "Running it",
+    "Ten minutes from a clean machine to a board with someone overdue on it."],
   architecture: ["architecture.md", "Architecture",
     "The data model, what runs on a request, and where each design gives out."],
   decisions: ["decisions.md", "Decisions",
