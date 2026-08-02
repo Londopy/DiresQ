@@ -34,10 +34,10 @@
 
             <article
                 class="report-card"
-                data-title="{{ report.title|lower }}"
+                data-title="{{ report.subject|lower }}"
                 data-priority="{{ report.priority }}">
 
-                <h2>{{ report.title }}</h2>
+                <h2>{{ report.subject }}</h2>
 
                 <span class="priority {{ report.priority|lower }}">
                     {{ report.priority }}
