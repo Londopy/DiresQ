@@ -291,3 +291,59 @@ body{
     }
 
 }
+
+.safety-note{
+
+    margin:0 0 16px;
+
+    padding:11px 14px;
+
+    border-radius:8px;
+
+    background:#313244;
+
+    border-left:3px solid #f38ba8;
+
+    color:#cdd6f4;
+
+    font-size:.87rem;
+
+}
+
+.safety-note strong{
+
+    color:#f38ba8;
+
+}
+
+.safety-note a{
+
+    color:#a6adc8;
+
+}
+
+.legal-link{
+
+    display:block;
+
+    margin-top:26px;
+
+    text-align:center;
+
+    font-size:.78rem;
+
+    color:#6c7086;
+
+}
+
+.legal-link a{
+
+    color:#6c7086;
+
+}
+
+.legal-link a:hover{
+
+    color:#a6adc8;
+
+}

@@ -291,3 +291,29 @@ body{
     }
 
 }
+
+.legal-link{
+
+    display:block;
+
+    margin-top:26px;
+
+    text-align:center;
+
+    font-size:.78rem;
+
+    color:#6c7086;
+
+}
+
+.legal-link a{
+
+    color:#6c7086;
+
+}
+
+.legal-link a:hover{
+
+    color:#a6adc8;
+
+}

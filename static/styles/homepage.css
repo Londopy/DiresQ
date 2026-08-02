@@ -44,26 +44,33 @@ padding:40px;
 
 .topbar{
 
-display:flex;
-gap:15px;
+    display:flex;
+    align-items:center;
 
-margin-bottom:30px;
+    gap:15px;
+
+    flex-wrap:wrap;
+
+    margin-bottom:30px;
 
 }
 
 #search{
 
-flex:1;
+    flex:1;
+    min-width:240px;
 
-padding:14px;
+    height:48px;
 
-border:none;
+    padding:0 16px;
 
-border-radius:12px;
+    border:none;
 
-background:var(--surface);
+    border-radius:12px;
 
-color:white;
+    background:var(--surface);
+
+    color:var(--text);
 
 }
 
@@ -245,41 +252,58 @@ gap:10px;
 
 @media(max-width:768px){
 
-.container{
+    .container{
 
-grid-template-columns:1fr;
+        grid-template-columns:1fr;
 
-}
+    }
 
-aside{
+    .topbar{
 
-position:fixed;
+        display:grid;
 
-right:-270px;
+        grid-template-columns:1fr auto auto auto;
 
-top:0;
+        gap:10px;
 
-width:260px;
+    }
 
-height:100%;
+    #search{
 
-transition:.3s;
+        grid-column:1/-1;
 
-z-index:100;
+        width:100%;
 
-}
+    }
 
-aside.show{
+    aside{
 
-right:0;
+        position:fixed;
 
-}
+        right:-270px;
 
-.mobile-filter{
+        top:0;
 
-display:block;
+        width:260px;
+        height:100%;
 
-}
+        transition:.3s;
+
+        z-index:100;
+
+    }
+
+    aside.show{
+
+        right:0;
+
+    }
+
+    .mobile-filter{
+
+        display:flex;
+
+    }
 
 }
 
@@ -290,31 +314,91 @@ display:block;
 
 }
 
-.map-btn{
+.map-btn,
+.board-btn{
 
     display:flex;
     align-items:center;
     justify-content:center;
 
+    height:48px;
+
     padding:0 18px;
 
     border-radius:12px;
 
-    background:var(--blue);
-
-    color:var(--base);
-
     text-decoration:none;
 
-    font-weight:bold;
+    font-weight:600;
 
     transition:.2s;
 
 }
 
-.map-btn:hover{
+.map-btn{
+
+    background:var(--blue);
+    color:var(--base);
+
+}
+
+.board-btn{
+
+    background:var(--green);
+    color:var(--base);
+
+}
+
+.map-btn:hover,
+.board-btn:hover{
 
     transform:translateY(-2px);
     filter:brightness(1.05);
+
+}
+
+.badge{
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+    margin-left:8px;
+
+    width:22px;
+    height:22px;
+
+    border-radius:50%;
+
+    background:var(--red);
+    color:var(--base);
+
+    font-size:.75rem;
+
+}
+
+.legal-link{
+
+    display:block;
+
+    margin-top:26px;
+
+    text-align:center;
+
+    font-size:.78rem;
+
+    color:#6c7086;
+
+}
+
+.legal-link a{
+
+    color:#6c7086;
+
+}
+
+.legal-link a:hover{
+
+    color:#a6adc8;
 
 }
