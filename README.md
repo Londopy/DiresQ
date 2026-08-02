@@ -27,6 +27,8 @@ DiresQ tracks the people going into it.**
 [![Docs](https://img.shields.io/badge/docs-14_pages-cba6f7)](https://skythe7.github.io/DiresQ)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
+**[Read the docs →](https://skythe7.github.io/DiresQ)**
+
 Built at **Katy Youth Hacks 2026** (Tech for Humanity)
 · also submitted to **STEMist Hacks IV**
 
@@ -299,6 +301,13 @@ git push --tags
 ```
 
 ## Read more
+
+**All of this is a website: [skythe7.github.io/DiresQ](https://skythe7.github.io/DiresQ)**
+— same words, easier to read, and it's built from the files below on every
+push so the two can't disagree.
+
+The links here are to the source, which is the version that still works in a
+fork, offline, or if Pages is down.
 
 - [Why](docs/why.md) — the gap this exists to fill, and what we refused to
   build
