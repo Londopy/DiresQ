@@ -1,0 +1,210 @@
+:root{
+--base:#1e1e2e;
+--surface:#313244;
+--mantle:#181825;
+--overlay:#45475a;
+--text:#cdd6f4;
+--subtext:#a6adc8;
+--blue:#89b4fa;
+--green:#a6e3a1;
+--yellow:#f9e2af;
+--red:#f38ba8;
+--peach:#fab387;
+}
+
+*{box-sizing:border-box;}
+
+body{
+    margin:0;
+    background:var(--base);
+    color:var(--text);
+    font-family:system-ui,-apple-system,Segoe UI,sans-serif;
+}
+
+.container{
+    max-width:1000px;
+    margin:0 auto;
+    padding:32px 20px 64px;
+}
+
+.topbar{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:16px;
+    flex-wrap:wrap;
+    margin-bottom:24px;
+}
+
+.titles h1{
+    margin:0;
+    font-size:1.6rem;
+    letter-spacing:-0.01em;
+}
+
+.sub{
+    margin:4px 0 0;
+    color:var(--subtext);
+    font-size:0.9rem;
+}
+
+.topbar-right{
+    display:flex;
+    align-items:center;
+    gap:10px;
+}
+
+.feed-btn,.map-btn{
+    background:var(--surface);
+    color:var(--text);
+    text-decoration:none;
+    padding:8px 14px;
+    border-radius:8px;
+    font-size:0.9rem;
+}
+
+.feed-btn:hover,.map-btn:hover{background:var(--overlay);}
+
+.live{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    color:var(--subtext);
+    font-size:0.8rem;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+}
+
+.live .dot{
+    width:8px;height:8px;border-radius:50%;
+    background:var(--green);
+    animation:pulse 2s ease-in-out infinite;
+}
+
+.live.stalled .dot{background:var(--red);animation:none;}
+
+@keyframes pulse{
+    0%,100%{opacity:1;}
+    50%{opacity:0.25;}
+}
+
+/* ---- totals ---- */
+
+.totals{
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:10px;
+    margin-bottom:20px;
+}
+
+.total{
+    background:var(--mantle);
+    border-radius:10px;
+    padding:14px 16px;
+    border-left:3px solid var(--overlay);
+}
+
+.total .n{display:block;font-size:1.7rem;font-weight:700;line-height:1;}
+.total .k{
+    display:block;margin-top:4px;
+    font-size:0.75rem;text-transform:uppercase;
+    letter-spacing:0.08em;color:var(--subtext);
+}
+
+.total.overdue{border-left-color:var(--red);}
+.total.on_scene{border-left-color:var(--green);}
+.total.en_route{border-left-color:var(--blue);}
+.total.available{border-left-color:var(--overlay);}
+.total.overdue .n{color:var(--red);}
+
+/* ---- rows ---- */
+
+.responders{display:flex;flex-direction:column;gap:8px;}
+
+.row{
+    display:grid;
+    grid-template-columns:1.1fr 0.7fr 1.4fr 1.1fr;
+    gap:16px;
+    align-items:center;
+    background:var(--mantle);
+    border-radius:10px;
+    padding:14px 16px;
+    border-left:4px solid var(--overlay);
+    transition:background 0.2s ease,border-color 0.2s ease;
+}
+
+.row.en_route{border-left-color:var(--blue);}
+.row.on_scene{border-left-color:var(--green);}
+.row.available{border-left-color:var(--overlay);opacity:0.75;}
+
+/* The moment the whole app exists for. */
+.row.overdue{
+    border-left-color:var(--red);
+    background:#2a1a22;
+    animation:alarm 1.6s ease-in-out infinite;
+}
+
+@keyframes alarm{
+    0%,100%{background:#2a1a22;}
+    50%{background:#3a1f2a;}
+}
+
+/* Applied by board.js when a row changes state between polls. */
+.row.changed{animation:flash 0.9s ease-out 1;}
+
+@keyframes flash{
+    0%{background:var(--overlay);}
+    100%{background:var(--mantle);}
+}
+
+.who h2{margin:0;font-size:1rem;font-weight:600;}
+
+.caps{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;}
+
+.cap{
+    background:var(--surface);
+    color:var(--subtext);
+    font-size:0.7rem;
+    padding:2px 7px;
+    border-radius:99px;
+}
+
+.badge{
+    display:inline-block;
+    font-size:0.7rem;
+    font-weight:700;
+    letter-spacing:0.07em;
+    padding:4px 10px;
+    border-radius:99px;
+    background:var(--surface);
+    color:var(--subtext);
+    white-space:nowrap;
+}
+
+.badge.en_route{background:rgba(137,180,250,0.15);color:var(--blue);}
+.badge.on_scene{background:rgba(166,227,161,0.15);color:var(--green);}
+.badge.overdue{background:var(--red);color:var(--mantle);}
+
+.doing a{color:var(--text);text-decoration:none;font-size:0.92rem;}
+.doing a:hover{text-decoration:underline;}
+
+.vote{
+    display:block;margin-top:3px;
+    font-size:0.75rem;color:var(--peach);
+}
+
+.idle{color:var(--overlay);font-size:0.85rem;}
+
+.contact{text-align:right;font-size:0.8rem;color:var(--subtext);}
+.contact .ago{display:block;}
+.contact .pos{display:block;margin-top:3px;font-family:ui-monospace,monospace;font-size:0.72rem;color:var(--overlay);}
+
+.row.overdue .contact .ago{color:var(--red);font-weight:600;}
+
+.empty{color:var(--subtext);text-align:center;padding:40px 0;}
+
+@media (max-width:760px){
+    .totals{grid-template-columns:repeat(2,1fr);}
+    .row{grid-template-columns:1fr 1fr;gap:10px;}
+    .contact{text-align:left;}
+}

@@ -27,9 +27,12 @@ All notable changes to this project are documented here. Format follows
 - Once on scene, tell everyone else how staffed it is: needs more help,
   adequate, overstaffed, or stood down. Only people physically there can set
   this, because only they can see it.
-- The accountability board: every responder, what they are doing, where they
-  were last seen, and how long since anyone heard from them. Anyone overdue
-  sorts to the top.
+- The accountability board at `/board`: every responder, what they are doing,
+  where they were last seen, and how long since anyone heard from them. Anyone
+  overdue sorts to the top and their row turns red. The page refreshes itself
+  every three seconds, so someone going overdue appears without anyone
+  touching the screen. It renders server-side first, so it still works with
+  JavaScript switched off.
 - Check in to reset your timer and update your position.
 - Report cards say how many people are on their way and how many have arrived,
   and carry the staffing signal when someone on scene has set one. A report

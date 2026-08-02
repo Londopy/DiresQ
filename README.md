@@ -13,7 +13,7 @@ DiresQ tracks the people going into it.**
 
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
 [![Flask](https://img.shields.io/badge/flask-3.1-black)](https://flask.palletsprojects.com)
-[![Tests](https://img.shields.io/badge/tests-95%20passing-brightgreen)](tests/test_app.py)
+[![Tests](https://img.shields.io/badge/tests-111%20passing-brightgreen)](tests/test_app.py)
 [![Changelog](https://img.shields.io/badge/changelog-keep--a--changelog-orange)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 

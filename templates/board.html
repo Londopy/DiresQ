@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="../static/styles/board.css">
+    <title>Accountability Board</title>
+</head>
+<body>
+
+<div class="container">
+
+    <div class="topbar">
+
+        <div class="titles">
+            <h1>Accountability Board</h1>
+            <p class="sub">Everyone who went in, and when we last heard from them.</p>
+        </div>
+
+        <div class="topbar-right">
+            <span class="live" id="live" title="Refreshing every 3 seconds">
+                <span class="dot"></span> live
+            </span>
+            <a href="/" class="feed-btn">Reports</a>
+            <a href="/map" class="map-btn">Map</a>
+        </div>
+
+    </div>
+
+    <div class="totals">
+        <div class="total overdue">
+            <span class="n" id="n-overdue">0</span>
+            <span class="k">overdue</span>
+        </div>
+        <div class="total on_scene">
+            <span class="n" id="n-on-scene">0</span>
+            <span class="k">on scene</span>
+        </div>
+        <div class="total en_route">
+            <span class="n" id="n-en-route">0</span>
+            <span class="k">en route</span>
+        </div>
+        <div class="total available">
+            <span class="n" id="n-available">0</span>
+            <span class="k">available</span>
+        </div>
+    </div>
+
+    <!-- Rendered server-side for first paint, then replaced by board.js on
+         each poll. The page is readable with JavaScript disabled. -->
+    <div class="responders" id="responders">
+        {% for r in responders %}
+        <article class="row {{ r.state }}">
+
+            <div class="who">
+                <h2>{{ r.username }}</h2>
+                <div class="caps">
+                    {% for cap in r.capabilities %}
+                    <span class="cap">{{ cap }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="state">
+                <span class="badge {{ r.state }}">
+                    {{ r.state.replace('_', ' ')|upper }}
+                </span>
+            </div>
+
+            <div class="doing">
+                {% if r.assignment %}
+                <a href="/report/{{ r.assignment.report_id }}">
+                    {{ r.assignment.report_subject }}
+                </a>
+                {% if r.assignment.staffing_vote %}
+                <span class="vote">
+                    said {{ r.assignment.staffing_vote.replace('_', ' ') }}
+                </span>
+                {% endif %}
+                {% else %}
+                <span class="idle">not assigned</span>
+                {% endif %}
+            </div>
+
+            <div class="contact">
+                {% if r.minutes_since_contact is not none %}
+                <span class="ago">last contact {{ r.minutes_since_contact }} min ago</span>
+                {% else %}
+                <span class="ago idle">no contact yet</span>
+                {% endif %}
+                {% if r.last_position %}
+                <span class="pos">
+                    {{ '%.4f'|format(r.last_position.lat) }},
+                    {{ '%.4f'|format(r.last_position.lng) }}
+                </span>
+                {% else %}
+                <span class="pos idle">no position</span>
+                {% endif %}
+            </div>
+
+        </article>
+        {% endfor %}
+    </div>
+
+    <p class="empty" id="empty" hidden>Nobody has registered as a responder yet.</p>
+
+</div>
+
+<script src="../static/scripts/board.js"></script>
+</body>
+</html>

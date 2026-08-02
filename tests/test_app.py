@@ -580,6 +580,49 @@ class TestCardShowsResponders:
         assert b"UNSTAFFED" not in body
 
 
+class TestBoardPage:
+    def test_page_renders(self, client):
+        assert client.get("/board").status_code == 200
+
+    def test_requires_login(self, anon):
+        r = anon.get("/board")
+        assert r.status_code == 302 and "/login" in r.headers["Location"]
+
+    def test_lists_responders_server_side(self, client):
+        body = client.get("/board").get_data(as_text=True)
+        assert "londo" in body and "skythe" in body
+        assert "kiyan" not in body, "reporters do not belong on the board"
+
+    def test_shows_what_someone_is_doing(self, client):
+        client.post("/report/1/rescue")
+        body = client.get("/board").get_data(as_text=True)
+        assert "Water rising, 2 trapped" in body
+        assert "EN ROUTE" in body
+
+    def test_overdue_row_is_marked(self, client):
+        client.post("/report/1/rescue")
+        stale = (datetime.now(timezone.utc) - timedelta(minutes=90)).isoformat(
+            timespec="seconds")
+        with diresq.app.app_context():
+            db = diresq.get_db()
+            db.execute("UPDATE assignments SET joined_at = ?", (stale,))
+            db.commit()
+        body = client.get("/board").get_data(as_text=True)
+        assert 'class="row overdue"' in body
+        assert "OVERDUE" in body
+        assert "last contact 90 min ago" in body
+
+    def test_page_works_with_no_responders_at_all(self, anon):
+        # Empty board must render, not explode.
+        anon.post("/login", data={"username": "kiyan", "password": "diresq"})
+        with diresq.app.app_context():
+            db = diresq.get_db()
+            db.execute("DELETE FROM assignments")
+            db.execute("UPDATE accounts SET role = 'reporter'")
+            db.commit()
+        assert anon.get("/board").status_code == 200
+
+
 class TestFeedReordersOnStaffing:
     def on_scene_and_vote(self, client, report_id, vote):
         client.post(f"/report/{report_id}/rescue")

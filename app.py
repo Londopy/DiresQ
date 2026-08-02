@@ -217,6 +217,14 @@ def map_page():
     return render_template("map.html", reports=located)
 
 
+@app.get("/board")
+@login_required
+def board():
+    # Rendered server-side so the page works without JS; board.js then polls
+    # /api/responders and re-renders on its own.
+    return render_template("board.html", responders=fetch_responders())
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":

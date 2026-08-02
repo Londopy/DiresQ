@@ -29,17 +29,17 @@
 
         <form action="/login" method="POST" class="login-card">
 
-
-{% with messages = get_flashed_messages() %}
-{% if messages %}
-<ul class="flashes">
-    {% for message in messages %}
-    <li>{{ message }}</li>
-    {% endfor %}
-</ul>
-{% endif %}
-{% endwith %}
             <h2>Login</h2>
+
+            {% with messages = get_flashed_messages() %}
+            {% if messages %}
+            <ul class="flashes">
+                {% for message in messages %}
+                <li>{{ message }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+            {% endwith %}
 
             <input
                 type="text"
