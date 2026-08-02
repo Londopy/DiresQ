@@ -9,12 +9,26 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.10 is the floor the README advertises, 3.12 is what Render runs.
+        # Testing only the deploy version meant the advertised one was a claim
+        # nobody checked — and it broke once already. `datetime.fromisoformat`
+        # could not parse the trailing "Z" that browsers send until 3.11, so
+        # every queued check-in would have failed on a 3.10 host while passing
+        # CI. Found by hand. This leg is here so the next one isn't.
+        python: ["3.10", "3.12"]
+
+    name: tests (py${{ matrix.python }})
+
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python }}
           cache: pip
 
       - run: pip install -r requirements-dev.txt
@@ -28,25 +42,108 @@ jobs:
       - name: Tests
         run: pytest -q
 
-      # The test client skips the WSGI server and static handler.
+      # The test client skips the WSGI server and the static handler, so
+      # everything below is checked against a real one.
+      #
+      # /sw.js and the manifest are here rather than in the suite because the
+      # failure they guard against is a serving problem, not a code one: a
+      # worker sent with the wrong content type is refused by the browser, and
+      # a manifest that 404s means the app silently stops being installable.
+      # Both look completely fine to pytest.
       - name: Boot check
         run: |
           flask --app app init-db
           flask --app app seed
           flask --app app run --port 5000 &
+
           for i in $(seq 1 20); do
             sleep 0.5
-            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5000/login) && break
+            curl -sf -o /dev/null http://127.0.0.1:5000/login && break
           done
-          echo "GET /login -> $code"
-          test "$code" = "200"
 
+          fail=0
+          check () {   # path, expected status
+            code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:5000$1")
+            if [ "$code" = "$2" ]; then
+              echo "  ok    $1 -> $code"
+            else
+              echo "::error::$1 returned $code, expected $2"
+              fail=1
+            fi
+          }
+
+          check /login 200
+          check /disclaimer 200
+          check /offline 200
+          check /sw.js 200
+          check /static/manifest.webmanifest 200
+
+          # A service worker served as text/plain is refused outright, and the
+          # whole offline story goes with it.
+          type=$(curl -sI http://127.0.0.1:5000/sw.js | grep -i '^content-type' || true)
+          echo "  sw.js $type"
+          echo "$type" | grep -qi javascript || {
+            echo "::error::/sw.js is not served as JavaScript"; fail=1; }
+
+          exit $fail
+
+  # Separate job: the service worker decides what a phone keeps when it has no
+  # network, and a syntax error in it fails silently. `cache.addAll` rejects
+  # atomically, the install handler swallows that by design, and the app goes
+  # on looking fine right up until somebody loses signal.
+  scripts:
+    runs-on: ubuntu-latest
+    name: browser scripts
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Parse every script we ship
+        run: |
+          fail=0
+          for f in static/scripts/*.js; do
+            if node --check "$f"; then
+              echo "  ok    $f"
+            else
+              echo "::error file=$f::does not parse"
+              fail=1
+            fi
+          done
+          exit $fail
+
+      - name: The manifest is valid JSON
+        run: |
+          python3 -c "
+          import json, pathlib, sys
+          m = json.loads(pathlib.Path('static/manifest.webmanifest').read_text())
+          missing = [k for k in ('name', 'start_url', 'display', 'icons')
+                     if k not in m]
+          if missing:
+              print(f'::error::manifest is missing {missing}')
+              sys.exit(1)
+          for icon in m['icons']:
+              if not pathlib.Path(icon['src'].lstrip('/')).exists():
+                  print(f\"::error::manifest names {icon['src']}, which is absent\")
+                  sys.exit(1)
+          print(f\"manifest ok, {len(m['icons'])} icons all present\")
+          "
+
+  summary:
+    runs-on: ubuntu-latest
+    needs: [test, scripts]
+    if: always()
+    steps:
       - name: Summary
-        if: always()
         run: |
           {
             echo "### CI"
-            echo "- tests: \`pytest -q\`"
+            echo "- tests: \`pytest -q\` on Python 3.10 and 3.12"
             echo "- lint: ruff E9,F (advisory)"
-            echo "- boot: GET /login on the real server"
+            echo "- boot: login, disclaimer, offline, sw.js and the manifest"
+            echo "  fetched from a real server, with the worker's content type"
+            echo "  checked"
+            echo "- scripts: every file in static/scripts parsed with node"
           } >> "$GITHUB_STEP_SUMMARY"

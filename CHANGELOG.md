@@ -278,6 +278,19 @@ All notable changes to this project are documented here. Format follows
 - The service worker was registered from `map.js`, so anyone who installed
   DiresQ from the accountability board had no offline support at all until
   they happened to open the map. It now registers on every page.
+- CI tested only Python 3.12 while the README advertised 3.10 and up. The gap
+  was not theoretical: `datetime.fromisoformat` could not parse the trailing
+  `Z` that browsers put on a timestamp until 3.11, so every queued check-in
+  would have failed on a 3.10 host while CI stayed green. That one was found
+  by hand. Tests now run on both.
+- Nothing checked the JavaScript. A syntax error in the service worker fails
+  silently — `cache.addAll` rejects atomically and the install handler
+  swallows it by design — so the app would look fine until somebody lost
+  signal. Every file in `static/scripts` is now parsed on each push, and the
+  boot check fetches `/sw.js`, `/offline` and the manifest from a real server
+  and asserts the worker is served as JavaScript, since a worker sent as
+  `text/plain` is refused by the browser and looks perfectly healthy to
+  pytest.
 - The suggestion panel showed the classifier's internal stems rather than the
   words somebody typed: "Suggested from: ris, upstair, fast" instead of
   "rising, upstairs, fast". The point of showing the reasoning is that a
