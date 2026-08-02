@@ -1,17 +1,12 @@
-"""DiresQ -- Katy Youth Hacks 2026.
+"""DiresQ backend.
 
-Backend skeleton: connection helper + the six routes templates/ already needs.
-
-    python -m venv .venv && .venv\\Scripts\\activate     (Windows)
+    python -m venv .venv && .venv\\Scripts\\activate
     pip install -r requirements.txt
     flask --app app init-db
     flask --app app seed
     flask --app app run --debug
 
-Then http://127.0.0.1:5000
-
-Login is deliberately bypassable while the core loop is being built --
-see DIRESQ_DEV_USER below. Per work etiquette: login lands last.
+Set DIRESQ_DEV_USER=londo to skip the login wall while building.
 """
 
 from __future__ import annotations
@@ -27,43 +22,32 @@ from flask import (
 )
 from werkzeug.security import check_password_hash, generate_password_hash
 
-# --------------------------------------------------------------------------- #
-# config
-# --------------------------------------------------------------------------- #
-
 DATABASE = os.environ.get("DIRESQ_DB", "diresq.db")
 
-# Default check-in interval when a responder gives no ETA. Doc open question
-# suggested 30 min; that is the answer until someone says otherwise.
+# How long a responder has to check in when they didn't give an ETA.
 DEFAULT_CHECKIN_MINUTES = 30
 
-# ETA guardrails ("Limits We're Fixing #2"). The timer is a safety mechanism --
-# a 12-hour interval is not a check-in, it's an off switch.
+# A 12-hour check-in interval isn't a check-in, it's an off switch.
 ETA_MIN_MINUTES = 5
 ETA_WARN_MINUTES = 120
 ETA_MAX_MINUTES = 240
 
 PRIORITIES = ("HIGH", "MEDIUM", "LOW")
 
-# Strings sort wrong alphabetically (HIGH < LOW < MEDIUM). Always rank via this.
+# Never ORDER BY priority directly: alphabetically HIGH < LOW < MEDIUM.
 PRIORITY_RANK = """
     CASE r.priority WHEN 'HIGH' THEN 3 WHEN 'MEDIUM' THEN 2 ELSE 1 END
 """
 
-# Most conservative wins. need_more always beats adequate -- an optimistic
-# report must never suppress a call for help.
+# Ascending order of caution. An optimistic responder must never be able to
+# drown out someone asking for help, so we take the max, not the average.
 STAFFING_ORDER = ("stood_down", "overstaffed", "adequate", "need_more")
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("DIRESQ_SECRET_KEY") or secrets.token_hex(32)
 
 
-# --------------------------------------------------------------------------- #
-# db
-# --------------------------------------------------------------------------- #
-
 def get_db() -> sqlite3.Connection:
-    """One connection per request, torn down in close_db."""
     if "db" not in g:
         g.db = sqlite3.connect(DATABASE, detect_types=sqlite3.PARSE_DECLTYPES)
         g.db.row_factory = sqlite3.Row
@@ -91,16 +75,7 @@ def parse_iso(value: str | None) -> datetime | None:
         return None
 
 
-# --------------------------------------------------------------------------- #
-# auth
-# --------------------------------------------------------------------------- #
-
 def current_user() -> sqlite3.Row | None:
-    """Logged-in account, or the dev override.
-
-    Set DIRESQ_DEV_USER=londo to work on the core loop without logging in.
-    Unset it before the demo.
-    """
     uid = session.get("user_id")
     if uid is None:
         dev = os.environ.get("DIRESQ_DEV_USER")
@@ -126,16 +101,8 @@ def inject_user():
     return {"current_user": current_user()}
 
 
-# --------------------------------------------------------------------------- #
-# staffing (computed, never stored)
-# --------------------------------------------------------------------------- #
-
 def resolve_staffing(votes) -> str:
-    """Most conservative vote from anyone currently on scene.
-
-    No votes at all -> 'unstaffed'. This is one comparison, and it is the
-    difference between a safety system and a popularity contest.
-    """
+    """Most cautious vote from anyone on scene, or 'unstaffed' if nobody voted."""
     ranked = [v for v in votes if v in STAFFING_ORDER]
     if not ranked:
         return "unstaffed"
@@ -152,9 +119,7 @@ def staffing_for(report_id: int) -> str:
 
 
 def is_overdue(joined_at: str, eta: str | None, last_checkin: str | None) -> bool:
-    """Computed on read. A responder is overdue if now > eta, or -- with no
-    eta -- if it has been longer than the default interval since their last
-    contact (a check-in if they have one, otherwise when they joined)."""
+    """Derived at read time so there's no cron job to forget to start."""
     now = datetime.now(timezone.utc)
     deadline = parse_iso(eta)
     if deadline is None:
@@ -164,10 +129,6 @@ def is_overdue(joined_at: str, eta: str | None, last_checkin: str | None) -> boo
         deadline = last + timedelta(minutes=DEFAULT_CHECKIN_MINUTES)
     return now > deadline
 
-
-# --------------------------------------------------------------------------- #
-# queries
-# --------------------------------------------------------------------------- #
 
 REPORT_COLUMNS = f"""
     r.id, r.subject, r.description, r.priority, r.lat, r.lng,
@@ -180,7 +141,6 @@ REPORT_COLUMNS = f"""
 
 
 def fetch_reports(include_resolved: bool = False) -> list[dict]:
-    """Feed order: priority desc, then newest first."""
     where = "" if include_resolved else "WHERE r.status NOT IN ('resolved', 'hidden')"
     rows = get_db().execute(f"""
         SELECT {REPORT_COLUMNS}
@@ -196,7 +156,7 @@ def fetch_reports(include_resolved: bool = False) -> list[dict]:
     for row in rows:
         item = dict(row)
         item["staffing"] = staffing_for(row["id"])
-        # map.js reads latitude/longitude; the schema stores lat/lng.
+        # map.js reads latitude/longitude. Drop these two lines once it doesn't.
         item["latitude"] = row["lat"]
         item["longitude"] = row["lng"]
         reports.append(item)
@@ -230,10 +190,6 @@ def fetch_report(report_id: int) -> dict | None:
     return item
 
 
-# --------------------------------------------------------------------------- #
-# routes -- the six templates/ needs
-# --------------------------------------------------------------------------- #
-
 @app.get("/")
 @login_required
 def homepage():
@@ -243,7 +199,7 @@ def homepage():
 @app.get("/map")
 @login_required
 def map_page():
-    # tojson cannot serialise sqlite3.Row -- fetch_reports returns dicts.
+    # tojson can't serialise sqlite3.Row, so fetch_reports hands back dicts.
     located = [r for r in fetch_reports() if r["latitude"] is not None]
     return render_template("map.html", reports=located)
 
@@ -258,7 +214,8 @@ def login():
             "SELECT * FROM accounts WHERE username = ?", (username,)
         ).fetchone()
 
-        # One generic message, both branches -- never leak which usernames exist.
+        # Same message whether the user exists or the password was wrong,
+        # otherwise this endpoint enumerates accounts for free.
         if row is None or not check_password_hash(row["hashed_password"], password):
             flash("Invalid username or password")
             return render_template("login.html"), 401
@@ -283,9 +240,6 @@ def report_new():
         subject = (request.form.get("subject") or "").strip()
         priority = (request.form.get("priority") or "").strip().upper()
         description = (request.form.get("description") or "").strip()
-
-        # report_make.html has no location input yet. Accept it when it appears;
-        # until then reports file fine but will not appear on the map.
         lat = request.form.get("lat", type=float)
         lng = request.form.get("lng", type=float)
 
@@ -293,6 +247,10 @@ def report_new():
             flash("Subject is required")
         elif priority not in PRIORITIES:
             flash("Priority must be HIGH, MEDIUM or LOW")
+        elif lat is None or lng is None:
+            # The hidden lat/lng inputs carry `required`, but hidden inputs are
+            # exempt from browser validation, so an untouched map still submits.
+            flash("Click the map to set a location")
         else:
             db = get_db()
             cur = db.execute("""
@@ -322,11 +280,7 @@ def report_detail(report_id: int):
 @app.post("/report/<int:report_id>/rescue")
 @login_required
 def report_rescue(report_id: int):
-    """The rescue button in report.html == 'join' in the API spec.
-
-    Anyone can join. That is the point -- no claim lock, many responders
-    per report.
-    """
+    """Join a report. Anyone can, and any number of people can."""
     db = get_db()
     user = current_user()
 
@@ -339,7 +293,7 @@ def report_rescue(report_id: int):
             VALUES (?, ?, 'en_route', ?)
         """, (report_id, user["id"], now_iso()))
     except sqlite3.IntegrityError:
-        # UNIQUE(report_id, responder) -- already joined. 409, not an error page.
+        # UNIQUE(report_id, responder) fired. Already joined, not an error.
         flash("You have already joined this report")
         return redirect(url_for("report_detail", report_id=report_id))
 
@@ -351,22 +305,14 @@ def report_rescue(report_id: int):
     return redirect(url_for("report_detail", report_id=report_id))
 
 
-# --------------------------------------------------------------------------- #
-# one JSON endpoint, so the 3s polling has somewhere to land later
-# --------------------------------------------------------------------------- #
-
 @app.get("/api/reports")
 def api_reports():
     return jsonify(fetch_reports())
 
 
-# --------------------------------------------------------------------------- #
-# cli
-# --------------------------------------------------------------------------- #
-
 @app.cli.command("init-db")
 def init_db_command() -> None:
-    """Drop and recreate every table. Destructive, on purpose."""
+    """Drop every table and rebuild. Wipes the database."""
     with app.app_context():
         with open("schema.sql", encoding="utf-8") as fh:
             get_db().executescript(fh.read())
@@ -376,7 +322,6 @@ def init_db_command() -> None:
 
 @app.cli.command("seed")
 def seed_command() -> None:
-    """A handful of Katy-area reports. An empty board looks broken."""
     accounts = [
         ("londo", "responder", "boat,medical"),
         ("skythe", "responder", "truck,chainsaw"),
