@@ -5,6 +5,10 @@ venv/
 .venv/
 env/
 
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+
 # Database
 *.db
 *.sqlite
@@ -19,6 +23,18 @@ env/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Sublime Text
+# Per-user window state: open tabs, unsaved buffers, find history.
+*.sublime-workspace
+# Shared project settings. Uncomment to ignore if you'd rather not commit it.
+# *.sublime-project
+# SFTP plugin config. Stores host passwords and keys in plaintext.
+sftp-config.json
+sftp-config-alt*.json
+*.tmlanguage.cache
+*.tmPreferences.cache
+*.stTheme.cache
 
 # Logs
 *.log

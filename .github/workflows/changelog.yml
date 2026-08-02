@@ -1,0 +1,37 @@
+name: Changelog
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - CHANGELOG.md
+      - .github/workflows/changelog.yml
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install patchnotes==2.4.0
+
+      # Annotations land inline on the PR diff. Reported, not blocking.
+      - name: Validate CHANGELOG.md
+        continue-on-error: true
+        run: patchnotes CHANGELOG.md validate --strict
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Changelog"
+            echo '```'
+            patchnotes CHANGELOG.md unreleased || echo "no unreleased section"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -19,6 +19,16 @@
 
     <form action="/report/new" method="POST" class="report-card">
 
+
+{% with messages = get_flashed_messages() %}
+{% if messages %}
+<ul class="flashes">
+    {% for message in messages %}
+    <li>{{ message }}</li>
+    {% endfor %}
+</ul>
+{% endif %}
+{% endwith %}
         <h1>Create Report</h1>
 
         <label>Subject</label>

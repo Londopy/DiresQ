@@ -1,0 +1,69 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # The only failures worth stopping a push for.
+  blocking:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: No committed database
+        run: |
+          if git ls-files | grep -Ei '\.(db|sqlite3?)$'; then
+            echo "::error::a database file is tracked in git — add it to .gitignore and git rm --cached it"
+            exit 1
+          fi
+
+      - name: No hardcoded SECRET_KEY
+        run: |
+          if grep -rnE 'SECRET_KEY["'\'']?\s*[=:]\s*["'\'][^"'\'']+' --include='*.py' .; then
+            echo "::error::SECRET_KEY is assigned a literal — read it from the environment"
+            exit 1
+          fi
+
+      - name: No random module for anything token-shaped
+        run: |
+          if grep -rnE '\brandom\.(random|randint|choice|choices|getrandbits)' \
+               --include='*.py' . | grep -viE 'seed|sample|test'; then
+            echo "::error::use the secrets module for tokens, not random"
+            exit 1
+          fi
+
+  # Reported to the job summary, never blocking.
+  advisory:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install bandit pip-audit
+
+      - name: Bandit
+        continue-on-error: true
+        run: |
+          echo '### Bandit' >> "$GITHUB_STEP_SUMMARY"
+          bandit -r . -x ./tests,./.venv -f txt 2>&1 | tail -40 >> "$GITHUB_STEP_SUMMARY"
+
+      - name: pip-audit
+        continue-on-error: true
+        run: |
+          echo '### pip-audit' >> "$GITHUB_STEP_SUMMARY"
+          pip-audit -r requirements.txt 2>&1 | tail -40 >> "$GITHUB_STEP_SUMMARY"
+
+      - name: gitleaks
+        continue-on-error: true
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

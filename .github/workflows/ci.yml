@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements-dev.txt
+
+      # Undefined names, syntax, unused imports. Not style.
+      - name: Lint
+        continue-on-error: true
+        run: ruff check --select=E9,F --output-format=github .
+
+      # Blocks, unlike the rest. main must always run.
+      - name: Tests
+        run: pytest -q
+
+      # The test client skips the WSGI server and static handler.
+      - name: Boot check
+        run: |
+          flask --app app init-db
+          flask --app app seed
+          flask --app app run --port 5000 &
+          for i in $(seq 1 20); do
+            sleep 0.5
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5000/login) && break
+          done
+          echo "GET /login -> $code"
+          test "$code" = "200"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### CI"
+            echo "- tests: \`pytest -q\`"
+            echo "- lint: ruff E9,F (advisory)"
+            echo "- boot: GET /login on the real server"
+          } >> "$GITHUB_STEP_SUMMARY"

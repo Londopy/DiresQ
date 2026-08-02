@@ -16,6 +16,7 @@ import secrets
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from functools import wraps
+from pathlib import Path
 
 from flask import (
     Flask, flash, g, jsonify, redirect, render_template, request, session, url_for
@@ -310,18 +311,19 @@ def api_reports():
     return jsonify(fetch_reports())
 
 
-@app.cli.command("init-db")
-def init_db_command() -> None:
+# Resolved against this file, not the working directory, so pytest can run
+# from anywhere.
+SCHEMA = Path(__file__).with_name("schema.sql")
+
+
+def init_db() -> None:
     """Drop every table and rebuild. Wipes the database."""
     with app.app_context():
-        with open("schema.sql", encoding="utf-8") as fh:
-            get_db().executescript(fh.read())
+        get_db().executescript(SCHEMA.read_text(encoding="utf-8"))
         get_db().commit()
-    print(f"initialised {DATABASE}")
 
 
-@app.cli.command("seed")
-def seed_command() -> None:
+def seed_data() -> tuple[int, int]:
     accounts = [
         ("londo", "responder", "boat,medical"),
         ("skythe", "responder", "truck,chainsaw"),
@@ -362,7 +364,21 @@ def seed_command() -> None:
             """, (subject, desc, priority, lat, lng, sender, now_iso()))
 
         db.commit()
-    print(f"seeded {len(accounts)} accounts, {len(reports)} reports "
+    return len(accounts), len(reports)
+
+
+@app.cli.command("init-db")
+def init_db_command() -> None:
+    """Drop every table and rebuild. Wipes the database."""
+    init_db()
+    print(f"initialised {DATABASE}")
+
+
+@app.cli.command("seed")
+def seed_command() -> None:
+    """Load test accounts and Katy-area reports."""
+    n_accounts, n_reports = seed_data()
+    print(f"seeded {n_accounts} accounts, {n_reports} reports "
           f"(password for all: diresq)")
 
 

@@ -1,0 +1,9 @@
+-r requirements.txt
+
+pytest==8.3.4
+
+# Changelog parsing and CI validation.
+patchnotes==2.4.0
+
+# Errors only. Style nits are not worth a red X at hour 28.
+ruff==0.8.4
