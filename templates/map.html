@@ -3,12 +3,65 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DiresQ Map</title>
+
     <link rel="stylesheet" href="../static/styles/map.css">
-    <title>Map</title>
+
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet/dist/leaflet.css">
 </head>
 <body>
-    <!-- Code here -->
 
-    <script src="../static/scripts/map.js"></script>
+<div class="container">
+
+    <header>
+
+        <h1>DiresQ Map</h1>
+
+        <input
+            type="text"
+            id="search"
+            placeholder="Search report..."
+        >
+
+    </header>
+
+    <div id="map"></div>
+
+    <div class="stats">
+
+        <div class="card">
+            <h2 id="total">{{ reports|length }}</h2>
+            <p>Total</p>
+        </div>
+
+        <div class="card high">
+            <h2 id="high">0</h2>
+            <p>High</p>
+        </div>
+
+        <div class="card medium">
+            <h2 id="medium">0</h2>
+            <p>Medium</p>
+        </div>
+
+        <div class="card low">
+            <h2 id="low">0</h2>
+            <p>Low</p>
+        </div>
+
+    </div>
+
+</div>
+
+<script id="reports-data" type="application/json">
+{{ reports | tojson }}
+</script>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script src="../static/scripts/map.js"></script>
+
 </body>
 </html>
