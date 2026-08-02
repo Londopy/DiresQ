@@ -38,7 +38,10 @@ All notable changes to this project are documented here. Format follows
   every three seconds, so someone going overdue appears without anyone
   touching the screen. It renders server-side first, so it still works with
   JavaScript switched off.
-- Check in to reset your timer and update your position.
+- Check in to reset your timer and update your position. A check-in can say
+  when it was really made, so one queued while offline is judged on when it
+  happened rather than when it synced. The board shows both times and marks
+  the ones that arrived late.
 - The feed refreshes itself, so a card reorders when someone two streets away
   changes their staffing signal.
 - Flag a report as fake. One flag each; at three it drops out of the feed but

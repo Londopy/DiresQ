@@ -1,7 +1,8 @@
-# Tasks — Londo
+# Tasks
 
-Kiyan is MIA, so his list is folded in here. Ordered by what actually blocks
-the submission, not by what's fun.
+Shared list. Ordered by what actually blocks the submission, not by what's
+fun. Anyone can take anything — say so in Discord first if it's in someone
+else's files.
 
 Build cutoff: **______** (doc says at least 3h before submission — pick a
 number and put it here)
@@ -21,7 +22,9 @@ number and put it here)
 - [ ] Try to break it: empty forms, GPS denied, double-join, silly input,
       resolve twice, flag your own report.
 
-## Was Kiyan's
+## Demo and submission
+
+Currently unclaimed — Londo picking these up unless someone says otherwise.
 
 - [ ] Seed content that reads like real Katy incidents. The five in `seed_data`
       are fine but thin — real street names, believable descriptions.
@@ -30,16 +33,35 @@ number and put it here)
 - [ ] Screenshots for the README.
 - [ ] Devpost writeup — tagline, about, tags, links.
 
+## Skythe — frontend
+
+Londo scaffolded these to match the Catppuccin variables, but they've never
+been through a designer. They're functional, not designed. Restyle freely,
+move markup, rename classes — the backend doesn't care what any of it looks
+like.
+
+- [ ] `/board` — `board.css`. The hero screen and the last shot of the video.
+      Overdue rows should be impossible to miss.
+- [ ] Report page actions — `actions.css`. Join, status, staffing buttons,
+      check in, resolve.
+- [ ] `/triage` — `triage.css`. Four questions, wants to feel calm and fast.
+- [ ] `/credits` — `credits.css`. The hidden page.
+- [ ] `nav.css` — the Board link and its overdue badge, on every page.
+- [ ] Responder pins on the map. Data is already in `/api/responders`.
+- [ ] Phone width, everywhere. Nobody has looked.
+- [ ] Role picker on signup — everyone is a responder right now.
+
 ## Still unbuilt
 
 - [ ] **Responder pins on the map.** Board shows coordinates, map doesn't plot
       them. Your 1:40 beat says "last known position". Data is already in
       `/api/responders`.
-- [ ] **Offline queue.** Check-ins queue in localStorage, sync on reconnect.
-      Real differentiator and a scripted beat at 2:00.
-- [ ] **Offline map tiles.** Service worker, cache-first. Only after the queue
-      works — tiles without the queue is backwards. Do NOT bulk-download tiles,
-      the OSM usage policy forbids it.
+- [ ] **Offline queue** *(frontend — Skythe unless she'd rather not)*.
+      Check-ins queue in localStorage, sync on reconnect. Real differentiator
+      and a scripted beat at 2:00.
+- [ ] **Offline map tiles** *(frontend)*. Service worker, cache-first. Only
+      after the queue works — tiles without the queue is backwards. Do NOT
+      bulk-download tiles, the OSM usage policy forbids it.
 - [ ] **Astro site.** Content is already written in `docs/`. Mostly a deploy
       job. First thing to cut.
 

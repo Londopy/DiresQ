@@ -83,11 +83,19 @@ CREATE INDEX idx_assignments_responder ON assignments(responder);
 
 
 CREATE TABLE checkins (
-    id         INTEGER PRIMARY KEY,
-    responder  INTEGER NOT NULL REFERENCES accounts(id),
-    lat        REAL,
-    lng        REAL,
-    created_at TEXT    NOT NULL
+    id          INTEGER PRIMARY KEY,
+    responder   INTEGER NOT NULL REFERENCES accounts(id),
+    lat         REAL,
+    lng         REAL,
+
+    -- When the responder says they were there. For a check-in queued offline
+    -- this is the time it was made, not the time it reached us. The overdue
+    -- timer runs off this, so a late sync can't silently clear a red row.
+    created_at  TEXT    NOT NULL,
+
+    -- When the server actually got it. Ours, not the client's. The gap
+    -- between the two is what tells a coordinator someone was out of contact.
+    received_at TEXT    NOT NULL
 );
 
 CREATE INDEX idx_checkins_responder ON checkins(responder, created_at DESC);

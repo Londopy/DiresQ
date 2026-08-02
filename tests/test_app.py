@@ -872,6 +872,108 @@ class TestPositionMismatch:
         assert diresq.metres_between(None, -95.8, 29.7, -95.8) is None
 
 
+class TestQueuedCheckins:
+    """A check-in that sat offline must not clear a timer it never met."""
+
+    def go_overdue(self, client, minutes=90):
+        client.post("/report/1/rescue")
+        stale = (datetime.now(timezone.utc) - timedelta(minutes=minutes)).isoformat(
+            timespec="seconds")
+        with diresq.app.app_context():
+            db = diresq.get_db()
+            db.execute("UPDATE assignments SET joined_at = ?", (stale,))
+            db.commit()
+
+    def row(self, client):
+        return next(r for r in client.get("/api/responders").get_json()
+                    if r["username"] == "londo")
+
+    def test_a_live_checkin_clears_the_timer(self, client):
+        self.go_overdue(client)
+        assert self.row(client)["overdue"] is True
+        client.post("/api/checkin", json={"lat": 29.78, "lng": -95.82})
+        assert self.row(client)["overdue"] is False
+
+    def test_an_old_queued_checkin_does_not(self, client):
+        # Made 80 minutes ago, syncing now. They were silent for the 30-minute
+        # window, so the row has to stay red.
+        self.go_overdue(client)
+        made = (datetime.now(timezone.utc) - timedelta(minutes=80)).isoformat(
+            timespec="seconds")
+        client.post("/api/checkin", json={
+            "lat": 29.78, "lng": -95.82, "happened_at": made,
+        })
+        assert self.row(client)["overdue"] is True, (
+            "a late sync silently cleared an overdue responder"
+        )
+
+    def test_a_recent_queued_checkin_does_clear_it(self, client):
+        self.go_overdue(client)
+        made = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat(
+            timespec="seconds")
+        client.post("/api/checkin", json={
+            "lat": 29.78, "lng": -95.82, "happened_at": made,
+        })
+        assert self.row(client)["overdue"] is False
+
+    def test_the_board_shows_it_arrived_late(self, client):
+        client.post("/report/1/rescue")
+        made = (datetime.now(timezone.utc) - timedelta(minutes=20)).isoformat(
+            timespec="seconds")
+        client.post("/api/checkin", json={
+            "lat": 29.78, "lng": -95.82, "happened_at": made,
+        })
+        pos = self.row(client)["last_position"]
+        assert pos["synced_late"] is True
+        assert pos["at"] != pos["received_at"]
+
+    def test_a_normal_checkin_is_not_marked_late(self, client):
+        client.post("/report/1/rescue")
+        client.post("/api/checkin", json={"lat": 29.78, "lng": -95.82})
+        assert self.row(client)["last_position"]["synced_late"] is False
+
+    @pytest.mark.parametrize("offset,why", [
+        (timedelta(hours=5), "dated hours into the future"),
+        (timedelta(hours=-20), "older than the backdating cap"),
+    ])
+    def test_implausible_timestamps_are_refused(self, client, offset, why):
+        when = (datetime.now(timezone.utc) + offset).isoformat(timespec="seconds")
+        r = client.post("/api/checkin", json={
+            "lat": 29.78, "lng": -95.82, "happened_at": when,
+        })
+        assert r.status_code == 400, why
+        assert r.get_json()["error"]
+
+    def test_garbage_timestamps_are_refused(self, client):
+        r = client.post("/api/checkin", json={
+            "lat": 29.78, "lng": -95.82, "happened_at": "yesterday-ish",
+        })
+        assert r.status_code == 400
+
+    def test_a_slightly_fast_clock_is_tolerated(self, client):
+        # 30 seconds ahead is drift, not a lie. Accept it, but don't store a
+        # time in the future.
+        when = (datetime.now(timezone.utc) + timedelta(seconds=30)).isoformat(
+            timespec="seconds")
+        r = client.post("/api/checkin", json={
+            "lat": 29.78, "lng": -95.82, "happened_at": when,
+        })
+        assert r.status_code == 201
+        assert not r.get_json()["synced_late"]
+
+    def test_the_newest_checkin_wins_not_the_last_to_arrive(self, client):
+        client.post("/report/1/rescue")
+        client.post("/api/checkin", json={"lat": 29.78, "lng": -95.82})
+
+        # An older queued one arrives afterwards; it must not become "latest".
+        old = (datetime.now(timezone.utc) - timedelta(minutes=40)).isoformat(
+            timespec="seconds")
+        client.post("/api/checkin", json={
+            "lat": 29.90, "lng": -95.50, "happened_at": old,
+        })
+        assert self.row(client)["last_position"]["lat"] == 29.78
+
+
 class TestTriage:
     def test_page_renders(self, client):
         assert client.get("/triage").status_code == 200

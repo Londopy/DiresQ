@@ -55,10 +55,13 @@ tells you when to *start asking*, and that's all we claim for it.
 Check-ins, reports and the board all need a connection. In a disaster, that's
 exactly what you don't have.
 
-The plan is a queue in local storage that syncs on reconnect, plus cached map
-tiles for areas already viewed. Neither is built. Tiles can only ever cover
-where you've already been — a cache can't pre-fetch somewhere you've never
-looked.
+The server side is ready: a check-in can say when it was really made, and the
+overdue timer uses that rather than when it arrived, so a queued one can't
+clear a red row it never earned. The queue itself, and cached map tiles, are
+not built.
+
+Tiles can only ever cover where you've already been — a cache can't pre-fetch
+somewhere you've never looked.
 
 ## Spam control is flagging, not verification
 

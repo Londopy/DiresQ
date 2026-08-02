@@ -443,6 +443,16 @@ ON_SCENE_RADIUS_M = 500
 # Flags needed before a report drops out of the feed.
 FLAG_THRESHOLD = 3
 
+# A check-in queued offline can say when it was really made. Bounds on that
+# claim: clocks drift a bit, so allow a little future, and anything older than
+# the cap is too stale to be worth trusting.
+CLOCK_SKEW_SECONDS = 120
+MAX_BACKDATE_HOURS = 12
+
+# Gap between "I checked in" and "we received it" that counts as a late sync,
+# so a coordinator can see someone was out of contact.
+LATE_SYNC_SECONDS = 60
+
 
 def metres_between(lat1, lng1, lat2, lng2) -> float | None:
     """Great-circle distance. Haversine, so no dependency for one sum."""
@@ -479,6 +489,7 @@ def fetch_responders() -> list[dict]:
                asg.position_mismatch,
                r.subject    AS report_subject,
                chk.created_at AS last_checkin,
+               chk.received_at AS last_received,
                chk.lat      AS last_lat,
                chk.lng      AS last_lng
         FROM accounts acc
@@ -486,7 +497,7 @@ def fetch_responders() -> list[dict]:
                ON asg.responder = acc.id AND asg.status != 'cleared'
         LEFT JOIN reports r ON r.id = asg.report_id
         LEFT JOIN (
-            SELECT responder, lat, lng, created_at,
+            SELECT responder, lat, lng, created_at, received_at,
                    ROW_NUMBER() OVER (PARTITION BY responder
                                       ORDER BY created_at DESC) AS rn
             FROM checkins
@@ -540,12 +551,52 @@ def fetch_responders() -> list[dict]:
                 "lat": row["last_lat"],
                 "lng": row["last_lng"],
                 "at": row["last_checkin"],
+                "received_at": row["last_received"],
+                # True when it reached us well after it was made, i.e. it sat
+                # in a queue while they were offline.
+                "synced_late": late_sync(row["last_checkin"],
+                                         row["last_received"]),
             },
         })
 
     board.sort(key=lambda r: (BOARD_ORDER.index(r["state"]),
                              -(r["minutes_since_contact"] or 0)))
     return board
+
+
+def late_sync(made_at: str | None, received_at: str | None) -> bool:
+    """Did this check-in reach us well after it was made?"""
+    made, got = parse_iso(made_at), parse_iso(received_at)
+    if made is None or got is None:
+        return False
+    return (got - made).total_seconds() > LATE_SYNC_SECONDS
+
+
+def claimed_time(raw: str) -> tuple[datetime, str | None]:
+    """When a check-in says it happened. Empty means now.
+
+    The value comes from the client, so it's a claim, not a fact. We bound it:
+    barely in the future is clock drift, far in the future or very old is
+    either a broken device or someone playing games.
+    """
+    now = datetime.now(timezone.utc)
+    if not raw:
+        return now, None
+
+    when = parse_iso(raw)
+    if when is None:
+        return now, "Could not read that timestamp."
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+
+    if (when - now).total_seconds() > CLOCK_SKEW_SECONDS:
+        return now, "That check-in is dated in the future."
+    if (now - when).total_seconds() > MAX_BACKDATE_HOURS * 3600:
+        return now, f"Too old to accept, over {MAX_BACKDATE_HOURS} hours."
+
+    # Slightly ahead is a drifting clock, not a lie. Don't let it sit in the
+    # future, but don't reject it either.
+    return min(when, now), None
 
 
 def position_looks_wrong(report_id: int, account_id: int) -> bool:
@@ -826,13 +877,30 @@ def api_checkin():
         lat = payload.get("lat", lat)
         lng = payload.get("lng", lng)
 
+    # A check-in that sat in an offline queue says when it was really made.
+    # Without this the timer would run from the moment it synced, so a row
+    # that should still be red would quietly go green.
+    happened_at, error = claimed_time(form_or_json("happened_at"))
+    if error:
+        return answer({"error": error}, 400, error)
+
+    received = datetime.now(timezone.utc)
     db = get_db()
     db.execute("""
-        INSERT INTO checkins (responder, lat, lng, created_at)
-        VALUES (?, ?, ?, ?)
-    """, (current_user()["id"], lat, lng, now_iso()))
+        INSERT INTO checkins (responder, lat, lng, created_at, received_at)
+        VALUES (?, ?, ?, ?, ?)
+    """, (current_user()["id"], lat, lng,
+          happened_at.isoformat(timespec="seconds"),
+          received.isoformat(timespec="seconds")))
     db.commit()
-    return answer({"ok": True, "at": now_iso()}, 201, "Checked in. Timer reset.")
+
+    late = (received - happened_at).total_seconds() > LATE_SYNC_SECONDS
+    return answer({"ok": True,
+                   "at": happened_at.isoformat(timespec="seconds"),
+                   "received_at": received.isoformat(timespec="seconds"),
+                   "synced_late": late},
+                  201,
+                  "Queued check-in synced." if late else "Checked in. Timer reset.")
 
 
 # Resolved against this file, not the working directory, so pytest can run

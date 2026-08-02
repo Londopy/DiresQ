@@ -38,7 +38,7 @@ derived from votes, never stored.
 | --- | --- | --- | --- |
 | `GET` | `/api/responders` | | The board |
 | `POST` | `/api/assignments/<id>/status` | `status` | Your own assignment only |
-| `POST` | `/api/checkin` | `lat`, `lng` | Resets your timer |
+| `POST` | `/api/checkin` | `lat`, `lng`, `happened_at` *(optional)* | Resets your timer |
 
 `status` moves forward only: `en_route` → `on_scene` → `cleared`. Anything
 else is a 400. Clearing retracts your staffing vote.
@@ -69,6 +69,28 @@ else is a 400. Clearing retracts your staffing vote.
 `state` is `overdue`, `on_scene`, `en_route` or `available`, and rows arrive
 already sorted in that order. Switch on that one field — don't recompute the
 overdue rule client-side, and don't re-sort.
+
+### Queued check-ins
+
+A check-in made offline should say when it was really made, not when it
+reached the server:
+
+```json
+{ "lat": 29.7858, "lng": -95.8244, "happened_at": "2026-08-02T03:15:00+00:00" }
+```
+
+Without it the timer would run from the sync time, so a responder who was
+silent through their whole window would come back green the moment their
+phone reconnected. The overdue calculation uses `happened_at`.
+
+It's a client claim, so it's bounded: more than two minutes in the future is
+rejected, more than 12 hours old is rejected, and anything slightly ahead is
+clamped to now rather than stored in the future.
+
+The server records both times. `last_position` on the board carries `at`
+(when it was made), `received_at` (when we got it) and `synced_late`, so a
+coordinator can see someone was out of contact rather than just seeing a
+green row.
 
 ## Triage
 
