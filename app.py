@@ -24,6 +24,7 @@ from flask import (
 )
 from werkzeug.security import check_password_hash, generate_password_hash
 
+import triage
 from eta import parse_eta
 
 # Must run before anything reads os.environ. Real environment variables win
@@ -111,11 +112,10 @@ def inject_user():
 
 @app.context_processor
 def inject_overdue_count():
-    """How many responders are late, available on every page.
+    """Overdue count for the nav badge, on every page.
 
-    Lets the nav carry the alarm, so you find out someone is overdue without
-    having to be looking at the board. Costs one query per page render, which
-    is fine at this scale and would need caching at a real one.
+    One query per render. Fine with a handful of responders, would need
+    caching with more.
     """
     def overdue_count() -> int:
         if current_user() is None:
@@ -209,12 +209,32 @@ def fetch_report(report_id: int) -> dict | None:
     item["staffing"] = staffing_for(report_id)
     item["responders"] = [dict(x) for x in get_db().execute("""
         SELECT asg.id, asg.status, asg.eta, asg.staffing_vote, asg.joined_at,
-               acc.username, acc.capabilities
+               acc.username, acc.capabilities, acc.id AS account_id
         FROM assignments asg
         JOIN accounts acc ON acc.id = asg.responder
         WHERE asg.report_id = ?
         ORDER BY asg.joined_at
     """, (report_id,)).fetchall()]
+
+    # What the person looking at this page is allowed to press. Working it out
+    # here keeps the permission rules in one place instead of scattered
+    # through the template.
+    user = current_user()
+    mine = next((r for r in item["responders"]
+                 if user and r["account_id"] == user["id"]), None)
+
+    item["mine"] = mine
+    item["can_join"] = bool(user) and mine is None
+    item["next_status"] = (
+        sorted(ALLOWED_TRANSITIONS[mine["status"]])[0]
+        if mine and ALLOWED_TRANSITIONS[mine["status"]] else None
+    )
+    item["can_set_staffing"] = bool(mine) and mine["status"] == "on_scene"
+    item["can_check_in"] = bool(mine) and mine["status"] != "cleared"
+    item["can_resolve"] = bool(user) and item["status"] != "resolved" and (
+        item["sender"] == user["id"]
+        or (mine is not None and mine["status"] == "on_scene")
+    )
     return item
 
 
@@ -350,7 +370,7 @@ def report_new():
 def report_detail(report_id: int):
     report = fetch_report(report_id)
     if report is None:
-        return render_template("report.html", report=None), 404
+        return render_template("notfound.html"), 404
     return render_template("report.html", report=report)
 
 
@@ -362,7 +382,7 @@ def report_rescue(report_id: int):
     user = current_user()
 
     if db.execute("SELECT 1 FROM reports WHERE id = ?", (report_id,)).fetchone() is None:
-        return render_template("report.html", report=None), 404
+        return render_template("notfound.html"), 404
 
     # Optional free-text ETA. A rejected one still lets you join; you just get
     # the default interval instead of a deadline nobody was sure about.
@@ -509,6 +529,24 @@ def form_or_json(field: str) -> str:
     return (request.form.get(field) or "").strip()
 
 
+def answer(payload: dict, status: int, message: str, report_id: int | None = None):
+    """Reply as JSON to fetch, or bounce back to the page for a form post.
+
+    The buttons are plain forms so they work with JavaScript off. Same
+    endpoints still return JSON when something asks for it.
+    """
+    if request.is_json:
+        return jsonify(payload), status
+    if message:
+        flash(message)
+    target = request.form.get("next")
+    if target and target.startswith("/"):
+        return redirect(target)
+    if report_id is not None:
+        return redirect(url_for("report_detail", report_id=report_id))
+    return redirect(url_for("homepage"))
+
+
 @app.post("/api/assignments/<int:assignment_id>/status")
 @login_required
 def api_assignment_status(assignment_id: int):
@@ -517,17 +555,20 @@ def api_assignment_status(assignment_id: int):
     db = get_db()
 
     row = db.execute(
-        "SELECT responder, status FROM assignments WHERE id = ?", (assignment_id,)
+        "SELECT report_id, responder, status FROM assignments WHERE id = ?",
+        (assignment_id,),
     ).fetchone()
     if row is None:
-        return jsonify({"error": "no such assignment"}), 404
+        return answer({"error": "no such assignment"}, 404, "No such assignment")
     if row["responder"] != current_user()["id"]:
-        return jsonify({"error": "not your assignment"}), 403
+        return answer({"error": "not your assignment"}, 403,
+                      "That is not your assignment", row["report_id"])
     if wanted not in ALLOWED_TRANSITIONS[row["status"]]:
-        return jsonify({
+        return answer({
             "error": f"cannot go from {row['status']} to {wanted or 'nothing'}",
             "allowed": sorted(ALLOWED_TRANSITIONS[row["status"]]),
-        }), 400
+        }, 400, f"Cannot go from {row['status']} to {wanted or 'nothing'}",
+            row["report_id"])
 
     if wanted == "cleared":
         # Leaving retracts your staffing vote: you can no longer see the scene.
@@ -538,7 +579,8 @@ def api_assignment_status(assignment_id: int):
         db.execute("UPDATE assignments SET status = ? WHERE id = ?",
                    (wanted, assignment_id))
     db.commit()
-    return jsonify({"id": assignment_id, "status": wanted})
+    return answer({"id": assignment_id, "status": wanted}, 200,
+                  f"You are now {wanted.replace('_', ' ')}", row["report_id"])
 
 
 @app.post("/api/reports/<int:report_id>/staffing")
@@ -548,8 +590,9 @@ def api_report_staffing(report_id: int):
     they are the only ones who can see it."""
     vote = form_or_json("staffing").lower()
     if vote not in STAFFING_ORDER:
-        return jsonify({"error": "unknown staffing signal",
-                        "allowed": list(STAFFING_ORDER)}), 400
+        return answer({"error": "unknown staffing signal",
+                       "allowed": list(STAFFING_ORDER)}, 400,
+                      "Unknown staffing signal", report_id)
 
     db = get_db()
     row = db.execute("""
@@ -558,17 +601,20 @@ def api_report_staffing(report_id: int):
     """, (report_id, current_user()["id"])).fetchone()
 
     if row is None:
-        return jsonify({"error": "you have not joined this report"}), 403
+        return answer({"error": "you have not joined this report"}, 403,
+                      "Join this report before signalling staffing", report_id)
     if row["status"] != "on_scene":
-        return jsonify({"error": "only on-scene responders can set staffing",
-                        "your_status": row["status"]}), 403
+        return answer({"error": "only on-scene responders can set staffing",
+                       "your_status": row["status"]}, 403,
+                      "Only people on scene can set staffing", report_id)
 
     db.execute("UPDATE assignments SET staffing_vote = ? WHERE id = ?",
                (vote, row["id"]))
     db.commit()
-    return jsonify({"report_id": report_id,
-                    "your_vote": vote,
-                    "staffing": staffing_for(report_id)})
+    return answer({"report_id": report_id,
+                   "your_vote": vote,
+                   "staffing": staffing_for(report_id)}, 200,
+                  f"Marked {vote.replace('_', ' ')}", report_id)
 
 
 @app.post("/report/<int:report_id>/resolve")
@@ -587,7 +633,7 @@ def report_resolve(report_id: int):
         "SELECT sender, status FROM reports WHERE id = ?", (report_id,)
     ).fetchone()
     if report is None:
-        return render_template("report.html", report=None), 404
+        return render_template("notfound.html"), 404
 
     on_scene = db.execute("""
         SELECT 1 FROM assignments
@@ -610,6 +656,61 @@ def report_resolve(report_id: int):
     """, (report_id,))
     db.commit()
     return redirect(url_for("homepage"))
+
+
+@app.get("/triage")
+@login_required
+def triage_page():
+    return render_template("triage.html", questions=triage.QUESTIONS)
+
+
+@app.post("/api/triage")
+@login_required
+def api_triage():
+    """Run START on four observations and return the severity it implies."""
+    data = request.get_json(silent=True) or request.form
+
+    def flag(name):
+        value = data.get(name)
+        if value in (None, "", "unknown"):
+            return None
+        return str(value).lower() in ("1", "true", "yes", "on")
+
+    can_walk = flag("can_walk")
+    breathing = flag("breathing")
+
+    if can_walk is None:
+        return jsonify({"error": "answer whether they can walk"}), 400
+
+    rate = data.get("respiratory_rate")
+    try:
+        rate = None if rate in (None, "", "unknown") else int(rate)
+    except (TypeError, ValueError):
+        return jsonify({"error": "breaths per minute must be a number"}), 400
+
+    # "Not breathing" and "breathing at an unknown rate" are different answers.
+    if breathing is False:
+        rate = None
+    elif breathing and rate is None:
+        return jsonify({"error": "give a rough breaths per minute"}), 400
+
+    result = triage.assess(
+        can_walk=can_walk,
+        respiratory_rate=rate,
+        has_radial_pulse=flag("has_radial_pulse"),
+        follows_commands=flag("follows_commands"),
+    )
+    return jsonify({
+        "priority": result.priority,
+        "severity": result.severity,
+        "explanation": result.explanation,
+    })
+
+
+# Not linked from anywhere. Whoever goes looking has earned it.
+@app.get("/credits")
+def credits_page():
+    return render_template("credits.html")
 
 
 @app.get("/api/reports")
@@ -639,7 +740,7 @@ def api_checkin():
         VALUES (?, ?, ?, ?)
     """, (current_user()["id"], lat, lng, now_iso()))
     db.commit()
-    return jsonify({"ok": True, "at": now_iso()}), 201
+    return answer({"ok": True, "at": now_iso()}, 201, "Checked in. Timer reset.")
 
 
 # Resolved against this file, not the working directory, so pytest can run

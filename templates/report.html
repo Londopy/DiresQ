@@ -4,23 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="../static/styles/report.css">
-    <title>Report: {{ report.subject }}</title>
+    <link rel="stylesheet" href="../static/styles/actions.css">
     <link rel="stylesheet" href="../static/styles/nav.css">
+    <title>Report: {{ report.subject }}</title>
 </head>
 <body>
 
 <div class="container">
 
-
-{% with messages = get_flashed_messages() %}
-{% if messages %}
-<ul class="flashes">
-    {% for message in messages %}
-    <li>{{ message }}</li>
-    {% endfor %}
-</ul>
-{% endif %}
-{% endwith %}
     <a href="/" class="back-btn">
         ← Back
     </a>
@@ -31,6 +22,16 @@
         <span class="badge">{{ overdue_count() }}</span>
         {% endif %}
     </a>
+
+    {% with messages = get_flashed_messages() %}
+    {% if messages %}
+    <ul class="flashes">
+        {% for message in messages %}
+        <li>{{ message }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+    {% endwith %}
 
     <div class="report-card">
 
@@ -44,13 +45,15 @@
                 {{ report.priority }}
             </span>
 
-            <form action="/report/{{ report.id }}/rescue" method="POST">
+            {% if report.staffing != 'unstaffed' %}
+            <span class="staffing {{ report.staffing }}">
+                {{ report.staffing.replace('_', ' ')|upper }}
+            </span>
+            {% endif %}
 
-                <button type="submit" class="rescue-btn">
-                    🚨 Rescue
-                </button>
-
-            </form>
+            {% if report.status == 'resolved' %}
+            <span class="resolved-tag">RESOLVED</span>
+            {% endif %}
 
         </div>
 
@@ -63,6 +66,132 @@
             </p>
 
         </section>
+
+    </div>
+
+    {% if report.status != 'resolved' %}
+    <div class="actions">
+
+        {% if report.can_join %}
+        <form action="/report/{{ report.id }}/rescue" method="POST" class="join-form">
+            <label for="eta_text">When will you next check in?</label>
+            <div class="join-row">
+                <input
+                    type="text"
+                    id="eta_text"
+                    name="eta_text"
+                    placeholder="30 min"
+                    value="30 min">
+                <button type="submit" class="rescue-btn">🚨 Respond</button>
+            </div>
+            <span class="hint">
+                Try &ldquo;30 min&rdquo;, &ldquo;2 hours&rdquo;, or leave it and
+                you get 30 minutes by default.
+            </span>
+        </form>
+        {% endif %}
+
+        {% if report.mine %}
+        <div class="mine">
+
+            <p class="you-are">
+                You are
+                <strong>{{ report.mine.status.replace('_', ' ') }}</strong>
+                {% if report.mine.staffing_vote %}
+                and you said
+                <strong>{{ report.mine.staffing_vote.replace('_', ' ') }}</strong>
+                {% endif %}
+            </p>
+
+            <div class="button-row">
+
+                {% if report.next_status %}
+                <form action="/api/assignments/{{ report.mine.id }}/status" method="POST">
+                    <input type="hidden" name="status" value="{{ report.next_status }}">
+                    <input type="hidden" name="next" value="/report/{{ report.id }}">
+                    <button type="submit" class="primary">
+                        {% if report.next_status == 'on_scene' %}
+                        I&rsquo;m on scene
+                        {% else %}
+                        I&rsquo;m done here
+                        {% endif %}
+                    </button>
+                </form>
+                {% endif %}
+
+                {% if report.can_check_in %}
+                <form action="/api/checkin" method="POST" id="checkin-form">
+                    <input type="hidden" name="lat" id="checkin-lat">
+                    <input type="hidden" name="lng" id="checkin-lng">
+                    <input type="hidden" name="next" value="/report/{{ report.id }}">
+                    <button type="submit" class="check-in">Check in</button>
+                </form>
+                {% endif %}
+
+            </div>
+
+            {% if report.can_set_staffing %}
+            <div class="staffing-block">
+                <p class="prompt">How is it staffed here?</p>
+                <div class="button-row">
+                    {% for vote, label in [
+                        ('need_more', 'Need more help'),
+                        ('adequate', 'We have enough'),
+                        ('overstaffed', 'Too many here'),
+                        ('stood_down', 'Stand down')
+                    ] %}
+                    <form action="/api/reports/{{ report.id }}/staffing" method="POST">
+                        <input type="hidden" name="staffing" value="{{ vote }}">
+                        <input type="hidden" name="next" value="/report/{{ report.id }}">
+                        <button type="submit"
+                                class="vote {{ vote }}{% if report.mine.staffing_vote == vote %} chosen{% endif %}">
+                            {{ label }}
+                        </button>
+                    </form>
+                    {% endfor %}
+                </div>
+                <span class="hint">
+                    Only people on scene can set this. If responders disagree,
+                    the most cautious signal wins.
+                </span>
+            </div>
+            {% endif %}
+
+        </div>
+        {% endif %}
+
+        {% if report.can_resolve %}
+        <form action="/report/{{ report.id }}/resolve" method="POST" class="resolve-form">
+            <button type="submit" class="resolve-btn">Mark resolved</button>
+            <span class="hint">Closes it for everyone and clears anyone still on it.</span>
+        </form>
+        {% endif %}
+
+    </div>
+    {% endif %}
+
+    <div class="responders-block">
+
+        <h2>
+            {% if report.responders %}
+            Who is on this
+            {% else %}
+            Nobody is on this yet
+            {% endif %}
+        </h2>
+
+        {% for r in report.responders %}
+        <div class="responder {{ r.status }}">
+            <span class="name">{{ r.username }}</span>
+            <span class="status">{{ r.status.replace('_', ' ')|upper }}</span>
+            {% if r.staffing_vote %}
+            <span class="vote-tag">{{ r.staffing_vote.replace('_', ' ') }}</span>
+            {% endif %}
+            {% if r.capabilities %}
+            <span class="caps">{{ r.capabilities.replace(',', ' · ') }}</span>
+            {% endif %}
+        </div>
+        {% endfor %}
 
     </div>
 

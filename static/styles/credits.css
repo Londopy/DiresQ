@@ -1,0 +1,73 @@
+:root{
+--base:#1e1e2e;
+--mantle:#181825;
+--surface:#313244;
+--overlay:#45475a;
+--text:#cdd6f4;
+--subtext:#a6adc8;
+--blue:#89b4fa;
+--green:#a6e3a1;
+}
+
+body{
+    margin:0;
+    background:var(--base);
+    color:var(--text);
+    font-family:system-ui,-apple-system,Segoe UI,sans-serif;
+}
+
+.container{
+    max-width:600px;
+    margin:0 auto;
+    padding:48px 20px 70px;
+}
+
+.sig{
+    color:var(--green);
+    font-size:0.72rem;
+    line-height:1.35;
+    margin:0 0 26px;
+    opacity:0.75;
+}
+
+h1{font-size:1.7rem;margin:0 0 14px;}
+
+h2{
+    font-size:0.78rem;
+    text-transform:uppercase;
+    letter-spacing:0.11em;
+    color:var(--subtext);
+    margin:34px 0 12px;
+}
+
+.line{line-height:1.6;margin:0 0 12px;font-size:0.95rem;}
+.line.small{color:var(--subtext);font-size:0.85rem;margin-top:26px;}
+
+.team{list-style:none;padding:0;margin:0;}
+.team li{padding:5px 0;font-size:0.95rem;}
+
+.libs{list-style:none;padding:0;margin:0;}
+
+.libs li{
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+    padding:11px 14px;
+    background:var(--mantle);
+    border-radius:8px;
+    margin-bottom:7px;
+}
+
+.libs a{color:var(--blue);text-decoration:none;font-weight:600;font-size:0.93rem;}
+.libs a:hover{text-decoration:underline;}
+.libs span{color:var(--subtext);font-size:0.83rem;}
+
+.home{
+    display:inline-block;
+    margin-top:34px;
+    color:var(--subtext);
+    text-decoration:none;
+    font-size:0.9rem;
+}
+
+.home:hover{color:var(--text);}

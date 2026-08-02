@@ -5,6 +5,9 @@ python-dotenv==1.0.1
 
 pygeospy==0.2.2
 
+# START triage scoring on the report form.
+vitalscore==0.1.1
+
 # parse() raises ParseError on no match, and returns Instant | Range | Ambiguous.
 # Wrap every call.
 timefuzz==0.3.1

@@ -1,5 +1,5 @@
-// Polls /api/responders and re-renders. Overdue is worked out server-side on
-// every read, so a row turns red on its own with nobody touching anything.
+// Polls /api/responders and redraws. The server works out overdue on every
+// read, so rows go red on their own.
 
 const POLL_MS = 3000;
 
@@ -14,7 +14,7 @@ const totals = {
     available: document.getElementById("n-available"),
 };
 
-// Remembered so a row can flash when it changes, rather than silently swapping.
+// Used to flash a row when its state changes.
 let lastStates = {};
 
 function esc(value) {
@@ -83,15 +83,23 @@ async function poll() {
         live.classList.remove("stalled");
         live.title = "Refreshing every 3 seconds";
     } catch (err) {
-        // Keep the last good board on screen; just stop claiming it is live.
+        // Keep the last board on screen, just stop saying it's live.
         live.classList.add("stalled");
         live.title = "Lost contact with the server. Showing the last update.";
     }
 }
 
-// Seed from what the server already rendered, so the first poll does not
-// flash every row as "changed".
+// Seed from the server-rendered rows so the first poll doesn't flash everything.
 document.querySelectorAll(".row").forEach((el, i) => { lastStates[i] = null; });
 
 poll();
 setInterval(poll, POLL_MS);
+
+console.log(
+    "%cDiresQ",
+    "color:#a6e3a1;font-size:20px;font-weight:bold;letter-spacing:4px"
+);
+console.log(
+    "%cpoking around? there's a page at /credits",
+    "color:#6c7086;font-size:11px"
+);

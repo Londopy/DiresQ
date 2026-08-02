@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="../static/styles/triage.css">
+    <link rel="stylesheet" href="../static/styles/nav.css">
+    <title>Triage</title>
+</head>
+<body>
+
+<div class="container">
+
+    <a href="/report/new" class="back-btn">← Back to report</a>
+
+    <h1>Not sure how bad it is?</h1>
+    <p class="lede">
+        Four questions. This is START, the same triage protocol used at real
+        multiple-casualty scenes. No training or equipment needed.
+    </p>
+
+    <form id="triage-form" class="triage-card">
+
+        <fieldset>
+            <legend>Can they walk?</legend>
+            <label><input type="radio" name="can_walk" value="true"> Yes</label>
+            <label><input type="radio" name="can_walk" value="false" checked> No</label>
+        </fieldset>
+
+        <fieldset id="breathing-q">
+            <legend>Are they breathing?</legend>
+            <label><input type="radio" name="breathing" value="true" checked> Yes</label>
+            <label><input type="radio" name="breathing" value="false"> No</label>
+        </fieldset>
+
+        <fieldset id="rate-q">
+            <legend>Roughly how many breaths per minute?</legend>
+            <input type="number" name="respiratory_rate" value="18" min="0" max="80">
+            <span class="hint">A normal adult is around 12&ndash;20.</span>
+        </fieldset>
+
+        <fieldset id="pulse-q">
+            <legend>Can you feel a pulse at their wrist?</legend>
+            <label><input type="radio" name="has_radial_pulse" value="true" checked> Yes</label>
+            <label><input type="radio" name="has_radial_pulse" value="false"> No</label>
+        </fieldset>
+
+        <fieldset id="commands-q">
+            <legend>Can they follow a simple instruction?</legend>
+            <span class="hint">Ask them to squeeze your hand.</span>
+            <label><input type="radio" name="follows_commands" value="true" checked> Yes</label>
+            <label><input type="radio" name="follows_commands" value="false"> No</label>
+        </fieldset>
+
+        <button type="submit" class="assess-btn">Assess</button>
+
+    </form>
+
+    <div id="result" class="result" hidden>
+        <span class="priority" id="r-priority"></span>
+        <p class="explanation" id="r-explanation"></p>
+        <p class="maps-to">
+            Files this report as <strong id="r-severity"></strong>.
+        </p>
+        <a href="/report/new" class="use-btn" id="r-use">Use this and file the report</a>
+    </div>
+
+    <p class="footnote">
+        START triage &mdash; Simple Triage And Rapid Treatment. Scored by
+        <a href="https://pypi.org/project/vitalscore/">vitalscore</a>.
+        This orders who gets reached first. It is not medical advice and it
+        does not replace a clinician.
+    </p>
+
+</div>
+
+<script src="../static/scripts/triage.js"></script>
+</body>
+</html>

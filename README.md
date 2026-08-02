@@ -13,7 +13,7 @@ DiresQ tracks the people going into it.**
 
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
 [![Flask](https://img.shields.io/badge/flask-3.1-black)](https://flask.palletsprojects.com)
-[![Tests](https://img.shields.io/badge/tests-117%20passing-brightgreen)](tests/test_app.py)
+[![Tests](https://img.shields.io/badge/tests-159%20passing-brightgreen)](tests/test_app.py)
 [![Changelog](https://img.shields.io/badge/changelog-keep--a--changelog-orange)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
@@ -82,6 +82,9 @@ on its own, and now somebody knows where to start looking.
 - **Signal staffing** — once you're on scene you can tell everyone else whether
   the site needs more help or has too many people. Where responders disagree,
   the most cautious signal wins.
+- **Triage it properly** — if you can't judge how bad something is, four
+  questions run START, the protocol used at real multiple-casualty scenes,
+  and pick the severity for you.
 - **Check in** — resets your timer and updates your last known position.
 - **The accountability board** — everyone who is out, what they're doing, and
   how long since anyone heard from them. Overdue sorts to the top.
@@ -132,6 +135,7 @@ Pages are server-rendered; everything under `/api` returns JSON.
 | --- | --- | --- |
 | `GET` | `/` | Report feed |
 | `GET` | `/board` | Accountability board. Refreshes itself every 3s |
+| `GET` | `/triage` | START triage helper |
 | `GET` | `/map` | Map of located reports |
 | `GET` `POST` | `/login` · `/signup` | Auth |
 | `POST` | `/logout` | |
@@ -144,6 +148,7 @@ Pages are server-rendered; everything under `/api` returns JSON.
 | `POST` | `/api/reports/<id>/staffing` | `need_more` · `adequate` · `overstaffed` · `stood_down`. On-scene only |
 | `POST` | `/api/assignments/<id>/status` | `on_scene` then `cleared`. Forward only, your own only |
 | `POST` | `/api/checkin` | `{lat, lng}` — resets your timer |
+| `POST` | `/api/triage` | Four observations in, START category out |
 
 Status codes: `200` ok · `201` created · `302` redirect · `400` bad input ·
 `401` not signed in · `403` not yours · `404` not found.
@@ -167,6 +172,12 @@ four-hour cap and a five-minute minimum. If the parser isn't sure what you
 meant you get the default interval and a message — a safety timer set from a
 bad guess is worse than no timer at all.
 
+**Severity can come from a protocol instead of a guess.** `triage.py` runs
+START via [vitalscore](https://pypi.org/project/vitalscore/) — can they walk,
+are they breathing, how fast, is there a pulse, do they respond — and maps the
+category onto a severity band. It orders who gets reached first. It is not
+medical advice.
+
 ## Tests
 
 ```bash
@@ -174,7 +185,7 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
-95 tests covering every route, the permission rules, feed ordering, staffing
+159 tests covering every route, the permission rules, feed ordering, staffing
 resolution, ETA parsing and overdue calculation. CI runs them on every push,
 along with a boot check against a real server.
 
@@ -183,10 +194,12 @@ along with a boot check against a real server.
 ```
 app.py              routes, queries, CLI
 eta.py              free-text ETA parsing with a confidence gate
+triage.py           START triage, mapped onto report severity
 schema.sql          accounts · reports · assignments · checkins
 templates/          Jinja pages
 static/             CSS, JS, images
 tests/              pytest suite
+docs/               decisions, process, limits, api
 .github/workflows/  ci · security · changelog
 ```
 
@@ -197,6 +210,13 @@ patchnotes CHANGELOG.md bump 1.0.0
 git tag v1.0.0
 git push --tags
 ```
+
+## Read more
+
+- [Decisions](docs/decisions.md) — what we argued about and what we picked
+- [Process](docs/process.md) — the build log, including what broke
+- [Limits](docs/limits.md) — what this doesn't do
+- [API](docs/api.md) — full reference
 
 ## Known limitations
 

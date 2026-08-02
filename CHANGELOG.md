@@ -23,7 +23,12 @@ All notable changes to this project are documented here. Format follows
 - Join a report. Any number of people can join the same one. There is no claim
   lock, because in a real disaster the failure is convergence, not collision.
 - Move yourself through en route, on scene, and cleared as you go, so the board
-  reflects where people actually are.
+  reflects where people actually are. Buttons on the report page drive all of
+  it: respond with an ETA, mark yourself on scene, signal staffing, check in,
+  and resolve. Plain forms, so they work with JavaScript off.
+- The report page lists everyone on it with their status and staffing vote, and
+  only offers you the actions you are actually allowed to take.
+- A real not-found page instead of an empty report.
 - Once on scene, tell everyone else how staffed it is: needs more help,
   adequate, overstaffed, or stood down. Only people physically there can set
   this, because only they can see it.
@@ -34,6 +39,12 @@ All notable changes to this project are documented here. Format follows
   touching the screen. It renders server-side first, so it still works with
   JavaScript switched off.
 - Check in to reset your timer and update your position.
+- A triage helper for when you cannot judge how bad something is. Four
+  questions anyone can answer without training or equipment, run through
+  START, the protocol used at real multiple-casualty scenes. It returns a
+  category, the severity that files the report as, and a plain-English reason.
+  The severity dropdown still works; not every report is a casualty.
+- Written decisions, build log, known limits and API reference under `docs/`.
 - A Board link on the feed, the map and every report page. It turns red and
   shows a count the moment anyone goes overdue, so you learn somebody is late
   wherever you happen to be rather than only while watching the board.

@@ -7,6 +7,7 @@ Each test gets its own throwaway database, so order never matters and a
 failing test can't poison the next one.
 """
 
+import re
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -683,6 +684,174 @@ class TestOverdueCountInNav:
         body = client.get(page).get_data(as_text=True)
         assert "board-btn alert" in body, f"{page} did not show the alarm"
         assert '<span class="badge">' in body
+
+
+class TestReportPageActions:
+    """The buttons, not the endpoints. Every demo beat has to be pressable."""
+
+    def buttons(self, client):
+        html = client.get("/report/1").get_data(as_text=True)
+        return " ".join(re.findall(r"<button[^>]*>(.*?)</button>", html, re.S))
+
+    def test_a_stranger_is_offered_only_join(self, client):
+        text = self.buttons(client)
+        assert "Respond" in text
+        assert "on scene" not in text
+        assert "Need more help" not in text
+
+    def test_joining_offers_going_on_scene_and_checking_in(self, client):
+        client.post("/report/1/rescue")
+        text = self.buttons(client)
+        assert "on scene" in text
+        assert "Check in" in text
+        assert "Respond" not in text, "offered to join a report twice"
+
+    def test_staffing_buttons_only_appear_on_scene(self, client):
+        client.post("/report/1/rescue")
+        assert "Need more help" not in self.buttons(client)
+
+        client.post("/api/assignments/1/status",
+                    data={"status": "on_scene", "next": "/report/1"})
+        text = self.buttons(client)
+        for label in ["Need more help", "We have enough",
+                      "Too many here", "Stand down"]:
+            assert label in text
+
+    def test_the_join_form_asks_for_an_eta(self, client):
+        assert b'name="eta_text"' in client.get("/report/1").data
+
+    def test_pressing_a_staffing_button_changes_the_feed(self, client):
+        client.post("/report/1/rescue")
+        client.post("/api/assignments/1/status",
+                    data={"status": "on_scene", "next": "/report/1"})
+        client.post("/api/reports/1/staffing",
+                    data={"staffing": "overstaffed", "next": "/report/1"})
+
+        report = next(r for r in client.get("/api/reports").get_json()
+                      if r["id"] == 1)
+        assert report["staffing"] == "overstaffed"
+
+    def test_your_current_vote_is_marked(self, client):
+        client.post("/report/1/rescue")
+        client.post("/api/assignments/1/status",
+                    data={"status": "on_scene", "next": "/report/1"})
+        client.post("/api/reports/1/staffing",
+                    data={"staffing": "need_more", "next": "/report/1"})
+        assert b"vote need_more chosen" in client.get("/report/1").data
+
+    def test_resolve_appears_for_someone_on_scene(self, client):
+        client.post("/report/1/rescue")
+        assert "Mark resolved" not in self.buttons(client), "en route can resolve"
+
+        client.post("/api/assignments/1/status",
+                    data={"status": "on_scene", "next": "/report/1"})
+        assert "Mark resolved" in self.buttons(client)
+
+    def test_a_resolved_report_offers_nothing(self, client):
+        client.post("/report/1/rescue")
+        client.post("/api/assignments/1/status",
+                    data={"status": "on_scene", "next": "/report/1"})
+        client.post("/report/1/resolve")
+        assert self.buttons(client).strip() == ""
+        assert b"RESOLVED" in client.get("/report/1").data
+
+    def test_the_page_lists_everyone_on_it(self, client):
+        client.post("/report/1/rescue")
+        body = client.get("/report/1").get_data(as_text=True)
+        assert "londo" in body
+        assert "EN ROUTE" in body
+
+    def test_form_posts_redirect_instead_of_returning_json(self, client):
+        client.post("/report/1/rescue")
+        r = client.post("/api/assignments/1/status",
+                        data={"status": "on_scene", "next": "/report/1"})
+        assert r.status_code == 302
+        assert r.headers["Location"].endswith("/report/1")
+
+    def test_json_posts_still_get_json(self, client):
+        client.post("/report/1/rescue")
+        r = client.post("/api/assignments/1/status", json={"status": "on_scene"})
+        assert r.status_code == 200
+        assert r.get_json()["status"] == "on_scene"
+
+    def test_a_redirect_target_offsite_is_ignored(self, client):
+        client.post("/report/1/rescue")
+        r = client.post("/api/assignments/1/status",
+                        data={"status": "on_scene", "next": "https://evil.example"})
+        assert "evil.example" not in r.headers["Location"]
+
+
+class TestTriage:
+    def test_page_renders(self, client):
+        assert client.get("/triage").status_code == 200
+
+    def test_report_form_links_to_it(self, client):
+        assert b'href="/triage"' in client.get("/report/new").data
+
+    @pytest.mark.parametrize("payload,priority,severity", [
+        ({"can_walk": True, "breathing": True, "respiratory_rate": 18},
+         "Minor", "LOW"),
+        ({"can_walk": False, "breathing": False},
+         "Deceased", "HIGH"),
+        ({"can_walk": False, "breathing": True, "respiratory_rate": 34},
+         "Immediate", "HIGH"),
+        ({"can_walk": False, "breathing": True, "respiratory_rate": 18,
+          "has_radial_pulse": False},
+         "Immediate", "HIGH"),
+        ({"can_walk": False, "breathing": True, "respiratory_rate": 18,
+          "has_radial_pulse": True, "follows_commands": False},
+         "Immediate", "HIGH"),
+        ({"can_walk": False, "breathing": True, "respiratory_rate": 18,
+          "has_radial_pulse": True, "follows_commands": True},
+         "Delayed", "MEDIUM"),
+    ])
+    def test_start_categories_map_to_severity(self, client, payload,
+                                              priority, severity):
+        body = client.post("/api/triage", json=payload).get_json()
+        assert body["priority"] == priority
+        assert body["severity"] == severity
+        assert body["explanation"]
+
+    def test_walking_beats_everything_else(self, client):
+        # START asks this first and stops. Someone walking is Minor whatever
+        # else you tell it.
+        body = client.post("/api/triage", json={
+            "can_walk": True, "breathing": True, "respiratory_rate": 40,
+            "has_radial_pulse": False, "follows_commands": False,
+        }).get_json()
+        assert body["priority"] == "Minor"
+
+    @pytest.mark.parametrize("payload,why", [
+        ({}, "no answer about walking"),
+        ({"can_walk": False, "breathing": True}, "breathing but no rate given"),
+        ({"can_walk": False, "breathing": True, "respiratory_rate": "abc"},
+         "rate is not a number"),
+    ])
+    def test_incomplete_answers_are_refused(self, client, payload, why):
+        r = client.post("/api/triage", json=payload)
+        assert r.status_code == 400, why
+        assert r.get_json()["error"]
+
+    def test_requires_login(self, anon):
+        assert anon.post("/api/triage", json={"can_walk": True}).status_code == 302
+
+
+class TestCredits:
+    def test_the_page_is_there(self, client):
+        assert client.get("/credits").status_code == 200
+
+    def test_it_works_logged_out_too(self, anon):
+        assert anon.get("/credits").status_code == 200
+
+    def test_nothing_in_the_nav_links_to_it(self, client):
+        for page in ["/", "/map", "/board", "/report/1"]:
+            body = client.get(page).get_data(as_text=True)
+            assert 'href="/credits"' not in body, (
+                f"{page} gives it away in a link"
+            )
+
+    def test_but_the_source_hints_at_it(self, client):
+        assert "/credits" in client.get("/").get_data(as_text=True)
 
 
 class TestFeedReordersOnStaffing:
