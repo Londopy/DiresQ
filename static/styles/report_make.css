@@ -156,3 +156,49 @@ padding:20px;
 }
 
 }
+
+#map{
+
+    height:300px;
+
+    border-radius:15px;
+
+    margin:15px 0;
+
+    overflow:hidden;
+
+}
+
+.location-tools{
+
+    margin:10px 0;
+
+}
+
+.location-btn{
+
+    padding:12px 16px;
+
+    border:none;
+
+    border-radius:10px;
+
+    cursor:pointer;
+
+    background:var(--blue);
+
+    color:var(--base);
+
+    font-weight:bold;
+
+}
+
+#locationText{
+
+    color:var(--subtext);
+
+    margin-bottom:20px;
+
+    font-size:.9rem;
+
+}
