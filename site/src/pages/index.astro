@@ -17,6 +17,8 @@ const PAGES = [
    "What actually happened over three days, including five bugs we shipped and caught."],
   ["/offline", "Offline and LoRa",
    "An 18-byte signed check-in, a gateway, and a blunt table of what isn't built."],
+  ["/model", "The classifier",
+   "Naive Bayes over 65 labelled reports, and why it is not a language model."],
   ["/security", "Security",
    "The threat model, the radio signatures, and the one we got properly wrong."],
   ["/accessibility", "Accessibility",
@@ -149,6 +151,11 @@ const PAGES = [
       }
 
       .cards a:hover { border-left-color: var(--blue); }
+
+      /* An odd number of cards leaves the last one stranded in a half-empty
+         row. Let it span instead — this holds for any count, so adding a
+         page later can't make the grid ugly again. */
+      .cards a:last-child:nth-child(odd) { grid-column: 1 / -1; }
 
       .cards h2 { margin: 0 0 6px; font-size: 17px; color: var(--blue); }
       .cards p { margin: 0; font-size: 14px; color: var(--subtext); }

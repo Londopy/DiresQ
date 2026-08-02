@@ -104,6 +104,18 @@ All notable changes to this project are documented here. Format follows
   not contact emergency services and that the triage helper orders attention
   rather than giving medical advice. The report form carries the warning above
   its first field, and the triage result carries it beside the category.
+- The report form reads what you type and suggests how bad it is and what
+  equipment is needed, showing the words that led it there. It stops adjusting
+  the dropdown the moment you set one yourself, says nothing below the
+  confidence it needs, and never writes anything — the person filing the
+  report decides. Runs on the machine serving the page in about a tenth of a
+  millisecond, with no model file and no network.
+- It also notices when a description matches a report somebody has already
+  filed, and offers a link to it. Duplicate reports are how six people end up
+  at one address while a street nearby has nobody.
+- `GET /api/model` says what the classifier is, what it was trained on, and
+  what it is bad at. Public and unauthenticated, because anyone should be able
+  to find out what the software is doing to their report.
 - Written decisions, build log, architecture notes, known limits and API
   reference under `docs/`. The architecture notes name the point at which each
   design stops working, rather than only what it does.

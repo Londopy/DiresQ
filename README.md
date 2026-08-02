@@ -15,7 +15,7 @@ DiresQ tracks the people going into it.**
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
 [![Flask](https://img.shields.io/badge/flask-3.1-black)](https://flask.palletsprojects.com)
 [![SQLite](https://img.shields.io/badge/sqlite-3-003B57)](https://sqlite.org)
-[![Tests](https://img.shields.io/badge/tests-268%20passing-brightgreen)](tests/test_app.py)
+[![Tests](https://img.shields.io/badge/tests-291%20passing-brightgreen)](tests/test_app.py)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 [![Accessibility](https://img.shields.io/badge/accessibility-WCAG_2.1_AA_audited-a6e3a1)](docs/accessibility.md)
@@ -24,7 +24,7 @@ DiresQ tracks the people going into it.**
 [![Limitations](https://img.shields.io/badge/limitations-written_down-f38ba8)](docs/limits.md)
 
 [![Changelog](https://img.shields.io/badge/changelog-keep--a--changelog-orange)](CHANGELOG.md)
-[![Docs](https://img.shields.io/badge/docs-12_pages-cba6f7)](https://skythe7.github.io/DiresQ)
+[![Docs](https://img.shields.io/badge/docs-13_pages-cba6f7)](https://skythe7.github.io/DiresQ)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
 Built at **Katy Youth Hacks 2026** (Tech for Humanity)
@@ -93,6 +93,13 @@ on its own, and now somebody knows where to start looking.
 - **Signal staffing** — once you're on scene you can tell everyone else whether
   the site needs more help or has too many people. Where responders disagree,
   the most cautious signal wins.
+- **It reads what you wrote** — a classifier suggests the priority and what
+  equipment is needed from the description, and shows you the words that
+  caused it. Naive Bayes, trained at import, 0.1 ms, no network. It also
+  spots when somebody has already reported the same incident, which is how
+  six people end up at one address. You always decide; touch the dropdown
+  and it stops touching it. [How it works, and why it isn't an
+  LLM](docs/model.md).
 - **Triage it properly** — if you can't judge how bad something is, four
   questions run START, the protocol used at real multiple-casualty scenes,
   and pick the severity for you.
@@ -216,7 +223,7 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
-268 test functions covering every route, the permission rules, feed ordering,
+291 test functions covering every route, the permission rules, feed ordering,
 staffing resolution, ETA parsing, overdue calculation, packet signing, the
 offline queue, the auth guardrails and an adversarial pass. CI runs them on
 every push, along with a boot check against a real server.
@@ -228,6 +235,7 @@ own test count is worse than one that doesn't mention it.
 
 ```
 app.py              routes, queries, CLI
+classify.py         priority suggestion and duplicate detection
 eta.py              free-text ETA parsing with a confidence gate
 triage.py           START triage, mapped onto report severity
 transport.py        the check-in packet, small enough for a radio
@@ -294,6 +302,8 @@ git push --tags
 - [Process](docs/process.md) — the build log, including what broke
 - [Offline and LoRa](docs/offline.md) — the radio packet, the gateway, and an
   honest table of what is and isn't built
+- [The classifier](docs/model.md) — naive Bayes over 65 labelled reports, the
+  measured duplicate threshold, and why it isn't a language model
 - [Security](docs/security.md) — the threat model, packet signing, and the
   open redirect we shipped by accident
 - [Accessibility](docs/accessibility.md) — the WCAG 2.1 AA audit: nine issues

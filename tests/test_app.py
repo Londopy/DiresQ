@@ -10,6 +10,7 @@ failing test can't poison the next one.
 import base64
 import re
 import sys
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -18,6 +19,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import app as diresq  # noqa: E402
+import classify  # noqa: E402
 import eta  # noqa: E402
 import transport  # noqa: E402
 
@@ -2051,6 +2053,135 @@ class TestAccessibility:
         css = (diresq.SCHEMA.parent / "static" / "styles" / "a11y.css"
                ).read_text(encoding="utf-8")
         assert "#a6adc8 !important" in css, "the contrast override is gone"
+
+
+class TestClassifier:
+    """The suggestion model. Deterministic, so every one of these is exact —
+    there is no 'usually' in a test suite."""
+
+    def test_a_trapped_person_reads_as_high(self):
+        assert classify.suggest(
+            "water rising fast, grandmother upstairs and cannot walk down"
+        ).priority == "HIGH"
+
+    def test_an_inconvenience_reads_as_low(self):
+        assert classify.suggest(
+            "mailbox blew over in the wind, no other damage, just reporting"
+        ).priority == "LOW"
+
+    def test_something_in_between_reads_as_medium(self):
+        assert classify.suggest(
+            "tree came down across the driveway, nobody hurt, car is stuck"
+        ).priority == "MEDIUM"
+
+    def test_it_says_what_equipment_is_needed(self):
+        assert "boat" in classify.suggest(
+            "family on the roof, water at the second floor windows").capabilities
+        assert "chainsaw" in classify.suggest(
+            "large tree fell across the drive, need it cut up").capabilities
+
+    def test_it_explains_itself(self):
+        # A coordinator deciding where to send a boat is owed a reason.
+        result = classify.suggest(
+            "man collapsed and is unresponsive, ambulance cannot reach us")
+        assert result.reasons, "no explanation given"
+        assert all(isinstance(word, str) for word in result.reasons)
+
+    def test_it_declines_to_guess_at_two_words(self):
+        result = classify.suggest("help please")
+        assert result.confident is False
+        assert result.confidence == 0.0
+
+    def test_it_declines_on_empty_input(self):
+        assert classify.suggest("").confident is False
+        assert classify.suggest(None).confident is False
+
+    def test_confidence_is_a_probability(self):
+        for text, _, _ in classify.CORPUS[:10]:
+            assert 0.0 <= classify.suggest(text).confidence <= 1.0
+
+    def test_the_same_text_always_gives_the_same_answer(self):
+        text = "water coming under the door, elderly resident alone downstairs"
+        answers = {classify.suggest(text).priority for _ in range(20)}
+        assert len(answers) == 1, "the model is not deterministic"
+
+    def test_it_survives_junk(self):
+        for junk in ["", "   ", "!!!!", "123 456", "ᚠᚢᚦ", "<script>x</script>"]:
+            classify.suggest(junk)   # must not raise
+
+    def test_a_restatement_is_flagged_as_a_duplicate(self):
+        existing = [{"id": 1, "subject": "Water rising, two adults upstairs",
+                     "description": "Water was at the porch, now inside. "
+                                    "They have gone to the second floor."}]
+        found = classify.duplicates(
+            "water rising in the house, two people have gone upstairs", existing)
+        assert found and found[0]["id"] == 1
+
+    def test_a_different_incident_is_not(self):
+        existing = [{"id": 1, "subject": "Water rising, two adults upstairs",
+                     "description": "They have gone to the second floor."}]
+        assert classify.duplicates(
+            "mailbox blew over in the wind", existing) == []
+
+    def test_the_threshold_clears_the_worst_real_false_positive(self):
+        # Measured against the seeded reports: 0.157 was the highest score
+        # between two genuinely different ones.
+        assert classify.DUPLICATE_THRESHOLD > 0.157
+
+    def test_the_model_card_admits_what_it_cannot_do(self):
+        card = classify.model_card()
+        assert card["limits"], "a model card with no limits is marketing"
+        assert card["trained_on"]
+
+    def test_every_corpus_label_is_a_real_priority(self):
+        for text, label, caps in classify.CORPUS:
+            assert label in classify.PRIORITIES, f"bad label on {text!r}"
+            for cap in caps:
+                assert cap in classify.CAPABILITIES, f"bad capability {cap!r}"
+
+    def test_the_corpus_is_not_lopsided(self):
+        # A class with far fewer examples gets quietly under-predicted.
+        counts = Counter(label for _, label, _ in classify.CORPUS)
+        assert min(counts.values()) >= len(classify.CORPUS) / 6
+
+
+class TestSuggestEndpoint:
+    def test_it_answers_with_a_suggestion(self, client):
+        body = client.post("/api/suggest", json={
+            "text": "water rising fast, two people trapped upstairs"}).get_json()
+        assert body["priority"] == "HIGH"
+        assert body["confident"] is True
+        assert body["reasons"]
+
+    def test_it_flags_a_report_that_already_exists(self, client):
+        # seed_minimal's first report is the same incident, worded differently.
+        body = client.post("/api/suggest", json={
+            "text": "water is rising, two people trapped on the second floor"
+        }).get_json()
+        assert body["duplicates"], "did not spot the existing report"
+
+    def test_it_writes_nothing(self, client):
+        before = count_reports()
+        for _ in range(5):
+            client.post("/api/suggest", json={"text": "water rising fast"})
+        assert count_reports() == before
+
+    def test_it_needs_a_login(self, anon):
+        assert anon.post("/api/suggest",
+                         json={"text": "water rising"}).status_code == 302
+
+    def test_empty_input_is_not_an_error(self, client):
+        res = client.post("/api/suggest", json={"text": ""})
+        assert res.status_code == 200
+        assert res.get_json()["confident"] is False
+
+    def test_the_model_card_is_public(self, anon):
+        card = anon.get("/api/model").get_json()
+        assert "naive Bayes" in card["kind"]
+        assert card["limits"]
+
+    def test_the_report_form_loads_it(self, client):
+        assert "suggest.js" in client.get("/report/new").get_data(as_text=True)
 
 
 class TestSafetyNotices:

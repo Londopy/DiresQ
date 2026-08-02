@@ -125,3 +125,57 @@ a{color:#89b4fa;}
 
 .legal-link a{color:#6c7086;}
 .legal-link a:hover{color:#a6adc8;}
+
+/* The classifier's suggestion under the description box. Quiet — it is a
+   suggestion, and it sits next to a field somebody is still typing in. */
+.suggestion{
+    margin:-6px 0 16px;
+    padding:12px 14px;
+    border-radius:8px;
+    background:#181825;
+    border-left:3px solid #89b4fa;
+    font-size:0.85rem;
+}
+
+.suggestion[hidden]{display:none;}
+
+.suggestion .row{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    flex-wrap:wrap;
+    margin-bottom:6px;
+}
+
+.suggestion .tag{
+    padding:2px 9px;
+    border-radius:99px;
+    font-size:0.72rem;
+    font-weight:700;
+    letter-spacing:0.05em;
+}
+
+.suggestion .tag.high{background:#f38ba8;color:#11111b;}
+.suggestion .tag.medium{background:#fab387;color:#11111b;}
+.suggestion .tag.low{background:#a6e3a1;color:#11111b;}
+
+.suggestion .sure{color:#a6adc8;font-size:0.78rem;}
+.suggestion .caps{color:#89b4fa;font-size:0.78rem;}
+
+.suggestion .why{margin:0;color:#a6adc8;font-size:0.8rem;}
+
+/* A report that may already exist. Amber, because it is a question and not
+   an error. */
+.suggestion .dupe{
+    display:block;
+    margin-top:8px;
+    padding:8px 10px;
+    border-radius:6px;
+    background:#313244;
+    border-left:3px solid #fab387;
+    color:#cdd6f4;
+    text-decoration:none;
+    font-size:0.82rem;
+}
+
+.suggestion .dupe:hover{background:#45475a;}

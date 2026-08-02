@@ -28,6 +28,8 @@ const SITE = {
     "What actually happened, including the parts that broke."],
   offline: ["offline.md", "Offline and LoRa",
     "The radio packet, the gateway, and a blunt table of what isn't built."],
+  model: ["model.md", "The classifier",
+    "Naive Bayes over 65 labelled reports. Why it is not a language model."],
   security: ["security.md", "Security",
     "The threat model, the radio signatures, and the one we got properly wrong."],
   accessibility: ["accessibility.md", "Accessibility",

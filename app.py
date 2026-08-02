@@ -32,6 +32,7 @@ from flask import (
 )
 from werkzeug.security import check_password_hash, generate_password_hash
 
+import classify
 import transport
 import triage
 from eta import parse_eta
@@ -1071,6 +1072,36 @@ def report_flag(report_id: int):
 @app.get("/disclaimer")
 def disclaimer_page():
     return render_template("disclaimer.html")
+
+
+@app.post("/api/suggest")
+@login_required
+def api_suggest():
+    """Read a description and suggest how bad it is, and what's needed.
+
+    A suggestion, never a decision — nothing here writes to a report. It comes
+    back with the words that caused it, because a coordinator deciding where
+    to send a boat is owed a reason and not a number.
+
+    Also flags reports that look like the same incident. Duplicates are how
+    six people end up at one address while a street nearby has nobody.
+    """
+    text = form_or_json("text")
+    result = classify.suggest(text).as_dict()
+
+    # Only compare against things somebody could still go to.
+    open_reports = [
+        {"id": r["id"], "subject": r["subject"], "description": r["description"]}
+        for r in fetch_reports()
+    ]
+    result["duplicates"] = classify.duplicates(text, open_reports)
+    return jsonify(result)
+
+
+@app.get("/api/model")
+def api_model():
+    """What the classifier is, including what it's bad at."""
+    return jsonify(classify.model_card())
 
 
 @app.get("/triage")
