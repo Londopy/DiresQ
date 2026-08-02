@@ -71,3 +71,10 @@ h2{
 }
 
 .home:hover{color:var(--text);}
+
+/* Second hackathon line under the heading on the credits page. */
+.also{
+    margin:-8px 0 18px;
+    font-size:0.85rem;
+    color:#a6adc8;
+}

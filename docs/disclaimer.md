@@ -1,7 +1,8 @@
 # Disclaimer
 
-DiresQ was built in three days by two students at Katy Youth Hacks 2026. It
-has never been used in a real disaster, and it is not a product.
+DiresQ was built in three days by two students at Katy Youth Hacks 2026, and
+also submitted to STEMist Hacks IV. It has never been used in a real disaster,
+and it is not a product.
 
 Read this before doing anything with it that matters.
 

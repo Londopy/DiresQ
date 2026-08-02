@@ -27,7 +27,8 @@ DiresQ tracks the people going into it.**
 [![Docs](https://img.shields.io/badge/docs-12_pages-cba6f7)](https://skythe7.github.io/DiresQ)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
-Built at **Katy Youth Hacks 2026** · Theme: Tech for Humanity
+Built at **Katy Youth Hacks 2026** (Tech for Humanity)
+· also submitted to **STEMist Hacks IV**
 
 </div>
 
