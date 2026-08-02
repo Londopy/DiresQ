@@ -8,7 +8,7 @@
 #     Skythe7" will not be accepted anywhere)
 #   * the doi field below, which can only be filled in AFTER Zenodo mints one,
 #     because a DOI cannot be reserved ahead of a GitHub release
-#
+# 
 # Validate with: pip install cffconvert && cffconvert --validate
 
 cff-version: 1.2.0
