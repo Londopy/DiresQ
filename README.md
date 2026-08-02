@@ -279,6 +279,8 @@ git push --tags
 - [Process](docs/process.md) — the build log, including what broke
 - [Offline and LoRa](docs/offline.md) — the radio packet, the gateway, and an
   honest table of what is and isn't built
+- [Accessibility](docs/accessibility.md) — the WCAG 2.1 AA audit: nine issues
+  found, three critical, all fixed and held in place by tests
 - [Limits](docs/limits.md) — what this doesn't do
 - [Disclaimer](docs/disclaimer.md) — it does not call for help, and the triage
   helper is not medical advice

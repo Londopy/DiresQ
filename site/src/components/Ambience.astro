@@ -1,46 +1,84 @@
 ---
 // Movement, kept quiet.
 //
-// A documentation site about a disaster tool should not be doing somersaults.
-// Three things only: a soft light that follows the cursor, content that rises
-// as you reach it, and a page-to-page fade. All of them switch off entirely
-// under prefers-reduced-motion, and none of them affect layout, so nothing
-// here can push text around while somebody is reading it.
+// A documentation site about a disaster tool shouldn't be doing somersaults,
+// so this is deliberately restrained: an orb that trails the cursor, a wide
+// soft wash behind it, content that rises as you reach it, and a fade between
+// pages. Everything switches off completely under prefers-reduced-motion, and
+// nothing here affects layout — it can't push text around while you read.
+//
+// Same approach as the orb on londopy.github.io, retuned for this palette:
+// blue and lavender rather than green, because green already means "on scene"
+// everywhere else in this project.
 ---
 
-<div class="glow" aria-hidden="true"></div>
+<div id="orb" aria-hidden="true"></div>
+<div id="wash" aria-hidden="true"></div>
 
 <style is:global>
-  .glow {
+  /* The bright core. Small and sharp — a big faint gradient reads as a
+     smudge on a dark background, which is the mistake the first version of
+     this made. mix-blend-mode: screen is what makes it glow rather than sit
+     on top like a sticker. */
+  #orb {
     position: fixed;
     top: 0;
     left: 0;
-    width: 520px;
-    height: 520px;
-    margin: -260px 0 0 -260px;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    pointer-events: none;
+    /* Above everything. The page content sits in its own stacking context
+       and would otherwise cover this. */
+    z-index: 9998;
+    opacity: 0;
+    transition: opacity 350ms ease;
+    will-change: transform;
+    mix-blend-mode: screen;
+    background: radial-gradient(
+      circle,
+      rgba(180, 190, 254, 0.75) 0%,
+      rgba(137, 180, 250, 0.35) 35%,
+      rgba(137, 180, 250, 0) 70%
+    );
+    box-shadow:
+      0 0 24px 9px rgba(137, 180, 250, 0.20),
+      0 0 7px 2px rgba(203, 214, 244, 0.35);
+  }
+
+  /* A much wider, much slower wash. Lags well behind the orb, which is what
+     gives the page a sense of depth without anything obviously "animating". */
+  #wash {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 620px;
+    height: 620px;
+    margin: -310px 0 0 -310px;
     border-radius: 50%;
     pointer-events: none;
     z-index: 0;
     opacity: 0;
+    transition: opacity 900ms ease;
+    will-change: transform;
     background: radial-gradient(
       circle,
-      rgba(137, 180, 250, 0.13) 0%,
-      rgba(166, 227, 161, 0.06) 42%,
-      transparent 70%
+      rgba(137, 180, 250, 0.10) 0%,
+      rgba(203, 166, 247, 0.05) 45%,
+      transparent 72%
     );
-    /* Composited on the GPU. Animating top/left instead would repaint the
-       whole page on every mouse move. */
-    transform: translate3d(-50%, -50%, 0);
-    transition: opacity 500ms ease;
-    will-change: transform;
   }
 
-  /* Everything real sits above it. */
+  /* Content above the wash, below the orb. */
   header, main, footer { position: relative; z-index: 1; }
 
-  /* Sections start slightly low and transparent, then settle as they come
-     into view. `.lift` is only added by JS, so with JS off everything is
-     simply visible. */
+  /* No orb on anything you touch rather than point at. */
+  @media (hover: none), (pointer: coarse) {
+    #orb, #wash { display: none; }
+  }
+
+  /* Sections start slightly low and settle as they come into view. `.lift`
+     is only ever added by JS, so with JS off everything is simply visible. */
   .lift {
     opacity: 0;
     transform: translateY(14px);
@@ -50,8 +88,6 @@
 
   .lift.seen { opacity: 1; transform: none; }
 
-  /* The whole page on arrival. Astro's view transitions drive this on
-     navigation; on a cold load it just runs once. */
   @keyframes page-in {
     from { opacity: 0; transform: translateY(8px); }
     to   { opacity: 1; transform: none; }
@@ -59,12 +95,8 @@
 
   main { animation: page-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both; }
 
-  /* Nav links get an underline that grows from the left rather than
-     appearing. Cheap, and it makes the header feel responsive. */
-  nav a {
-    position: relative;
-    padding-bottom: 2px;
-  }
+  /* Nav underline grows from the left instead of appearing. */
+  nav a { position: relative; padding-bottom: 2px; }
 
   nav a::after {
     content: "";
@@ -90,10 +122,10 @@
 
   .cards a:hover { transform: translateY(-3px); }
 
-  /* Someone who has asked their operating system to stop moving things gets
-     a completely still page. Not a slower one — a still one. */
+  /* Somebody who has asked their system to stop moving things gets a still
+     page. Not a slower one — a still one. */
   @media (prefers-reduced-motion: reduce) {
-    .glow { display: none; }
+    #orb, #wash { display: none; }
     .lift, .lift.seen { opacity: 1; transform: none; transition: none; }
     main { animation: none; }
     nav a::after { transition: none; }
@@ -102,53 +134,69 @@
 </style>
 
 <script>
-  // Runs after the document is parsed. Re-runs on every view transition,
-  // because Astro swaps the DOM out from under us on navigation.
+  // Astro swaps the DOM on navigation, so this has to be re-runnable. The
+  // loop is cancelled and restarted rather than left running twice.
+  let running = 0;
+
   function ambience() {
-    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (still) return;
+    cancelAnimationFrame(running);
 
-    const glow = document.querySelector(".glow");
+    const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const fine = matchMedia("(hover: hover) and (pointer: fine)").matches;
 
-    if (glow && window.matchMedia("(pointer: fine)").matches) {
-      let x = 0, y = 0, drawn = false;
+    const orb = document.getElementById("orb");
+    const wash = document.getElementById("wash");
 
-      // Position is written in a rAF rather than in the mousemove handler.
-      // Mouse events fire far more often than the screen refreshes, and
-      // writing a transform per event is how you drop frames for no gain.
-      function paint() {
-        glow.style.transform =
-          `translate3d(${x}px, ${y}px, 0) translate(-50%, -50%)`;
-        drawn = false;
-      }
+    if (orb && wash && fine && !still) {
+      const HALF = 13;
+      let tx = innerWidth / 2, ty = innerHeight / 2;
+      let ox = tx, oy = ty;   // orb, quick
+      let wx = tx, wy = ty;   // wash, slow
 
-      window.addEventListener("pointermove", (e) => {
-        x = e.clientX;
-        y = e.clientY;
-        glow.style.opacity = "1";
-        if (!drawn) {
-          drawn = true;
-          requestAnimationFrame(paint);
-        }
+      addEventListener("pointermove", (e) => {
+        tx = e.clientX;
+        ty = e.clientY;
+        orb.style.opacity = "1";
+        wash.style.opacity = "1";
       }, { passive: true });
 
-      // Fade out when the cursor leaves, so it isn't stranded in a corner.
+      // Fade out when the pointer leaves rather than stranding it in a corner.
       document.addEventListener("mouseleave", () => {
-        glow.style.opacity = "0";
+        orb.style.opacity = "0";
+        wash.style.opacity = "0";
       });
+
+      // One rAF loop for both, easing towards the target. Writing transforms
+      // inside the mousemove handler instead would mean several writes per
+      // frame for no visible gain.
+      const step = () => {
+        ox += (tx - ox) * 0.18;
+        oy += (ty - oy) * 0.18;
+        wx += (tx - wx) * 0.055;
+        wy += (ty - wy) * 0.055;
+        orb.style.transform = `translate(${ox - HALF}px, ${oy - HALF}px)`;
+        wash.style.transform = `translate(${wx}px, ${wy}px)`;
+        running = requestAnimationFrame(step);
+      };
+      step();
+    } else {
+      orb?.remove();
+      wash?.remove();
     }
 
-    // Reveal on scroll. IntersectionObserver rather than a scroll handler:
+    if (still) return;
+
+    // Reveal on scroll. IntersectionObserver rather than a scroll handler, so
     // the browser does the work off the main thread.
-    const targets = document.querySelectorAll("article > h2, article > h3, article > table, article > pre, .cards a");
+    const targets = document.querySelectorAll(
+      "article > h2, article > h3, article > table, article > pre, .cards a");
     if (!("IntersectionObserver" in window) || !targets.length) return;
 
     const watcher = new IntersectionObserver((entries) => {
       for (const entry of entries) {
         if (!entry.isIntersecting) continue;
         entry.target.classList.add("seen");
-        // One-shot. Re-animating on the way back up is irritating.
-        watcher.unobserve(entry.target);
+        watcher.unobserve(entry.target);   // one-shot; re-animating is annoying
       }
     }, { rootMargin: "0px 0px -8% 0px", threshold: 0.05 });
 

@@ -26,18 +26,20 @@ discovering it at the deadline.
 Our doc said the backend would push stub endpoints returning fake JSON in the
 first hour, and the frontend would build against those so nobody was blocked.
 
-The backend didn't push those stubs. That's on Londo — the plan had one
-dependency, it pointed at him, and he went and built the real thing instead of
-the thing everyone else was waiting on.
+The stubs never got written. We'd put the one hard dependency in the whole
+plan on a single task and then not treated it as one — it sat in the doc
+looking like a step rather than a blocker, and nobody flagged it while it was
+still cheap to fix.
 
-Skythe, quite reasonably, did not sit and wait. She built five complete pages
-in the time it would have taken to ask, and built them as **server-rendered
-Jinja templates** rather than JavaScript fetching from an API — which, as it
-turned out, was the better architecture, and is what the app still uses today.
-The stubs would have been thrown away regardless.
+Meanwhile the frontend kept moving, which was the right instinct. Five
+complete pages went up in the time it would have taken to stop and negotiate,
+built as **server-rendered Jinja templates** rather than JavaScript fetching
+from an API. That turned out to be the better architecture and it's what the
+app still uses — the stubs would have been thrown away regardless.
 
-The cost was that the contract ended up assumed on both sides rather than
-agreed by either. Three names came out different:
+So the plan failed in a way that produced a better app. What it cost was the
+contract: with no stubs to build against and no conversation instead of them,
+both sides assumed one. Three names came out different:
 
 | Frontend | Backend |
 | --- | --- |
@@ -48,12 +50,15 @@ agreed by either. Three names came out different:
 Found by reading the templates against the schema, not by anything breaking.
 The frontend names won all three times, and that was the right call: the
 templates were real, working software, and the schema was still a document
-nobody had run. `HIGH`/`MEDIUM`/`LOW` is also just better than integers 1–4 —
-nothing ever rendered a `3` to a human being.
+nobody had run. `HIGH`/`MEDIUM`/`LOW` is also plainly better than integers
+1–4 — nothing ever rendered a `3` to a human being.
 
-The honest lesson isn't "the frontend should have waited." It's that the one
-person who could have unblocked everybody didn't, and then the fix was to
-adopt what she'd already got right.
+The lesson we actually took is not "somebody should have waited." It's that
+**a plan with a dependency in it needs that dependency named as one**, out
+loud, with a time on it. Ours was one line in a doc that read like all the
+other lines. Fifteen minutes of agreeing field names would have cost less than
+the three renames did, and we'd have caught it if either of us had said "what
+is blocking you right now?" at any point in the first two hours.
 
 ## Five bugs found by tooling, not by reading code
 

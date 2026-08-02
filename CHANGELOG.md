@@ -91,10 +91,11 @@ All notable changes to this project are documented here. Format follows
   multi-agency scene — built from logged records rather than from memory.
   Every assignment, arrival, check-in and automatic alert, in time order.
 - A documentation site under `site/`, built from the same `docs/` files that
-  live in the repo, so the two can never disagree. Nine pages, including why
-  this was built and how to run it, with a light that follows the cursor and
-  transitions between pages that leave the header where it is. All of the
-  movement switches off for anyone who has asked their system for less of it.
+  live in the repo, so the two can never disagree. Twelve pages, including why
+  this was built, how to run it, and what the accessibility audit found, with
+  a light that follows the cursor and transitions between pages that leave the
+  header where it is. All of the movement switches off for anyone who has
+  asked their system for less of it.
 - Tagging a version builds a GitHub release, with the notes taken from the
   changelog rather than from commit subjects, and refuses to publish if the
   tests or the changelog check fail.
