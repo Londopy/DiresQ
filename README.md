@@ -28,6 +28,8 @@ DiresQ tracks the people going into it.**
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
 **[Read the docs →](https://skythe7.github.io/DiresQ)**
+&nbsp;&nbsp;·&nbsp;&nbsp;
+**[Watch the demo →](https://youtu.be/T0Udg9WgRYA)**
 
 Built at **Katy Youth Hacks 2026** (Tech for Humanity)
 · also submitted to **STEMist Hacks IV**
