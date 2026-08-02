@@ -27,8 +27,8 @@ Thumbs.db
 # Sublime Text
 # Per-user window state: open tabs, unsaved buffers, find history.
 *.sublime-workspace
-# Shared project settings. Uncomment to ignore if you'd rather not commit it.
-# *.sublime-project
+# Shared project settings.
+*.sublime-project
 # SFTP plugin config. Stores host passwords and keys in plaintext.
 sftp-config.json
 sftp-config-alt*.json

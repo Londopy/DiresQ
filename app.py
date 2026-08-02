@@ -24,6 +24,8 @@ from flask import (
 )
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from eta import parse_eta
+
 # Must run before anything reads os.environ. Real environment variables win
 # over .env, so CI and your shell always override the file.
 load_dotenv(Path(__file__).with_name(".env"))
@@ -339,11 +341,27 @@ def report_rescue(report_id: int):
     if db.execute("SELECT 1 FROM reports WHERE id = ?", (report_id,)).fetchone() is None:
         return render_template("report.html", report=None), 404
 
+    # Optional free-text ETA. A rejected one still lets you join; you just get
+    # the default interval instead of a deadline nobody was sure about.
+    eta_iso = eta_confidence = None
+    eta_text = (request.form.get("eta_text") or "").strip()
+    if eta_text:
+        parsed = parse_eta(eta_text)
+        if parsed.accepted:
+            eta_iso = parsed.when.isoformat(timespec="seconds")
+            eta_confidence = parsed.confidence
+            if parsed.warning:
+                flash(parsed.warning)
+        else:
+            flash(f"{parsed.message} Using the default "
+                  f"{DEFAULT_CHECKIN_MINUTES} minute interval.")
+
     try:
         db.execute("""
-            INSERT INTO assignments (report_id, responder, status, joined_at)
-            VALUES (?, ?, 'en_route', ?)
-        """, (report_id, user["id"], now_iso()))
+            INSERT INTO assignments
+                (report_id, responder, status, eta, eta_confidence, joined_at)
+            VALUES (?, ?, 'en_route', ?, ?, ?)
+        """, (report_id, user["id"], eta_iso, eta_confidence, now_iso()))
     except sqlite3.IntegrityError:
         # UNIQUE(report_id, responder) fired. Already joined, not an error.
         flash("You have already joined this report")

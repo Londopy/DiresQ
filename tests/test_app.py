@@ -16,6 +16,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import app as diresq  # noqa: E402
+import eta  # noqa: E402
 
 
 @pytest.fixture
@@ -382,6 +383,92 @@ class TestStaffingVotes:
         report = next(r for r in client.get("/api/reports").get_json()
                       if r["id"] == 1)
         assert report["staffing"] == "unstaffed"
+
+
+class TestEtaParsing:
+    def test_a_clear_duration_is_accepted(self):
+        now = datetime(2026, 8, 1, 21, 30, tzinfo=timezone.utc)
+        r = eta.parse_eta("in 45 minutes", now=now)
+        assert r.accepted
+        assert r.when == now + timedelta(minutes=45)
+
+    @pytest.mark.parametrize("text,why", [
+        ("", "nothing typed"),
+        ("asdfgh", "not a time at all"),
+        ("back in a couple hours", "timefuzz has no rule for this phrasing"),
+        ("30 min", "shorthand timefuzz does not parse"),
+    ])
+    def test_unparseable_input_is_refused_not_guessed(self, text, why):
+        r = eta.parse_eta(text)
+        assert not r.accepted, why
+        assert r.message, "refused without telling anyone why"
+
+    def test_parse_errors_never_escape(self):
+        # The whole point of the wrapper: ParseError must not reach the route.
+        for junk in ["", "???", "\x00", "next" * 50, "in -5 minutes"]:
+            assert isinstance(eta.parse_eta(junk), eta.EtaResult)
+
+    def test_beyond_the_cap_is_rejected(self):
+        now = datetime(2026, 8, 1, 9, 0, tzinfo=timezone.utc)
+        r = eta.parse_eta("tomorrow", now=now)
+        assert not r.accepted
+        assert "capped" in r.message
+
+    def test_very_short_intervals_round_up_rather_than_fail(self):
+        now = datetime(2026, 8, 1, 21, 30, tzinfo=timezone.utc)
+        r = eta.parse_eta("in 1 minute", now=now)
+        assert r.accepted
+        assert r.when == now + timedelta(minutes=eta.MIN_MINUTES)
+        assert r.warning
+
+    def test_long_but_legal_intervals_warn_without_blocking(self):
+        now = datetime(2026, 8, 1, 21, 30, tzinfo=timezone.utc)
+        r = eta.parse_eta("in 150 minutes", now=now)
+        assert r.accepted and r.warning
+
+    def test_a_confident_short_eta_carries_no_warning(self):
+        now = datetime(2026, 8, 1, 21, 30, tzinfo=timezone.utc)
+        r = eta.parse_eta("in 20 minutes", now=now)
+        assert r.accepted and not r.warning
+        assert r.confidence >= eta.CONFIDENCE_FLOOR
+
+
+class TestJoinWithEta:
+    def stored_eta(self):
+        with diresq.app.app_context():
+            return diresq.get_db().execute(
+                "SELECT eta, eta_confidence FROM assignments WHERE id = 1"
+            ).fetchone()
+
+    def test_a_good_eta_is_stored(self, client):
+        client.post("/report/1/rescue", data={"eta_text": "in 45 minutes"})
+        row = self.stored_eta()
+        assert row["eta"] is not None
+        assert row["eta_confidence"] >= eta.CONFIDENCE_FLOOR
+
+    def test_a_bad_eta_still_joins_but_stores_nothing(self, client):
+        r = client.post("/report/1/rescue", data={"eta_text": "sometime i guess"})
+        assert r.status_code == 302, "a bad ETA blocked someone from joining"
+        assert self.stored_eta()["eta"] is None
+
+    def test_joining_without_an_eta_is_unchanged(self, client):
+        client.post("/report/1/rescue")
+        assert self.stored_eta()["eta"] is None
+
+    def test_the_board_uses_a_real_eta_over_the_default(self, client):
+        # Default interval is 30 min. A 45 min ETA must survive past it.
+        client.post("/report/1/rescue", data={"eta_text": "in 45 minutes"})
+        stale = (datetime.now(timezone.utc) - timedelta(minutes=40)).isoformat(
+            timespec="seconds")
+        with diresq.app.app_context():
+            db = diresq.get_db()
+            db.execute("UPDATE assignments SET joined_at = ?", (stale,))
+            db.commit()
+        row = next(r for r in client.get("/api/responders").get_json()
+                   if r["username"] == "londo")
+        assert row["overdue"] is False, (
+            "default interval overrode an explicit ETA"
+        )
 
 
 class TestResolve:

@@ -34,6 +34,12 @@ All notable changes to this project are documented here. Format follows
 - Report cards say how many people are on their way and how many have arrived,
   and carry the staffing signal when someone on scene has set one. A report
   nobody has gone to reads "0 responding".
+- Give a free-text ETA when you join, so the board knows when to expect you.
+  The parser refuses anything it is not confident about rather than guessing,
+  caps intervals at four hours, and rounds anything under five minutes up.
+  A refused ETA still lets you join, on the default interval.
+- A README covering setup, configuration, every route, the design decisions
+  and the known limitations.
 - Resolve a report when it is handled. Open to whoever filed it and to anyone
   on scene, since those are the only people in a position to know. Resolving
   clears everyone still attached and drops it out of the feed.
