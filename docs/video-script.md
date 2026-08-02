@@ -193,3 +193,84 @@ man's switch. Those three are the project.
 - If you fluff a line, pause two seconds and say it again — easy to cut.
 - Record the voiceover separately if reading and clicking at once is hard.
   Screen capture first, narrate over it second.
+
+---
+
+# The README GIF
+
+A separate, shorter thing. **25 seconds, no sound, loops forever.**
+
+Record it **after** the video, not before. Same app state, same setup, and by
+then you'll have clicked through it four times and know exactly where
+everything is. Doing the GIF first is how the video ends up not existing.
+
+## What it has to do
+
+It has one job: make somebody scrolling past stop, and understand that **a
+report appeared that nobody filed.**
+
+No narration, no captions, no cursor waving about. It should look like the app
+doing something by itself, because that is literally what is happening.
+
+## Setup
+
+```bash
+python tools/demo_state.py --in 12
+```
+
+That winds `s.reyes`'s clock so the row goes red twelve seconds from now,
+while you're recording. `--reset` clears auto-filed reports between takes.
+
+Then load `/board` and start the recorder.
+
+## The three beats
+
+| Time | Shot | What the eye catches |
+| --- | --- | --- |
+| 0–7s | **Feed**, slow scroll | Amber banner: *"3 reports with nobody going."* A card with four responders sitting *below* one with none |
+| 7–16s | **Board** | `s.reyes` flips green to **red**, on its own, nobody touching anything |
+| 16–25s | **Feed** again | New HIGH card at the top: *"No contact from s.reyes for 47 minutes"*, with the `auto` badge |
+
+It loops back to the calm feed, which makes the red feel like it is happening
+*again*. That's the product in one loop with no words.
+
+## Settings
+
+- **ScreenToGif** (Windows, free) — record, trim and export in one place, and
+  it will drop frames to hit a size target.
+- **Crop out all browser chrome.** No tabs, no address bar. It is a picture of
+  an app, not of Firefox.
+- **~1100px wide, 12 fps.** Keep it under 5 MB — GitHub allows 10 but anything
+  larger loads slowly and people scroll past while it thinks.
+- Hold the last frame about a second before it loops, so the auto-filed card
+  registers before it cuts.
+
+## In the README
+
+Directly under the badge block, inside the existing `<div align="center">`:
+
+```markdown
+<img src="docs/demo.gif"
+     alt="The accountability board turning red when a responder stops checking
+          in, and the report DiresQ files automatically at their last known
+          position"
+     width="820">
+```
+
+The alt text matters. It is the only version of the demo a screen reader user
+gets, and it is the sentence you want a judge to read anyway.
+
+## If you only have time for 15 seconds
+
+Cut the feed scroll. Run red → auto-report. That's still the whole thesis, and
+a shorter loop gets watched twice.
+
+## A second GIF, only if there's time
+
+The classifier, 10 seconds: type *"water rising fast, grandmother upstairs and
+cannot walk"* into the report box and let the suggestion appear —
+`HIGH · 95% sure · boat`, with the words that caused it.
+
+It's a good shot because the reasoning is visible, which is the whole argument
+for not using a language model. But it's second priority. The board going red
+is the project; this is a feature.

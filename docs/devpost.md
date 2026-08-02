@@ -66,6 +66,51 @@ deadline, the board turns red.** Your name, your last known position, how long
 since anyone heard from you. Nobody has to notice. Nobody has to remember you
 went out.
 
+And if you stay quiet fifteen minutes past that, the server stops waiting to be
+noticed and files a report *about you*, at your last known position. It joins
+the feed like any other job, so somebody can go and find you.
+
+### The machine learning, and why it isn't a language model
+
+Somebody filing a report at 2am from a flooded house is being asked to pick a
+severity from a dropdown. They don't know. They aren't trained, they're
+frightened, and the honest answer to "how bad is this on a three-point scale"
+is *you tell me*.
+
+So we trained a **naive Bayes classifier on 65 hand-labelled reports** to
+suggest severity and required equipment from free text. It returns the words
+that drove each decision, measures its own duplicate-detection threshold
+against real data — 0.157 worst false positive, 0.409 true match, threshold
+0.30 — and ships a model card listing what it gets wrong. It runs locally in
+**0.1 ms with no network**, because the app is for a disaster, which is when
+the network fails.
+
+Type *"water rising fast, grandmother upstairs and cannot walk down"* and it
+answers `HIGH · 95% sure · boat`, and tells you it decided that from
+*rising, upstairs, cannot*. Touch the dropdown yourself and it stops adjusting
+it, permanently — somebody who has made a decision about their own emergency
+should not have software arguing with them.
+
+The same maths does something else that matters more: it spots when your
+description matches a report **somebody has already filed**. Duplicate reports
+are exactly how six people end up at one address while a street nearby has
+nobody.
+
+We deliberately did not use an LLM. Three reasons, in the order they mattered:
+
+1. **It has to explain itself.** The words shown *are* the decision — the
+   ranked log-odds — not a separately generated rationalisation that can
+   disagree with it. "Trust me" isn't available when somebody is deciding
+   where to send a boat.
+2. **It has to be honest about being wrong.** Below 45% confidence it says
+   nothing at all. A confident paragraph from a language model is much harder
+   to disbelieve, and this is a domain where confidently wrong sends people to
+   the wrong street.
+3. **It has to run.** No download, no API key, no network, no GPU. Our
+   check-ins already queue offline; a classifier that needed somebody else's
+   datacentre would be the one part of the system that fails exactly when it
+   is needed.
+
 ### What we built it with
 
 Flask and SQLite, server-rendered pages with a JSON API layered on top, Leaflet
@@ -114,13 +159,23 @@ all of it.
 ### The challenges
 
 The plan didn't survive contact. We'd agreed the backend would push stub JSON
-endpoints in the first hour so the frontend could build against them. Instead
-the frontend built five complete pages as server-rendered templates — which
-ignore JSON entirely. The stubs would have gone unused.
+endpoints in the first hour so the frontend could build against them, and then
+we put the one hard dependency in the whole plan on a single task and didn't
+treat it as one. It sat in the doc looking like a step rather than a blocker.
 
-We kept what she'd built rather than rewriting it, and it turned out better
-than the plan: the board works with JavaScript switched off, and only the parts
-that need to be live are live.
+The stubs never got written, and the frontend — rightly — kept moving instead
+of waiting, building five complete pages as server-rendered templates. Those
+ignore JSON entirely, so the stubs would have been thrown away regardless.
+
+We kept what was already working rather than rewriting it, and the plan failing
+produced a better app: the whole thing works with JavaScript switched off, and
+only the parts that need to be live are live.
+
+What it cost was the contract. With no stubs and no conversation instead of
+them, both sides assumed one, and three field names came out different. The
+lesson we actually took isn't "somebody should have waited" — it's that a plan
+with a dependency in it needs that dependency named as one, out loud, with a
+time on it.
 
 Deciding what *not* to build was harder than building. LoRa mesh is in our
 notes as roadmap-only. We don't have radios, which means we couldn't test it,
@@ -135,6 +190,11 @@ Location is self-reported; we detect inconsistency, not intent. Spam control is
 community flagging, not verification. The overdue timer measures contact, not
 safety: a dead battery flags identically to a flooded basement.
 
+The classifier counts words, so it cannot read "no longer trapped" correctly,
+and its duplicate detection misses two descriptions of the same house that
+happen to share no vocabulary. Sixty-five training examples is a demonstration,
+not a dataset. It suggests; the person filing the report always decides.
+
 And it has never been used in a real disaster. Everything here is reasoned from
 accounts of Harvey, Kathmandu and Mexico City, and from published triage
 protocol. We think the reasoning is sound. That's not the same as knowing it
@@ -146,9 +206,11 @@ works.
 
 ```
 python, flask, sqlite, jinja, javascript, html, css, leaflet,
-openstreetmap, timefuzz, vitalscore, patchnotes, pygeospy,
+openstreetmap, naive-bayes, tf-idf, machine-learning, astro,
+timefuzz, vitalscore, patchnotes, pygeospy, hmac, lora,
 werkzeug, python-dotenv, pytest, ruff, github-actions, bandit,
-pip-audit, gitleaks, keep-a-changelog, start-triage, git, sublime-text
+pip-audit, gitleaks, keep-a-changelog, start-triage, ics-214,
+wcag, git, sublime-text
 ```
 
 ## Try it out
