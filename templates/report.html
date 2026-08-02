@@ -7,8 +7,50 @@
     <title>Report: {{ report.subject }}</title>
 </head>
 <body>
-    <!-- Code here -->
 
-    <script src="../static/scripts/report.js"></script>
+<div class="container">
+
+    <a href="/" class="back-btn">
+        ← Back
+    </a>
+
+    <div class="report-card">
+
+        <h1>
+            {{ report.subject }}
+        </h1>
+
+        <div class="header">
+
+            <span class="priority {{ report.priority|lower }}">
+                {{ report.priority }}
+            </span>
+
+            <form action="/report/{{ report.id }}/rescue" method="POST">
+
+                <button type="submit" class="rescue-btn">
+                    🚨 Rescue
+                </button>
+
+            </form>
+
+        </div>
+
+        <section>
+
+            <h2>Description</h2>
+
+            <p>
+                {{ report.description }}
+            </p>
+
+        </section>
+
+    </div>
+
+</div>
+
+<script src="../static/scripts/report.js"></script>
+
 </body>
 </html>
