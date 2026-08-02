@@ -19,8 +19,11 @@ number and put it here)
       Astro site is gated on this existing, and it's what you're judged on.
 - [ ] Rehearse it three times and time it. First take is always too long.
 - [ ] Test at phone width. Nobody has looked at this on a small screen.
-- [ ] Try to break it: empty forms, GPS denied, double-join, silly input,
-      resolve twice, flag your own report.
+- [x] Try to break it — done as a test class, `TestTryingToBreakIt`. Empty
+      forms, denied GPS, junk coordinates, script tags, a semicolon and a
+      DROP TABLE, double-join, resolve twice, flag your own report, moving
+      someone else's assignment, a report id of `banana`. One real bug came
+      out of it. Still worth doing once by hand in a browser.
 
 ## Demo and submission
 
@@ -80,14 +83,19 @@ like.
       every dropped signal a callout.
 - [x] ICS-214 activity log export, from `/board`.
 - [x] Coverage gap banner on the feed.
-- [x] Transport seam: `transport.py` plus `/api/uplink`.
+- [x] Transport seam: `transport.py` plus `/api/uplink`, now signed per node,
+      plus `tools/gateway.py` to feed it from a pipe or a serial port.
+- [x] `flask --app app sweep`, so the dead man's switch can run on a schedule
+      rather than on somebody having a tab open.
 - [x] Login and sign-up guardrails, and the open redirect they turned up.
 
 ## Worth doing if there's time
 
 - [ ] Role picker on signup. Everyone is a responder right now.
-- [ ] Sign the uplink packet. Four more bytes and a key per node; without it
-      the endpoint can't ever face the internet.
+- [ ] **Browser offline queue.** The one real gap left. Server has been ready
+      for it since the `happened_at` work — see `docs/offline.md`.
+- [ ] A counter in the uplink packet, closing the replay hole. Two more bytes
+      and a table of the last packet accepted per node.
 
 ## Not doing
 
@@ -98,10 +106,13 @@ like.
 
 ## Housekeeping
 
-- [ ] Reconcile the project doc — it still has the old `severity` / `needs`
-      vocabulary and integer priorities in places.
-- [ ] Decide whether hardware is in scope. The newer doc dropped the Cardputer
-      section entirely and nobody said whether that was deliberate.
+- [x] Reconcile the project doc — differences written up in
+      `docs/project-doc-errata.md`, exact old/new. Someone still has to paste
+      the corrections into the actual doc; I can only write the list.
+- [x] Hardware is out of scope. The Cardputer section vanished between doc
+      versions and nobody said so out loud; recorded in the errata. We have no
+      device, so there is nothing to film. `tools/gateway.py` is the same idea
+      without one.
 - [ ] Tell Skythe about `nav.css`, `actions.css`, `triage.css`, `credits.css` —
       new stylesheets she may want to bring in line.
 - [ ] At the end: `patchnotes CHANGELOG.md bump 1.0.0`, `git tag v1.0.0`,

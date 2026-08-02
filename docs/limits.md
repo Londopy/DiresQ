@@ -50,18 +50,23 @@ Someone with a dead battery flags identically to someone in a flooded
 basement. Someone hurt but able to tap a button doesn't flag at all. The timer
 tells you when to *start asking*, and that's all we claim for it.
 
-## Nothing works offline yet
+## Nothing works offline in the browser yet
 
 Check-ins, reports and the board all need a connection. In a disaster, that's
 exactly what you don't have.
 
 The server side is ready: a check-in can say when it was really made, and the
 overdue timer uses that rather than when it arrived, so a queued one can't
-clear a red row it never earned. The queue itself, and cached map tiles, are
-not built.
+clear a red row it never earned. There is also a signed radio packet and a
+gateway that forwards it.
 
-Tiles can only ever cover where you've already been — a cache can't pre-fetch
-somewhere you've never looked.
+**The queue itself is not built.** Close the tab with no signal and the
+check-in is gone. Neither are cached map tiles, and a tile cache can only ever
+cover where you've already been — it can't pre-fetch somewhere you have never
+looked, which is often where the disaster is.
+
+The full accounting of which parts exist is in [offline.md](offline.md), and
+it is deliberately blunt.
 
 ## Spam control is flagging, not verification
 
@@ -80,26 +85,36 @@ The triage helper runs a real protocol and gives a real category. It decides
 who gets reached first. It is not medical advice, it doesn't tell you what to
 do when you get there, and it doesn't replace a clinician.
 
-## The uplink endpoint is unauthenticated
+## An uplink packet can be replayed
 
 `/api/uplink` takes a check-in as bytes rather than as a logged-in browser,
-because a radio gateway has no session and no cookie — it has a packet it
-heard and a socket to hand it over on. The responder is identified from
-inside the packet.
+because a radio gateway has no session and no cookie. The responder is named
+inside the packet, and every packet carries four bytes of HMAC over its body,
+checked against that responder's key before anything is written. An unsigned
+or wrongly-signed packet is refused.
 
-Which means anyone who can reach that endpoint can move a pin. It exists to
-prove the message shape is right, not to face the internet. Doing it properly
-needs a shared key per node and a signature over the packet, which is another
-four bytes and a key distribution problem we haven't solved.
+What that does not stop is a *replay*: somebody who records a valid packet off
+the air can send the same bytes again later and move that pin. Closing it
+needs a counter in the packet and a record of the last one accepted — two more
+bytes and a table.
 
-## The dead man's switch needs somebody to open the app
+Four bytes of signature is 32 bits, so a blind forgery gets through about once
+in four billion tries. That's a deliberate trade against a link where a full
+32-byte tag would be twice the size of the message. Key distribution is a
+person reading `flask --app app node-key alice` and typing it into a node,
+which works at the size of a volunteer group and not beyond it.
 
-The check for silence runs when a page is loaded, not on a timer. If nobody
-opens DiresQ at all, nothing is swept and no report is filed.
+## The dead man's switch depends on being run
 
-In practice, one browser left on the board polls every three seconds, which
-is enough. But "someone has a tab open" is a dependency, and it should be
-written down as one rather than assumed.
+The check for silence runs when a page is loaded. `flask --app app sweep` runs
+the same check from cron or Task Scheduler, so it doesn't have to depend on a
+browser — but somebody has to set that up, and if neither happens, nothing is
+swept and no report is filed.
+
+There is deliberately no background thread. A timer inside the app that dies
+takes the alarm with it, silently, which is the worst way for an alarm to
+fail. An external scheduler failing is at least visible to the machine running
+it.
 
 It also can't tell the difference between a phone that died and a person who
 is hurt. It files the same report either way, which is the right failure —

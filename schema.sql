@@ -22,6 +22,10 @@ CREATE TABLE accounts (
                             CHECK (role IN ('responder', 'reporter')),
     -- comma list: boat,truck,chainsaw,medical,generator
     capabilities    TEXT    NOT NULL DEFAULT '',
+    -- Shared secret for this person's radio node, hex. Signs uplink packets.
+    -- Null until they have one, and an unsigned packet is refused, so the
+    -- absence of a key fails closed.
+    node_key        TEXT,
     created_at      TEXT    NOT NULL
 );
 

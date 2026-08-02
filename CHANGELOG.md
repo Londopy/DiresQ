@@ -62,10 +62,24 @@ All notable changes to this project are documented here. Format follows
   Distinct from understaffed: it counts only the ones where nobody has said
   they are coming at all.
 - Check-ins can arrive as bytes instead of as a browser. A check-in packs into
-  fourteen bytes, which fits a LoRa payload with room to spare, and `POST
+  eighteen bytes, which fits a LoRa payload with room to spare, and `POST
   /api/uplink` accepts one from something that has no session to log in with.
   Both routes in go through the same code, so they cannot drift apart. The
   radio itself is not built.
+- Every radio check-in is signed. Each responder gets a key when their account
+  is made, and a packet that isn't signed with it is refused before anything
+  is written. There is no transport security on a radio link, so the message
+  has to prove where it came from on its own.
+- A gateway program that forwards packets from a pipe or a serial port. It
+  keeps listening through line noise, truncated packets, forged signatures and
+  the server being unreachable, because a gateway that stops on the first bad
+  line is a gateway that is down.
+- `flask --app app sweep` files reports for anyone gone quiet, so the alarm
+  can be put on a schedule instead of depending on somebody having a tab open.
+- `flask --app app node-key <username>` shows or rotates a responder's radio
+  key.
+- A written account of what works without a network and what does not, with a
+  table saying plainly which parts are built. The offline queue is not.
 - Export an ICS-214 Activity Log — the form agencies already keep at a
   multi-agency scene — built from logged records rather than from memory.
   Every assignment, arrival, check-in and automatic alert, in time order.
@@ -125,6 +139,10 @@ All notable changes to this project are documented here. Format follows
   map submitted silently and the report never appeared on the map.
 - Error messages were written but never displayed. A rejected sign-in or an
   incomplete report form appeared to do nothing at all.
+- Pressing resolve twice said "only the reporter or someone on scene can
+  resolve this" — because resolving clears you off the report, and so takes
+  away the right you had just used. It now says it is already resolved, which
+  is what actually happened.
 - Rebuilding the database on top of an existing one stopped halfway and left it
   in pieces, because a table had been added without a matching drop. The tables
   are now torn down in the order their foreign keys allow, and a test reads the

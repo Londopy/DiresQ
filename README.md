@@ -95,9 +95,13 @@ on its own, and now somebody knows where to start looking.
   nobody going to them at all. Not the same as understaffed.
 - **ICS-214 export** — the activity log agencies already keep, built from
   records rather than from memory.
-- **Check-ins over a radio** — a check-in packs into 14 bytes and `/api/uplink`
-  takes one from something with no session to log in with. The radio itself
-  isn't built; the message it would carry is.
+- **Check-ins over a radio** — a check-in packs into 18 signed bytes, small
+  enough for LoRa, and `tools/gateway.py` forwards them from a pipe or a
+  serial port to `/api/uplink`. Every packet is verified against that
+  responder's key before anything is written.
+  **The radio itself is not built, and neither is the browser offline queue.**
+  [docs/offline.md](docs/offline.md) is the full accounting of which parts
+  exist.
 
 ## Quickstart
 
@@ -210,13 +214,31 @@ app.py              routes, queries, CLI
 eta.py              free-text ETA parsing with a confidence gate
 triage.py           START triage, mapped onto report severity
 transport.py        the check-in packet, small enough for a radio
+tools/gateway.py    forwards packets from a pipe or a serial port
 schema.sql          accounts · reports · assignments · checkins
 templates/          Jinja pages
 static/             CSS, JS, images
 tests/              pytest suite
-docs/               decisions, process, limits, api
+docs/               decisions, process, offline, limits, api
 site/               Astro docs site, built from docs/
 .github/workflows/  ci · security · changelog · pages
+```
+
+## Commands
+
+```bash
+flask --app app init-db          # drop everything and rebuild
+flask --app app seed             # load an incident already in progress
+flask --app app sweep            # file reports for anyone gone quiet
+flask --app app node-key londo   # show or --rotate a radio key
+```
+
+`sweep` is the dead man's switch without a browser. It also runs when a page
+is loaded, but put it on cron or Task Scheduler and the alarm stops depending
+on somebody having a tab open:
+
+```
+*/5 * * * *  cd /srv/diresq && flask --app app sweep
 ```
 
 ## Docs site
@@ -243,8 +265,12 @@ git push --tags
 
 - [Decisions](docs/decisions.md) — what we argued about and what we picked
 - [Process](docs/process.md) — the build log, including what broke
+- [Offline and LoRa](docs/offline.md) — the radio packet, the gateway, and an
+  honest table of what is and isn't built
 - [Limits](docs/limits.md) — what this doesn't do
 - [API](docs/api.md) — full reference
+- [Project doc errata](docs/project-doc-errata.md) — where the planning doc
+  and the code disagree, and which one won
 
 ## Known limitations
 

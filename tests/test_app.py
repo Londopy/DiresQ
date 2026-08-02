@@ -1233,12 +1233,69 @@ class TestPackets:
             transport.pack_checkin(70000, 29.78, -95.82)
 
 
+class TestSignedPackets:
+    """A radio link has no TLS. Anyone with a $12 module can hear the channel
+    and transmit on it, so the packet has to prove where it came from."""
+
+    def test_a_sealed_packet_opens_with_the_right_key(self):
+        key = transport.new_node_key()
+        body = transport.pack_checkin(7, 29.78, -95.82, 5)
+        assert transport.unseal(transport.seal(body, key), key) == body
+
+    def test_the_wrong_key_is_refused(self):
+        body = transport.pack_checkin(7, 29.78, -95.82)
+        sealed = transport.seal(body, transport.new_node_key())
+        with pytest.raises(transport.PacketError):
+            transport.unseal(sealed, transport.new_node_key())
+
+    def test_one_flipped_bit_anywhere_is_caught(self):
+        key = transport.new_node_key()
+        sealed = transport.seal(transport.pack_checkin(7, 29.78, -95.82), key)
+        for i in range(len(sealed)):
+            broken = bytearray(sealed)
+            broken[i] ^= 0x01
+            with pytest.raises(transport.PacketError):
+                transport.unseal(bytes(broken), key)
+
+    def test_the_version_byte_is_signed_too(self):
+        # Otherwise you could talk us down to an older format by flipping one
+        # bit and leaving the rest alone.
+        key = transport.new_node_key()
+        sealed = bytearray(
+            transport.seal(transport.pack_checkin(7, 29.78, -95.82), key))
+        sealed[0] = 0
+        with pytest.raises(transport.PacketError):
+            transport.unseal(bytes(sealed), key)
+
+    def test_it_still_fits_a_radio_payload(self):
+        key = transport.new_node_key()
+        sealed = transport.seal(
+            transport.pack_checkin(65535, -33.8688, 151.2093, 240), key)
+        assert len(sealed) <= transport.MAX_PACKET_BYTES
+
+    def test_the_responder_can_be_read_before_it_is_trusted(self):
+        # You can't check a signature until you know whose key to check.
+        key = transport.new_node_key()
+        sealed = transport.seal(transport.pack_checkin(513, 29.78, -95.82), key)
+        assert transport.responder_in(sealed) == 513
+
+    def test_two_keys_are_never_the_same(self):
+        assert len({transport.new_node_key() for _ in range(50)}) == 50
+
+
 class TestUplink:
     """The same check-in, arriving as bytes instead of as a browser."""
 
-    def packet(self, responder_id=1, lat=29.78, lng=-95.82, age=0):
+    def key_for(self, responder_id=1):
+        with diresq.app.app_context():
+            return diresq.get_db().execute(
+                "SELECT node_key FROM accounts WHERE id = ?",
+                (responder_id,)).fetchone()["node_key"]
+
+    def packet(self, responder_id=1, lat=29.78, lng=-95.82, age=0, key=None):
+        body = transport.pack_checkin(responder_id, lat, lng, age)
         return base64.b64encode(
-            transport.pack_checkin(responder_id, lat, lng, age)).decode()
+            transport.seal(body, key or self.key_for(responder_id))).decode()
 
     def test_a_good_packet_records_a_checkin(self, anon):
         res = anon.post("/api/uplink", json={"packet": self.packet()})
@@ -1277,8 +1334,31 @@ class TestUplink:
         assert "error" in res.get_json()
 
     def test_an_unknown_responder_is_a_404(self, anon):
-        res = anon.post("/api/uplink", json={"packet": self.packet(9999)})
-        assert res.status_code == 404
+        packet = self.packet(9999, key=transport.new_node_key())
+        assert anon.post("/api/uplink",
+                         json={"packet": packet}).status_code == 404
+
+    def test_an_unsigned_packet_is_refused(self, anon):
+        bare = base64.b64encode(
+            transport.pack_checkin(1, 29.78, -95.82)).decode()
+        assert anon.post("/api/uplink",
+                         json={"packet": bare}).status_code == 400
+
+    def test_a_packet_signed_with_the_wrong_key_writes_nothing(self, anon):
+        packet = self.packet(key=transport.new_node_key())
+        res = anon.post("/api/uplink", json={"packet": packet})
+        assert res.status_code == 400
+        with diresq.app.app_context():
+            assert diresq.get_db().execute(
+                "SELECT COUNT(*) c FROM checkins").fetchone()["c"] == 0
+
+    def test_you_cannot_check_in_as_somebody_else(self, anon):
+        # Sign with responder 1's key but claim to be responder 2.
+        body = transport.pack_checkin(2, 29.78, -95.82)
+        packet = base64.b64encode(
+            transport.seal(body, self.key_for(1))).decode()
+        assert anon.post("/api/uplink",
+                         json={"packet": packet}).status_code == 400
 
 
 class TestDeadMansSwitch:
@@ -1517,6 +1597,259 @@ class TestAuthGuardrails:
         cookie = res.headers.get("Set-Cookie", "")
         assert "HttpOnly" in cookie
         assert "SameSite=Lax" in cookie
+
+
+class TestTryingToBreakIt:
+    """Everything a tired person does by accident at 3am, plus everything
+    somebody does on purpose when they find the URL bar."""
+
+    def test_an_entirely_empty_report_form(self, client):
+        res = client.post("/report/new", data={})
+        assert res.status_code == 400
+        assert "Subject is required" in res.get_data(as_text=True)
+
+    def test_a_report_of_nothing_but_spaces(self, client):
+        res = client.post("/report/new", data={
+            "subject": "     ", "priority": "HIGH", "lat": 29.7, "lng": -95.8})
+        assert res.status_code == 400
+
+    def test_a_report_with_no_location_because_gps_was_denied(self, client):
+        # The map is untouched and the browser said no, so the hidden inputs
+        # are still empty. Browsers don't validate hidden fields.
+        before = count_reports()
+        res = client.post("/report/new", data={
+            "subject": "Water rising", "priority": "HIGH",
+            "lat": "", "lng": ""})
+        assert res.status_code == 400
+        assert count_reports() == before
+
+    def test_coordinates_that_are_not_numbers(self, client):
+        res = client.post("/report/new", data={
+            "subject": "Water rising", "priority": "HIGH",
+            "lat": "somewhere", "lng": "over there"})
+        assert res.status_code == 400
+
+    def test_a_priority_nobody_offered(self, client):
+        res = client.post("/report/new", data={
+            "subject": "Water rising", "priority": "APOCALYPTIC",
+            "lat": 29.7, "lng": -95.8})
+        assert res.status_code == 400
+
+    def test_a_very_long_subject_does_not_break_the_feed(self, client):
+        client.post("/report/new", data={
+            "subject": "A" * 5000, "priority": "LOW",
+            "lat": 29.7, "lng": -95.8})
+        assert client.get("/").status_code == 200
+
+    def test_html_in_a_report_is_escaped_not_rendered(self, client):
+        client.post("/report/new", data={
+            "subject": "<script>alert(1)</script>", "priority": "LOW",
+            "description": "<img src=x onerror=alert(1)>",
+            "lat": 29.7, "lng": -95.8})
+        body = client.get("/").get_data(as_text=True)
+        assert "<script>alert(1)</script>" not in body
+        assert "&lt;script&gt;" in body
+
+    def test_a_quote_in_a_report_does_not_end_the_query(self, client):
+        before = count_reports()
+        client.post("/report/new", data={
+            "subject": "'; DROP TABLE reports; --", "priority": "LOW",
+            "lat": 29.7, "lng": -95.8})
+        assert count_reports() == before + 1
+        assert client.get("/").status_code == 200
+
+    def test_joining_the_same_report_twice(self, client):
+        client.post("/report/1/rescue")
+        client.post("/report/1/rescue")
+        with diresq.app.app_context():
+            count = diresq.get_db().execute(
+                "SELECT COUNT(*) c FROM assignments WHERE report_id = 1"
+            ).fetchone()["c"]
+        assert count == 1
+
+    def test_joining_a_report_that_does_not_exist(self, client):
+        assert client.post("/report/9999/rescue").status_code == 404
+
+    def test_resolving_the_same_report_twice(self, client):
+        # You have to be on scene, not merely on your way — being en route
+        # doesn't put you in a position to know it's handled.
+        client.post("/report/1/rescue")
+        client.post("/api/assignments/1/status", json={"status": "on_scene"})
+        client.post("/report/1/resolve")
+        res = client.post("/report/1/resolve", follow_redirects=True)
+        assert res.status_code == 200
+        assert "Already resolved" in res.get_data(as_text=True)
+
+    def test_you_cannot_resolve_from_the_car(self, client):
+        client.post("/report/1/rescue")
+        res = client.post("/report/1/resolve", follow_redirects=True)
+        assert "Only the reporter or someone on scene" in res.get_data(as_text=True)
+        with diresq.app.app_context():
+            status = diresq.get_db().execute(
+                "SELECT status FROM reports WHERE id = 1").fetchone()["status"]
+        assert status != "resolved"
+
+    def test_resolving_a_report_that_is_not_yours(self, client):
+        # Filed by kiyan, and londo never went. Nobody else has grounds.
+        res = client.post("/report/2/resolve", follow_redirects=True)
+        assert "Only the reporter or someone on scene" in res.get_data(as_text=True)
+
+    def test_flagging_your_own_report(self, client):
+        client.post("/report/new", data={
+            "subject": "Mine", "priority": "LOW", "lat": 29.7, "lng": -95.8})
+        mine = count_reports()
+        # Allowed — but it counts once, like anyone else's.
+        assert client.post(f"/report/{mine}/flag").status_code in (200, 302)
+        assert client.post(f"/report/{mine}/flag").status_code in (409, 302)
+        with diresq.app.app_context():
+            flags = diresq.get_db().execute(
+                "SELECT flags FROM reports WHERE id = ?", (mine,)
+            ).fetchone()["flags"]
+        assert flags == 1
+
+    def test_flagging_the_same_report_twice(self, client):
+        client.post("/report/1/flag")
+        res = client.post("/report/1/flag", json={})
+        assert res.status_code == 409
+
+    def test_a_hidden_report_is_still_visible_to_whoever_filed_it(self, client):
+        # Being outvoted by three strangers shouldn't strand the person who
+        # asked for help.
+        with diresq.app.app_context():
+            db = diresq.get_db()
+            db.execute("UPDATE reports SET status = 'hidden' WHERE id = 1")
+            db.commit()
+        assert client.get("/report/1").status_code == 200
+
+    def test_going_on_scene_without_joining(self, client):
+        res = client.post("/api/assignments/1/status", json={"status": "on_scene"})
+        assert res.status_code == 404
+
+    def test_moving_somebody_elses_assignment(self, client):
+        client.post("/report/1/rescue")
+        with diresq.app.app_context():
+            db = diresq.get_db()
+            db.execute("UPDATE assignments SET responder = 2 WHERE id = 1")
+            db.commit()
+        res = client.post("/api/assignments/1/status", json={"status": "on_scene"})
+        assert res.status_code == 403
+
+    def test_skipping_straight_to_cleared(self, client):
+        client.post("/report/1/rescue")
+        res = client.post("/api/assignments/1/status", json={"status": "cleared"})
+        assert res.status_code == 400
+
+    def test_un_arriving_from_a_scene(self, client):
+        client.post("/report/1/rescue")
+        client.post("/api/assignments/1/status", json={"status": "on_scene"})
+        res = client.post("/api/assignments/1/status", json={"status": "en_route"})
+        assert res.status_code == 400
+
+    def test_a_status_that_is_not_a_status(self, client):
+        client.post("/report/1/rescue")
+        res = client.post("/api/assignments/1/status", json={"status": "asleep"})
+        assert res.status_code == 400
+
+    def test_signalling_staffing_from_the_car(self, client):
+        client.post("/report/1/rescue")
+        res = client.post("/api/reports/1/staffing", json={"staffing": "need_more"})
+        assert res.status_code == 403
+
+    def test_checking_in_with_no_coordinates_at_all(self, client):
+        # GPS denied. A check-in with no position still resets the timer,
+        # because "I'm alive" is the part that matters.
+        client.post("/report/1/rescue")
+        res = client.post("/api/checkin", json={})
+        assert res.status_code == 201
+
+    def test_a_check_in_dated_next_week(self, client):
+        client.post("/report/1/rescue")
+        ahead = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+        res = client.post("/api/checkin", json={"lat": 29.7, "lng": -95.8,
+                                                "happened_at": ahead})
+        assert res.status_code == 400
+
+    def test_a_check_in_dated_last_year(self, client):
+        client.post("/report/1/rescue")
+        old = (datetime.now(timezone.utc) - timedelta(days=365)).isoformat()
+        res = client.post("/api/checkin", json={"lat": 29.7, "lng": -95.8,
+                                                "happened_at": old})
+        assert res.status_code == 400
+
+    def test_a_timestamp_that_is_not_a_timestamp(self, client):
+        client.post("/report/1/rescue")
+        res = client.post("/api/checkin", json={"happened_at": "yesterday-ish"})
+        assert res.status_code == 400
+
+    def test_triage_with_nothing_answered(self, client):
+        assert client.post("/api/triage", json={}).status_code == 400
+
+    def test_triage_with_a_word_where_a_number_goes(self, client):
+        res = client.post("/api/triage", json={
+            "can_walk": "false", "breathing": "true",
+            "respiratory_rate": "fast"})
+        assert res.status_code == 400
+
+    def test_a_report_id_that_is_not_a_number(self, client):
+        assert client.get("/report/banana").status_code == 404
+
+    def test_a_negative_report_id(self, client):
+        assert client.get("/report/-1").status_code == 404
+
+    def test_every_page_survives_an_empty_database(self, client):
+        with diresq.app.app_context():
+            db = diresq.get_db()
+            db.execute("DELETE FROM assignments")
+            db.execute("DELETE FROM report_flags")
+            db.execute("DELETE FROM reports")
+            db.commit()
+        for page in ["/", "/map", "/board", "/triage", "/export/ics214"]:
+            assert client.get(page).status_code == 200, page
+
+
+class TestSweepCommand:
+    """The dead man's switch without anyone having a tab open."""
+
+    def test_it_runs_clean_when_nobody_is_late(self, client):
+        runner = diresq.app.test_cli_runner()
+        result = runner.invoke(args=["sweep"])
+        assert result.exit_code == 0
+        assert "nobody is overdue" in result.output
+
+    def test_it_files_without_a_page_ever_being_loaded(self, client):
+        client.post("/report/1/rescue")
+        backdate(1, 60)
+        result = diresq.app.test_cli_runner().invoke(args=["sweep"])
+        assert result.exit_code == 0
+        assert "filed 1 report" in result.output
+        assert len(auto_reports()) == 1
+
+    def test_running_it_again_files_nothing_new(self, client):
+        client.post("/report/1/rescue")
+        backdate(1, 60)
+        runner = diresq.app.test_cli_runner()
+        runner.invoke(args=["sweep"])
+        runner.invoke(args=["sweep"])
+        assert len(auto_reports()) == 1
+
+
+class TestNodeKeyCommand:
+    def test_it_prints_a_key_for_a_real_account(self, client):
+        result = diresq.app.test_cli_runner().invoke(
+            args=["node-key", "londo"])
+        assert result.exit_code == 0
+        assert "node key" in result.output
+
+    def test_rotating_changes_it(self, client):
+        runner = diresq.app.test_cli_runner()
+        first = runner.invoke(args=["node-key", "londo"]).output
+        second = runner.invoke(args=["node-key", "londo", "--rotate"]).output
+        assert first != second
+
+    def test_an_account_that_does_not_exist(self, client):
+        result = diresq.app.test_cli_runner().invoke(
+            args=["node-key", "nobody"])
+        assert result.exit_code != 0
 
 
 class TestICS214Continued:

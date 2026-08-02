@@ -20,6 +20,8 @@ const SITE = {
     "What we chose, and what we gave up to choose it."],
   process: ["process.md", "Process",
     "What actually happened, including the parts that broke."],
+  offline: ["offline.md", "Offline and LoRa",
+    "The radio packet, the gateway, and a blunt table of what isn't built."],
   limits: ["limits.md", "Limits",
     "What this does not do. Written down rather than hoped over."],
   api: ["api.md", "API",

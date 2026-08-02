@@ -96,12 +96,14 @@ green row.
 
 | Method | Route | Body |
 | --- | --- | --- |
-| `POST` | `/api/uplink` | `packet` — base64 of a 14-byte check-in |
+| `POST` | `/api/uplink` | `packet` — base64 of an 18-byte signed check-in |
 
 The same check-in, arriving as bytes instead of as a browser. A gateway has no
-session, so the responder is identified from inside the packet — which is also
-why this endpoint is unauthenticated, and why it isn't something to expose.
-See `docs/limits.md`.
+session, so the responder is named inside the packet and the packet is signed.
+
+The id is read first, but only to decide whose key to check against — nothing
+is written until the four-byte HMAC over the body matches that responder's
+`node_key`. Get a key with `flask --app app node-key <username>`.
 
 The layout, from `transport.py`:
 
@@ -113,16 +115,26 @@ The layout, from `transport.py`:
 | 4 | latitude × 100000 |
 | 4 | longitude × 100000 |
 | 2 | age in minutes |
+| 4 | HMAC-SHA256 over all of the above, truncated |
 
-Fourteen bytes total, against a 53-byte budget — the smallest LoRa payload we
-were willing to design for. Coordinates land within about a metre.
+Eighteen bytes total, against a 53-byte budget — the smallest LoRa payload we
+were willing to design for. Coordinates land within about a metre. The version
+byte is signed too, so nobody can talk the server down to an older format.
 
 It carries an *age*, not a timestamp: a node running off a battery in a flood
 is the last clock you want to trust. The server subtracts it from now, and the
 result goes through the same overdue rules as any other check-in.
 
-A malformed packet is a 400 with a reason, not an error. Radio links corrupt
-things; that's expected traffic.
+A malformed or wrongly-signed packet is a 400 with a reason, not an error.
+Radio links corrupt things, and so does anyone poking at the endpoint; that's
+expected traffic.
+
+An account that doesn't exist and an account with no key both answer 404 with
+the same message, so the endpoint can't be used to find out which responder
+ids are real.
+
+`tools/gateway.py` speaks this, from a pipe or a serial port. What it cannot
+do is replay protection — see [offline.md](offline.md).
 
 ## Export
 

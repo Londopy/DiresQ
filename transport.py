@@ -12,8 +12,15 @@ would know the difference.
 
 We have not built the radio. We do not have the hardware and we are not going
 to pretend we tested something we didn't. What we can honestly claim is that
-the message fits: a check-in is 14 bytes, which clears every LoRa data rate
-except the very slowest, and the encoding round-trips to about a metre.
+the message fits: a check-in is 14 bytes of body plus a 4-byte signature,
+which clears every LoRa data rate except the very slowest, and the encoding
+round-trips to about a metre.
+
+The signature matters more here than it would over HTTPS. There is no
+transport security on a radio link — anyone with a $12 module can hear the
+whole channel and transmit on it — so the packet has to carry its own proof
+that it came from the node it claims. Every uplink is verified against that
+responder's key before a single row is written.
 
 Sizes worth knowing, for anyone picking this up:
 
@@ -28,8 +35,11 @@ generous limit is how you find out at the demo that it doesn't fit.
 
 from __future__ import annotations
 
+import hmac
+import secrets
 import struct
 from dataclasses import dataclass
+from hashlib import sha256
 
 PROTOCOL_VERSION = 1
 
@@ -57,9 +67,73 @@ MAX_RESPONDER_ID = 0xFFFF
 # battery-powered node's clock is not to be trusted.
 MAX_AGE_MINUTES = 0xFFFF
 
+# Four bytes of HMAC-SHA256, truncated. Not a lot — 32 bits means a blind
+# forgery lands about once in four billion tries — but a radio link has no TLS
+# and a full 32-byte tag is more than twice the message it protects. The
+# trade is written up in docs/offline.md rather than hidden here.
+SIGNATURE_BYTES = 4
+
+# Where the responder id sits in the body, so a gateway can find out whose key
+# to check with before it has parsed anything else.
+RESPONDER_ID_OFFSET = 2
+
+KEY_BYTES = 32
+
 
 class PacketError(ValueError):
     """Malformed packet. Radio links corrupt things; say so and move on."""
+
+
+def new_node_key() -> str:
+    """A key for one node, hex so it survives being pasted into a config."""
+    return secrets.token_hex(KEY_BYTES)
+
+
+def sign(body: bytes, key: str) -> bytes:
+    """Truncated HMAC over the whole body, including the version byte.
+
+    Signing the version too means nobody can talk us into an older format by
+    flipping one bit.
+    """
+    digest = hmac.new(bytes.fromhex(key), body, sha256).digest()
+    return digest[:SIGNATURE_BYTES]
+
+
+def seal(body: bytes, key: str) -> bytes:
+    """Body plus its signature. What actually goes over the air."""
+    packet = body + sign(body, key)
+    if len(packet) > MAX_PACKET_BYTES:
+        raise PacketError(f"{len(packet)} bytes will not fit a LoRa payload")
+    return packet
+
+
+def responder_in(packet: bytes) -> int:
+    """Read the claimed responder id without trusting anything else.
+
+    Needed before verification, because you can't check a signature until you
+    know whose key to check it against. Nothing is written on the strength of
+    this — it only picks which key to try.
+    """
+    if len(packet) < RESPONDER_ID_OFFSET + 2:
+        raise PacketError("packet too short to contain a responder id")
+    return int.from_bytes(
+        packet[RESPONDER_ID_OFFSET:RESPONDER_ID_OFFSET + 2], "big")
+
+
+def unseal(packet: bytes, key: str) -> bytes:
+    """Check the signature and hand back the body.
+
+    Compared in constant time, so the failure doesn't leak how much of the tag
+    was right.
+    """
+    if len(packet) != LAYOUT.size + SIGNATURE_BYTES:
+        raise PacketError(
+            f"expected {LAYOUT.size + SIGNATURE_BYTES} bytes, got {len(packet)}")
+
+    body, tag = packet[:LAYOUT.size], packet[LAYOUT.size:]
+    if not hmac.compare_digest(tag, sign(body, key)):
+        raise PacketError("signature does not match")
+    return body
 
 
 @dataclass(frozen=True)

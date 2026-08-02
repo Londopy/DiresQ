@@ -24,6 +24,7 @@ from functools import wraps
 from math import atan2, cos, radians, sin, sqrt
 from pathlib import Path
 
+import click
 from dotenv import load_dotenv
 from flask import (
     Flask, Response, flash, g, jsonify, redirect, render_template, request,
@@ -447,11 +448,16 @@ def signup():
         elif role not in ("responder", "reporter"):
             flash("Role must be responder or reporter")
         else:
+            # Responders get a node key up front. Nobody has a radio yet, but
+            # handing one out later means a second flow to build and forget.
             cur = db.execute("""
                 INSERT INTO accounts
-                    (username, hashed_password, role, capabilities, created_at)
-                VALUES (?, ?, ?, '', ?)
-            """, (username, generate_password_hash(password), role, now_iso()))
+                    (username, hashed_password, role, capabilities,
+                     node_key, created_at)
+                VALUES (?, ?, ?, '', ?, ?)
+            """, (username, generate_password_hash(password), role,
+                  transport.new_node_key() if role == "responder" else None,
+                  now_iso()))
             db.commit()
             session.clear()
             session["user_id"] = cur.lastrowid
@@ -983,6 +989,14 @@ def report_resolve(report_id: int):
     if report is None:
         return render_template("notfound.html"), 404
 
+    # Checked before permission, because resolving clears you off the report
+    # and so takes away the right you just used. Pressing the button twice
+    # would otherwise answer "you are not allowed to do that", which is a
+    # confusing thing to be told about something you did ten seconds ago.
+    if report["status"] == "resolved":
+        flash("Already resolved")
+        return redirect(url_for("report_detail", report_id=report_id))
+
     on_scene = db.execute("""
         SELECT 1 FROM assignments
         WHERE report_id = ? AND responder = ? AND status = 'on_scene'
@@ -990,10 +1004,6 @@ def report_resolve(report_id: int):
 
     if report["sender"] != user["id"] and on_scene is None:
         flash("Only the reporter or someone on scene can resolve this")
-        return redirect(url_for("report_detail", report_id=report_id))
-
-    if report["status"] == "resolved":
-        flash("Already resolved")
         return redirect(url_for("report_detail", report_id=report_id))
 
     db.execute("UPDATE reports SET status = 'resolved' WHERE id = ?", (report_id,))
@@ -1315,17 +1325,29 @@ def api_uplink():
     except (binascii.Error, ValueError):
         return jsonify({"error": "packet is not valid base64"}), 400
 
+    # The id inside the packet only chooses which key to check against.
+    # Nothing is trusted until the signature says it can be.
     try:
-        checkin = transport.unpack_checkin(packet)
+        claimed = transport.responder_in(packet)
     except transport.PacketError as err:
-        # Radio links corrupt things. A bad packet is expected traffic, not an
-        # incident, so say what was wrong and drop it.
         return jsonify({"error": str(err)}), 400
 
-    who = get_db().execute("SELECT id FROM accounts WHERE id = ?",
-                           (checkin.responder_id,)).fetchone()
-    if who is None:
-        return jsonify({"error": "unknown responder"}), 404
+    who = get_db().execute("SELECT id, node_key FROM accounts WHERE id = ?",
+                           (claimed,)).fetchone()
+
+    # Same answer whether the account doesn't exist or has no key. Otherwise
+    # this endpoint tells you which responder ids are real.
+    if who is None or not who["node_key"]:
+        return jsonify({"error": "unknown or unkeyed responder"}), 404
+
+    try:
+        body = transport.unseal(packet, who["node_key"])
+        checkin = transport.unpack_checkin(body)
+    except transport.PacketError as err:
+        # Radio links corrupt things, and so does anyone poking at this. A bad
+        # packet is expected traffic, not an incident: say what was wrong and
+        # drop it.
+        return jsonify({"error": str(err)}), 400
 
     # The packet carries an age, not a timestamp — a node running off a
     # battery in a flood is the last clock you want to trust.
@@ -1460,9 +1482,11 @@ def seed_minimal() -> tuple[int, int]:
         for username, role, caps in accounts:
             db.execute("""
                 INSERT OR IGNORE INTO accounts
-                    (username, hashed_password, role, capabilities, created_at)
-                VALUES (?, ?, ?, ?, ?)
-            """, (username, generate_password_hash("diresq"), role, caps, now_iso()))
+                    (username, hashed_password, role, capabilities,
+                     node_key, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (username, generate_password_hash("diresq"), role, caps,
+                  transport.new_node_key(), now_iso()))
 
         sender = db.execute(
             "SELECT id FROM accounts WHERE username = 'kiyan'"
@@ -1497,10 +1521,11 @@ def seed_data() -> tuple[int, int]:
         for username, role, caps in SEED_ACCOUNTS:
             db.execute("""
                 INSERT OR IGNORE INTO accounts
-                    (username, hashed_password, role, capabilities, created_at)
-                VALUES (?, ?, ?, ?, ?)
+                    (username, hashed_password, role, capabilities,
+                     node_key, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
             """, (username, generate_password_hash("diresq"), role, caps,
-                  ago(240)))
+                  transport.new_node_key(), ago(240)))
 
         who = {r["username"]: r["id"] for r in
                db.execute("SELECT id, username FROM accounts").fetchall()}
@@ -1569,6 +1594,53 @@ def seed_command() -> None:
     n_accounts, n_reports = seed_data()
     print(f"seeded {n_accounts} accounts, {n_reports} reports "
           f"(password for all: diresq)")
+
+
+@app.cli.command("sweep")
+def sweep_command() -> None:
+    """File reports for anyone who has gone quiet.
+
+    The same sweep that runs when a page is loaded. Having it as a command
+    means it can be put on cron or Task Scheduler, so the alarm doesn't depend
+    on somebody having a tab open:
+
+        */5 * * * *  cd /srv/diresq && flask --app app sweep
+    """
+    with app.app_context():
+        filed = sweep_silent_responders()
+    if not filed:
+        print("nobody is overdue past the escalation window")
+    else:
+        print(f"filed {len(filed)} report(s): {', '.join(map(str, filed))}")
+
+
+@app.cli.command("node-key")
+@click.argument("username")
+@click.option("--rotate", is_flag=True, help="Replace the existing key.")
+def node_key_command(username: str, rotate: bool) -> None:
+    """Show or replace the radio key for one responder.
+
+    The key goes in that person's node, and nothing else. Printing it here is
+    the whole distribution mechanism, which is honest about the scale we are
+    at — see docs/offline.md.
+    """
+    with app.app_context():
+        db = get_db()
+        row = db.execute("SELECT id, node_key FROM accounts WHERE username = ?",
+                         (username,)).fetchone()
+        if row is None:
+            raise click.ClickException(f"no account called {username}")
+
+        if rotate or not row["node_key"]:
+            key = transport.new_node_key()
+            db.execute("UPDATE accounts SET node_key = ? WHERE id = ?",
+                       (key, row["id"]))
+            db.commit()
+        else:
+            key = row["node_key"]
+
+    print(f"responder id : {row['id']}")
+    print(f"node key     : {key}")
 
 
 if __name__ == "__main__":
