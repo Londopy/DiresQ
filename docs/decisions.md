@@ -111,11 +111,78 @@ needs to be live is live.
 We're not doing anything async. Quart would have bought us nothing and cost us
 every StackOverflow answer written about Flask.
 
+## The server files a report when someone stays silent
+
+A red row on the board only helps if somebody is looking at the board. In the
+situation this app is for, the person who should be looking is themselves
+knee-deep in water somewhere.
+
+So once a responder is fifteen minutes past their deadline, the server stops
+waiting to be noticed and files a report at their last known position. It's a
+normal HIGH report — it sits in the feed, it can be joined, it can be
+resolved. The board says someone is late; this says someone needs finding.
+
+Fifteen minutes is a guess, but it's a bounded one. Shorter and every dropped
+signal becomes a callout. Longer and the alarm arrives after it mattered.
+
+Filed under the silent person's own name, because it is about them and there
+is nobody else to attribute it to. One `auto_filed_for` column stops it
+filing a second: while an open report points at someone, the alarm has
+already been raised.
+
+## The sweep rides on reads, not a scheduler
+
+There's no cron job and no background thread. The check for silence runs when
+somebody loads the feed, the board or the map.
+
+A GET that writes is not lovely and we know it. The alternative is a timer
+process, and a timer process that dies takes the alarm with it — silently,
+which is the worst way for an alarm to fail. The sweep is idempotent, so
+polling it a hundred times a minute changes nothing after the first.
+
+It has one real flaw: if nobody opens the app at all, nothing is checked. That
+is written down in `limits.md` rather than argued away.
+
+## The transport seam is a packet, not a radio
+
+Our notes had LoRa on the roadmap. We still don't have radios, so we still
+haven't built one.
+
+What we did build is the thing that would have to be right first: the
+*message*. `transport.py` encodes a check-in as 14 bytes and `/api/uplink`
+accepts it as base64, going through exactly the same `record_checkin` as the
+browser does. Both routes in end up at one function, so they can't drift
+apart.
+
+Fourteen bytes clears every LoRa data rate except the very slowest, and we
+have a test that fails if the layout ever grows past a payload we'd actually
+get. That's a claim we can defend. "We support LoRa" is not.
+
+## ICS-214 out, because that's the form that already exists
+
+Every agency at a multi-agency scene keeps an ICS 214 Activity Log: who was
+assigned, when, and what happened. They're filled in by hand, usually from
+memory, usually hours late.
+
+We already store every one of those events with a timestamp on it, so
+producing the form is formatting rather than remembering. It also answers the
+"why log responders at all" question in a way that doesn't need us to be
+adopted by anyone: the output slots into paperwork that already exists.
+
+## Coverage gap is counted separately from staffing
+
+"Understaffed" and "nobody is coming" look similar on a dashboard and are not
+the same problem. One needs more people; the other needs anyone at all.
+
+The banner counts only reports where both counts are zero. Someone en route
+and not yet arrived takes a report out of it, because a person on the way is
+the thing we were missing.
+
 ## Things we chose not to build
 
-- **LoRa.** It's in our roadmap notes as roadmap only. We don't have radios,
-  which means we couldn't test it, and untested code isn't a feature — it's a
-  file that looks like one.
+- **The radio itself.** We built the packet and the endpoint that accepts it;
+  we have no hardware, so we have not driven an SX1276 and won't claim to.
+  Untested code isn't a feature — it's a file that looks like one.
 - **Identity verification.** Anyone can register as a responder. Doing this
   properly needs real ID checks or organisational affiliation and there's no
   honest weekend version.

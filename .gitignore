@@ -38,3 +38,13 @@ sftp-config-alt*.json
 
 # Logs
 *.log
+
+# Astro site under site/
+site/node_modules/
+site/dist/
+site/.astro/
+
+# The doc pages are copied out of ../docs at build time by sync-docs.mjs.
+# Committing them would give every page two copies, and someone would edit
+# the wrong one.
+site/src/pages/*.md

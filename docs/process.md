@@ -95,6 +95,30 @@ broken file to prove it still catches a real one.
 It failed *safely*, which is the right direction for a check to fail in. But
 we only knew that because we went and looked.
 
+## The one we found by reading
+
+Adding guardrails to the login form meant reading the login route properly for
+the first time since it was written, and the last line of it was:
+
+```python
+return redirect(request.args.get("next") or url_for("homepage"))
+```
+
+`next` comes from the query string, so it is whatever the link you clicked
+says it is. `?next=https://somewhere-else` and our real login page, on our
+real domain, hands you to somebody else's site the moment you sign in
+successfully. That is the entire phishing trick, and we'd built it by
+accident.
+
+The redirect helper used everywhere else already checked this — `answer()`
+only honours paths starting with `/`. The login route predated that helper and
+never got the same treatment. Nothing found it because nothing was looking:
+the tests asserted a successful login redirects, which it did.
+
+Fixed with a `safe_next()` used by both, and three tests that try to escape:
+an absolute URL, a protocol-relative `//host` one, and a normal `/board` that
+still has to work.
+
 ## The two times we crossed into each other's files
 
 Both with a heads-up first, both minimal.

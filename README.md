@@ -88,6 +88,16 @@ on its own, and now somebody knows where to start looking.
 - **Check in** — resets your timer and updates your last known position.
 - **The accountability board** — everyone who is out, what they're doing, and
   how long since anyone heard from them. Overdue sorts to the top.
+- **The dead man's switch** — stay silent fifteen minutes past your deadline
+  and the server files a report about you, at your last known position. A red
+  row only helps if somebody is looking at the board.
+- **Coverage gaps, counted out loud** — a banner saying how many reports have
+  nobody going to them at all. Not the same as understaffed.
+- **ICS-214 export** — the activity log agencies already keep, built from
+  records rather than from memory.
+- **Check-ins over a radio** — a check-in packs into 14 bytes and `/api/uplink`
+  takes one from something with no session to log in with. The radio itself
+  isn't built; the message it would carry is.
 
 ## Quickstart
 
@@ -126,6 +136,7 @@ override the file, so your shell and CI always win.
 | `DIRESQ_SECRET_KEY` | Signs session cookies. Generate your own with `python -c "import secrets; print(secrets.token_hex(32))"`. Without it a new key is made every boot, which logs you out on every reload. Do not share it between machines. |
 | `DIRESQ_DEV_USER` | Stay signed in as this user without logging in. **Development only — it is a full auth bypass.** Leave unset for the real login flow. |
 | `DIRESQ_DB` | Path to the SQLite file. Defaults to `diresq.db`. |
+| `DIRESQ_HTTPS_ONLY` | Set to `1` when the site is served over HTTPS, so session cookies are marked Secure. Leave unset on localhost or you will not stay signed in. |
 
 ## API
 
@@ -148,7 +159,9 @@ Pages are server-rendered; everything under `/api` returns JSON.
 | `POST` | `/api/reports/<id>/staffing` | `need_more` · `adequate` · `overstaffed` · `stood_down`. On-scene only |
 | `POST` | `/api/assignments/<id>/status` | `on_scene` then `cleared`. Forward only, your own only |
 | `POST` | `/api/checkin` | `{lat, lng}` — resets your timer |
+| `POST` | `/api/uplink` | A check-in as a base64 14-byte packet. No session — see limits |
 | `POST` | `/api/triage` | Four observations in, START category out |
+| `GET` | `/export/ics214` | Activity log as CSV |
 
 Status codes: `200` ok · `201` created · `302` redirect · `400` bad input ·
 `401` not signed in · `403` not yours · `404` not found.
@@ -185,9 +198,10 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
-159 tests covering every route, the permission rules, feed ordering, staffing
-resolution, ETA parsing and overdue calculation. CI runs them on every push,
-along with a boot check against a real server.
+234 tests covering every route, the permission rules, feed ordering, staffing
+resolution, ETA parsing, overdue calculation, packet encoding and the auth
+guardrails. CI runs them on every push, along with a boot check against a real
+server.
 
 ## Layout
 
@@ -195,13 +209,27 @@ along with a boot check against a real server.
 app.py              routes, queries, CLI
 eta.py              free-text ETA parsing with a confidence gate
 triage.py           START triage, mapped onto report severity
+transport.py        the check-in packet, small enough for a radio
 schema.sql          accounts · reports · assignments · checkins
 templates/          Jinja pages
 static/             CSS, JS, images
 tests/              pytest suite
 docs/               decisions, process, limits, api
-.github/workflows/  ci · security · changelog
+site/               Astro docs site, built from docs/
+.github/workflows/  ci · security · changelog · pages
 ```
+
+## Docs site
+
+```bash
+cd site
+npm install
+npm run dev
+```
+
+`npm run sync` copies `../docs/*.md` into `src/pages` before every build, so
+the site can't drift from the docs in the repo. The generated pages are
+gitignored — edit `docs/`, never `site/src/pages/*.md`.
 
 ## Releasing
 
@@ -227,6 +255,12 @@ git push --tags
 - **Staffing is resolved by taking the most cautious signal**, which means one
   pessimistic responder can hold a report at "needs more". We chose that over
   the alternative deliberately.
+- **`/api/uplink` is unauthenticated.** A radio gateway has no session, so the
+  responder is named inside the packet. It proves the shape is right; it is
+  not something to expose.
+- **The dead man's switch runs on page loads, not a timer.** If nobody has
+  DiresQ open, nothing is swept. One tab on the board is enough, but that's a
+  dependency, not a guarantee.
 
 ## Team
 

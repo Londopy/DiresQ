@@ -1,0 +1,172 @@
+---
+const { frontmatter } = Astro;
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+const NAV = [
+  ["", "Home"],
+  ["/decisions", "Decisions"],
+  ["/process", "Process"],
+  ["/limits", "Limits"],
+  ["/api", "API"],
+];
+---
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{frontmatter.title} — DiresQ</title>
+    <meta name="description" content={frontmatter.description} />
+    <link rel="icon" href={`${base}/favicon.ico`} />
+  </head>
+
+  <body>
+    <header>
+      <a class="wordmark" href={base || "/"}>DiresQ</a>
+      <nav>
+        {NAV.slice(1).map(([href, label]) => (
+          <a href={`${base}${href}`} aria-current={
+            Astro.url.pathname.replace(/\/$/, "").endsWith(href)
+              ? "page" : undefined
+          }>{label}</a>
+        ))}
+      </nav>
+    </header>
+
+    <main>
+      <h1>{frontmatter.title}</h1>
+      <p class="lede">{frontmatter.description}</p>
+      <article><slot /></article>
+    </main>
+
+    <footer>
+      <p>
+        Built at Katy Youth Hacks 2026.
+        <a href="https://github.com/Londopy/DiresQ">Source on GitHub</a>.
+      </p>
+    </footer>
+
+    <style is:global>
+      /* Same palette as the app, so the writing and the thing it describes
+         don't look like two different projects. */
+      :root {
+        --base: #1e1e2e;
+        --mantle: #181825;
+        --surface: #313244;
+        --overlay: #45475a;
+        --text: #cdd6f4;
+        --subtext: #a6adc8;
+        --blue: #89b4fa;
+        --green: #a6e3a1;
+        --peach: #fab387;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        background: var(--base);
+        color: var(--text);
+        font: 16px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 18px;
+        align-items: center;
+        padding: 18px 24px;
+        background: var(--mantle);
+        border-bottom: 1px solid var(--surface);
+      }
+
+      .wordmark {
+        font-weight: 700;
+        letter-spacing: 2px;
+        color: var(--green);
+        text-decoration: none;
+      }
+
+      nav { display: flex; gap: 16px; flex-wrap: wrap; }
+
+      nav a {
+        color: var(--subtext);
+        text-decoration: none;
+        font-size: 14px;
+      }
+
+      nav a:hover { color: var(--text); }
+      nav a[aria-current="page"] { color: var(--blue); }
+
+      main {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 48px 24px 72px;
+      }
+
+      h1 { margin: 0 0 6px; font-size: 34px; line-height: 1.15; }
+
+      .lede {
+        margin: 0 0 36px;
+        color: var(--subtext);
+        font-size: 17px;
+      }
+
+      article h2 {
+        margin: 40px 0 12px;
+        font-size: 22px;
+        padding-top: 20px;
+        border-top: 1px solid var(--surface);
+      }
+
+      article h3 { margin: 28px 0 8px; font-size: 17px; }
+
+      a { color: var(--blue); }
+
+      code {
+        background: var(--surface);
+        padding: 2px 5px;
+        border-radius: 4px;
+        font-size: 0.9em;
+      }
+
+      pre {
+        background: var(--mantle);
+        padding: 16px;
+        border-radius: 8px;
+        overflow-x: auto;
+      }
+
+      pre code { background: none; padding: 0; }
+
+      table { width: 100%; border-collapse: collapse; margin: 18px 0; }
+
+      th, td {
+        text-align: left;
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--surface);
+        vertical-align: top;
+      }
+
+      th { color: var(--peach); font-size: 14px; }
+
+      blockquote {
+        margin: 18px 0;
+        padding-left: 16px;
+        border-left: 3px solid var(--overlay);
+        color: var(--subtext);
+      }
+
+      hr { border: 0; border-top: 1px solid var(--surface); margin: 32px 0; }
+
+      footer {
+        padding: 24px;
+        border-top: 1px solid var(--surface);
+        color: var(--subtext);
+        font-size: 14px;
+        text-align: center;
+      }
+    </style>
+  </body>
+</html>

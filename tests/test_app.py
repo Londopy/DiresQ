@@ -7,6 +7,7 @@ Each test gets its own throwaway database, so order never matters and a
 failing test can't poison the next one.
 """
 
+import base64
 import re
 import sys
 from datetime import datetime, timedelta, timezone
@@ -18,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import app as diresq  # noqa: E402
 import eta  # noqa: E402
+import transport  # noqa: E402
 
 
 @pytest.fixture
@@ -1169,3 +1171,357 @@ class TestTheThingsBrowsersAskForAnyway:
         # Real reports name real addresses.
         body = anon.get("/robots.txt").get_data(as_text=True)
         assert "Disallow: /" in body
+
+
+def ago(**kw):
+    return (datetime.now(timezone.utc) - timedelta(**kw)).isoformat(
+        timespec="seconds")
+
+
+def backdate(assignment_id, minutes):
+    """Move an assignment into the past so its deadline has come and gone."""
+    with diresq.app.app_context():
+        db = diresq.get_db()
+        db.execute("UPDATE assignments SET joined_at = ? WHERE id = ?",
+                   (ago(minutes=minutes), assignment_id))
+        db.commit()
+
+
+def auto_reports():
+    with diresq.app.app_context():
+        return [dict(r) for r in diresq.get_db().execute(
+            "SELECT * FROM reports WHERE auto_filed_for IS NOT NULL").fetchall()]
+
+
+class TestPackets:
+    """The radio doesn't exist yet. The message that would go over it does,
+    and it either fits or it doesn't."""
+
+    def test_a_checkin_survives_the_round_trip(self):
+        packet = transport.pack_checkin(42, 29.78584, -95.82441, 12)
+        out = transport.unpack_checkin(packet)
+        assert out.responder_id == 42
+        assert out.age_minutes == 12
+        assert abs(out.lat - 29.78584) < 1e-5
+        assert abs(out.lng - -95.82441) < 1e-5
+
+    def test_it_fits_the_smallest_payload_we_designed_for(self):
+        packet = transport.pack_checkin(65535, -33.8688, 151.2093, 240)
+        assert len(packet) <= transport.MAX_PACKET_BYTES
+
+    def test_coordinates_land_within_a_couple_of_metres(self):
+        # Five decimal places is ~1.1 m. Phone GPS in a storm is far worse,
+        # so this is not the weak link.
+        out = transport.unpack_checkin(
+            transport.pack_checkin(1, 29.786123456, -95.824987654))
+        assert abs(out.lat - 29.786123456) < 2e-5
+        assert abs(out.lng - -95.824987654) < 2e-5
+
+    def test_a_truncated_packet_is_rejected(self):
+        packet = transport.pack_checkin(1, 29.78, -95.82)
+        with pytest.raises(transport.PacketError):
+            transport.unpack_checkin(packet[:-3])
+
+    def test_a_packet_from_a_future_protocol_is_rejected(self):
+        packet = bytearray(transport.pack_checkin(1, 29.78, -95.82))
+        packet[0] = 99
+        with pytest.raises(transport.PacketError):
+            transport.unpack_checkin(bytes(packet))
+
+    def test_an_id_too_big_for_the_field_is_refused_up_front(self):
+        with pytest.raises(transport.PacketError):
+            transport.pack_checkin(70000, 29.78, -95.82)
+
+
+class TestUplink:
+    """The same check-in, arriving as bytes instead of as a browser."""
+
+    def packet(self, responder_id=1, lat=29.78, lng=-95.82, age=0):
+        return base64.b64encode(
+            transport.pack_checkin(responder_id, lat, lng, age)).decode()
+
+    def test_a_good_packet_records_a_checkin(self, anon):
+        res = anon.post("/api/uplink", json={"packet": self.packet()})
+        assert res.status_code == 201
+        with diresq.app.app_context():
+            assert diresq.get_db().execute(
+                "SELECT COUNT(*) c FROM checkins").fetchone()["c"] == 1
+
+    def test_it_does_not_need_a_session(self, anon):
+        # A gateway has no cookie. That's the whole point of the endpoint.
+        assert anon.post("/api/uplink",
+                         json={"packet": self.packet()}).status_code == 201
+
+    def test_the_age_in_the_packet_sets_the_time(self, anon):
+        anon.post("/api/uplink", json={"packet": self.packet(age=90)})
+        with diresq.app.app_context():
+            row = diresq.get_db().execute(
+                "SELECT created_at, received_at FROM checkins").fetchone()
+        made = diresq.parse_iso(row["created_at"])
+        got = diresq.parse_iso(row["received_at"])
+        assert 85 < (got - made).total_seconds() / 60 < 95
+
+    def test_a_late_packet_counts_as_a_late_sync(self, anon):
+        body = anon.post("/api/uplink",
+                         json={"packet": self.packet(age=45)}).get_json()
+        assert body["synced_late"] is True
+
+    def test_garbage_is_not_valid_base64(self, anon):
+        res = anon.post("/api/uplink", json={"packet": "not base64!!"})
+        assert res.status_code == 400
+
+    def test_a_corrupt_packet_is_dropped_not_crashed(self, anon):
+        junk = base64.b64encode(b"\x01\x02\x03").decode()
+        res = anon.post("/api/uplink", json={"packet": junk})
+        assert res.status_code == 400
+        assert "error" in res.get_json()
+
+    def test_an_unknown_responder_is_a_404(self, anon):
+        res = anon.post("/api/uplink", json={"packet": self.packet(9999)})
+        assert res.status_code == 404
+
+
+class TestDeadMansSwitch:
+    """A red row only helps if somebody is looking at the board."""
+
+    def silent_since(self, client, minutes):
+        client.post("/report/1/rescue")
+        backdate(1, minutes)
+
+    def test_nothing_happens_while_they_are_inside_their_window(self, client):
+        self.silent_since(client, 10)
+        client.get("/api/responders")
+        assert auto_reports() == []
+
+    def test_nothing_happens_the_moment_they_go_overdue(self, client):
+        # Overdue at 30 minutes; the switch waits another 15 before deciding
+        # nobody is coming to look.
+        self.silent_since(client, 35)
+        client.get("/api/responders")
+        assert auto_reports() == []
+
+    def test_a_report_is_filed_once_they_stay_silent(self, client):
+        self.silent_since(client, 60)
+        client.get("/api/responders")
+        filed = auto_reports()
+        assert len(filed) == 1
+        assert filed[0]["priority"] == "HIGH"
+        assert "londo" in filed[0]["subject"]
+
+    def test_it_only_ever_files_one(self, client):
+        self.silent_since(client, 60)
+        for _ in range(5):
+            client.get("/api/responders")
+            client.get("/")
+        assert len(auto_reports()) == 1
+
+    def test_it_is_pinned_to_their_last_known_position(self, client):
+        client.post("/report/1/rescue")
+        client.post("/api/checkin", json={"lat": 29.1234, "lng": -95.4321})
+        backdate(1, 60)
+        with diresq.app.app_context():
+            db = diresq.get_db()
+            db.execute("UPDATE checkins SET created_at = ?", (ago(minutes=60),))
+            db.commit()
+
+        client.get("/api/responders")
+        filed = auto_reports()[0]
+        assert round(filed["lat"], 4) == 29.1234
+        assert round(filed["lng"], 4) == -95.4321
+
+    def test_it_says_it_filed_itself(self, client):
+        self.silent_since(client, 60)
+        client.get("/api/responders")
+        assert "automatically" in auto_reports()[0]["description"].lower()
+
+    def test_a_checkin_stops_it_firing(self, client):
+        self.silent_since(client, 60)
+        client.post("/api/checkin", json={"lat": 29.78, "lng": -95.82})
+        client.get("/api/responders")
+        assert auto_reports() == []
+
+    def test_it_shows_up_on_the_feed_like_any_other_report(self, client):
+        self.silent_since(client, 60)
+        body = client.get("/").get_data(as_text=True)
+        assert "No contact from londo" in body
+
+
+class TestCoverageGap:
+    def test_it_counts_reports_nobody_is_going_to(self, client):
+        client.get("/")
+        with diresq.app.app_context():
+            assert len(diresq.coverage_gaps()) == 5
+
+    def test_joining_one_takes_it_out_of_the_count(self, client):
+        client.post("/report/1/rescue")
+        with diresq.app.app_context():
+            assert len(diresq.coverage_gaps()) == 4
+
+    def test_en_route_counts_as_covered(self, client):
+        # Nobody has arrived, but someone said they're coming. That's the
+        # difference between understaffed and abandoned.
+        client.post("/report/1/rescue")
+        with diresq.app.app_context():
+            gap_ids = [r["id"] for r in diresq.coverage_gaps()]
+        assert 1 not in gap_ids
+
+    def test_the_feed_says_the_number_out_loud(self, client):
+        body = client.get("/").get_data(as_text=True)
+        assert "with nobody going" in body
+
+    def test_it_says_so_when_there_is_no_gap(self, client):
+        for report_id in range(1, 6):
+            client.post(f"/report/{report_id}/rescue")
+        body = client.get("/").get_data(as_text=True)
+        assert "Someone is on every open report" in body
+
+
+class TestICS214:
+    def test_it_downloads_as_a_file(self, client):
+        res = client.get("/export/ics214")
+        assert res.status_code == 200
+        assert "attachment" in res.headers["Content-Disposition"]
+        assert "ICS-214" in res.headers["Content-Disposition"]
+
+    def test_it_has_the_sections_the_real_form_has(self, client):
+        body = client.get("/export/ics214").get_data(as_text=True)
+        for heading in ["ICS 214 - ACTIVITY LOG", "1. Incident Name",
+                        "2. Operational Period", "4. Resources Assigned",
+                        "5. Activity Log", "6. Prepared by"]:
+            assert heading in body, f"missing {heading}"
+
+    def test_everyone_who_went_out_is_listed(self, client):
+        client.post("/report/1/rescue")
+        body = client.get("/export/ics214").get_data(as_text=True)
+        assert "londo" in body
+
+    def test_the_activity_log_carries_real_events(self, client):
+        client.post("/report/1/rescue")
+        client.post("/api/checkin", json={"lat": 29.78, "lng": -95.82})
+        body = client.get("/export/ics214").get_data(as_text=True)
+        assert "assigned to" in body
+        assert "checked in" in body
+
+    def test_it_admits_what_it_cannot_timestamp(self, client):
+        body = client.get("/export/ics214").get_data(as_text=True)
+        assert "not separately timestamped" in body
+
+class TestAuthGuardrails:
+    """The boring ones. Every one of these is something a person will
+    actually do at two in the morning on a phone."""
+
+    @pytest.fixture(autouse=True)
+    def clear_lockouts(self):
+        # The counter is module-level, so one test's failures would lock the
+        # next one out.
+        diresq.LOGIN_FAILURES.clear()
+        yield
+        diresq.LOGIN_FAILURES.clear()
+
+    def signup(self, client, **fields):
+        form = {"username": "newperson", "password": "correcthorse",
+                "confirm_password": "correcthorse"}
+        form.update(fields)
+        return client.post("/signup", data=form)
+
+    def test_the_caps_lock_warning_is_wired_up(self, anon):
+        body = anon.get("/login").get_data(as_text=True)
+        assert "authform.js" in body
+
+    def test_password_fields_tell_the_browser_what_they_are(self, anon):
+        body = anon.get("/login").get_data(as_text=True)
+        assert 'autocomplete="current-password"' in body
+        assert 'autocomplete="username"' in body
+
+    def test_signup_asks_for_a_new_password_not_a_saved_one(self, anon):
+        body = anon.get("/signup").get_data(as_text=True)
+        assert 'autocomplete="new-password"' in body
+
+    def test_usernames_do_not_autocapitalise_on_phones(self, anon):
+        # Otherwise iOS quietly turns "londo" into "Londo" and the login fails
+        # for a reason nobody can see.
+        body = anon.get("/login").get_data(as_text=True)
+        assert 'autocapitalize="none"' in body
+
+    def test_errors_are_announced_to_screen_readers(self, anon):
+        body = anon.post("/login", data={"username": "nobody",
+                                         "password": "wrong"}
+                         ).get_data(as_text=True)
+        assert 'role="alert"' in body
+
+    def test_a_username_that_differs_only_by_case_is_refused(self, anon):
+        res = self.signup(anon, username="LONDO")
+        assert res.status_code == 400
+        assert "taken" in res.get_data(as_text=True)
+
+    def test_punctuation_in_a_username_is_refused(self, anon):
+        assert self.signup(anon, username="drop table").status_code == 400
+        assert self.signup(anon, username="a").status_code == 400
+
+    def test_a_password_the_same_as_the_username_is_refused(self, anon):
+        res = self.signup(anon, username="rutherford",
+                          password="rutherford", confirm_password="rutherford")
+        assert res.status_code == 400
+
+    def test_an_absurdly_long_password_is_refused(self, anon):
+        # werkzeug will hash a megabyte if you let it, and take its time.
+        long = "a" * 5000
+        res = self.signup(anon, password=long, confirm_password=long)
+        assert res.status_code == 400
+
+    def test_a_long_password_does_not_get_hashed_at_login(self, anon):
+        res = anon.post("/login", data={"username": "londo",
+                                        "password": "a" * 5000})
+        assert res.status_code == 401
+
+    def test_repeated_wrong_guesses_lock_the_account(self, anon):
+        for _ in range(diresq.MAX_LOGIN_ATTEMPTS):
+            anon.post("/login", data={"username": "londo", "password": "no"})
+        res = anon.post("/login", data={"username": "londo", "password": "no"})
+        assert res.status_code == 429
+        assert "Try again" in res.get_data(as_text=True)
+
+    def test_the_lockout_is_per_username(self, anon):
+        for _ in range(diresq.MAX_LOGIN_ATTEMPTS + 1):
+            anon.post("/login", data={"username": "londo", "password": "no"})
+        # Someone else is not locked out because you were guessed at.
+        res = anon.post("/login", data={"username": "skythe", "password": "no"})
+        assert res.status_code == 401
+
+    def test_a_good_password_clears_the_counter(self, anon):
+        anon.post("/login", data={"username": "londo", "password": "no"})
+        anon.post("/login", data={"username": "londo", "password": "diresq"})
+        assert "londo" not in diresq.LOGIN_FAILURES
+
+    def test_login_will_not_bounce_you_to_another_site(self, anon):
+        # ?next= is attacker-controlled. A real login form on a real domain
+        # that hands you off afterwards is the whole phishing trick.
+        res = anon.post("/login?next=https://example.com/",
+                        data={"username": "londo", "password": "diresq"})
+        assert res.status_code == 302
+        assert "example.com" not in res.headers["Location"]
+
+    def test_protocol_relative_urls_are_not_a_loophole(self, anon):
+        res = anon.post("/login?next=//example.com/",
+                        data={"username": "londo", "password": "diresq"})
+        assert "example.com" not in res.headers["Location"]
+
+    def test_a_normal_next_still_works(self, anon):
+        res = anon.post("/login?next=/board",
+                        data={"username": "londo", "password": "diresq"})
+        assert res.headers["Location"].endswith("/board")
+
+    def test_the_session_cookie_is_not_readable_from_javascript(self, anon):
+        res = anon.post("/login", data={"username": "londo",
+                                        "password": "diresq"})
+        cookie = res.headers.get("Set-Cookie", "")
+        assert "HttpOnly" in cookie
+        assert "SameSite=Lax" in cookie
+
+
+class TestICS214Continued:
+    def test_arriving_on_scene_gets_a_time(self, client):
+        client.post("/report/1/rescue")
+        client.post("/api/assignments/1/status", json={"status": "on_scene"})
+        body = client.get("/export/ics214").get_data(as_text=True)
+        assert "arrived on scene" in body

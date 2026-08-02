@@ -1,0 +1,54 @@
+/* Bits added to the auth forms. Separate file so login.css and signup.css
+   stay Skythe's. */
+
+.caps-warning {
+    margin: -6px 0 8px;
+    font-size: 12px;
+    color: #f9e2af;
+    font-family: system-ui, sans-serif;
+}
+
+.caps-warning::before {
+    content: "! ";
+    font-weight: 700;
+}
+
+.login-card {
+    position: relative;
+}
+
+/* The reveal button sits on top of the field it belongs to. Anchoring it to
+   the input's own box would mean touching the layout above it. */
+.reveal {
+    position: absolute;
+    right: 14px;
+    margin-top: -44px;
+    padding: 4px 8px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: #a6adc8;
+    font-size: 12px;
+    font-family: system-ui, sans-serif;
+    cursor: pointer;
+}
+
+.reveal:hover {
+    color: #cdd6f4;
+}
+
+.reveal:focus-visible {
+    outline: 2px solid #89b4fa;
+    outline-offset: 2px;
+}
+
+input.mismatch {
+    border-color: #f38ba8 !important;
+}
+
+.hint {
+    margin: -4px 0 10px;
+    font-size: 12px;
+    color: #a6adc8;
+    font-family: system-ui, sans-serif;
+}

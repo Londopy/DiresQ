@@ -6,6 +6,7 @@
     <link rel="stylesheet" href="../static/styles/homepage.css">
     <title>DiresQ</title>
     <link rel="stylesheet" href="../static/styles/nav.css">
+    <link rel="stylesheet" href="../static/styles/banner.css">
 </head>
 <body>
 
@@ -40,6 +41,22 @@
 
         </div>
 
+        {% set gaps = coverage_gap_count() %}
+        <div class="gap-banner{% if not gaps %} clear{% endif %}">
+            <span class="n">{{ gaps }}</span>
+            <span class="what">
+                {% if gaps %}
+                <strong>
+                    {{ gaps }} report{{ 's' if gaps != 1 }} with nobody going
+                </strong>
+                <span>Not understaffed. Nobody has said they are coming at all.</span>
+                {% else %}
+                <strong>Someone is on every open report</strong>
+                <span>Every one of these has at least one person on the way.</span>
+                {% endif %}
+            </span>
+        </div>
+
         <div class="reports">
 
             {% for report in reports %}
@@ -50,7 +67,13 @@
                     data-title="{{ report.subject|lower }}"
                     data-priority="{{ report.priority }}">
 
-                    <h2>{{ report.subject }}</h2>
+                    <h2>
+                        {{ report.subject }}
+                        {% if report.auto_filed_for %}
+                        <span class="auto-filed" title="Nobody filed this. The
+                            server did, because a responder went quiet.">auto</span>
+                        {% endif %}
+                    </h2>
 
                     <span class="priority {{ report.priority|lower }}">
                         {{ report.priority }}

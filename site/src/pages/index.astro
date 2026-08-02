@@ -1,0 +1,143 @@
+---
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+const PAGES = [
+  ["/decisions", "Decisions",
+   "Every choice that could have gone the other way, and what it cost."],
+  ["/process", "Process",
+   "What actually happened over three days, including five bugs we shipped and caught."],
+  ["/limits", "Limits",
+   "What DiresQ does not do. Written down rather than hoped over."],
+  ["/api", "API",
+   "Every endpoint, what it takes, and what comes back."],
+];
+---
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DiresQ — tracking the people going in</title>
+    <meta
+      name="description"
+      content="Every disaster app tells you where the disaster is. DiresQ tracks the people going into it."
+    />
+    <link rel="icon" href={`${base}/favicon.ico`} />
+  </head>
+
+  <body>
+    <main class="hero">
+      <p class="kicker">Katy Youth Hacks 2026 · Tech for Humanity</p>
+      <h1>DiresQ</h1>
+
+      <p class="thesis">
+        Every disaster app tells you where the disaster is.
+        <strong>DiresQ tracks the people going into it.</strong>
+      </p>
+
+      <p class="body">
+        When a flood hits, volunteers self-deploy — a neighbour with a boat, a
+        cousin with a truck. Nobody logs it. Four people end up at the same
+        car in a creek while a street two blocks away has nobody at all, and
+        when someone stops answering their phone, there is no record that they
+        ever went out.
+      </p>
+
+      <p class="body">
+        DiresQ logs who went where, holds them to a check-in timer, and turns
+        the board red when somebody goes quiet. If they stay quiet, it files a
+        report about them at their last known position, because a red row only
+        helps if somebody is looking at the board.
+      </p>
+
+      <nav class="cards">
+        {PAGES.map(([href, title, blurb]) => (
+          <a href={`${base}${href}`}>
+            <h2>{title}</h2>
+            <p>{blurb}</p>
+          </a>
+        ))}
+      </nav>
+
+      <p class="repo">
+        <a href="https://github.com/Londopy/DiresQ">Source on GitHub</a>
+      </p>
+    </main>
+
+    <style is:global>
+      :root {
+        --base: #1e1e2e;
+        --mantle: #181825;
+        --surface: #313244;
+        --text: #cdd6f4;
+        --subtext: #a6adc8;
+        --blue: #89b4fa;
+        --green: #a6e3a1;
+        --red: #f38ba8;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        background: var(--base);
+        color: var(--text);
+        font: 16px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+
+      .hero { max-width: 760px; margin: 0 auto; padding: 90px 24px 80px; }
+
+      .kicker {
+        margin: 0 0 10px;
+        color: var(--subtext);
+        font-size: 13px;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0 0 22px;
+        font-size: 64px;
+        letter-spacing: -1px;
+        color: var(--green);
+      }
+
+      .thesis { margin: 0 0 28px; font-size: 22px; line-height: 1.45; }
+      .thesis strong { color: var(--red); }
+
+      .body { margin: 0 0 18px; color: var(--subtext); }
+
+      .cards {
+        display: grid;
+        gap: 14px;
+        grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+        margin: 44px 0 32px;
+      }
+
+      .cards a {
+        display: block;
+        padding: 18px;
+        border-radius: 10px;
+        background: var(--surface);
+        text-decoration: none;
+        color: inherit;
+        border-left: 3px solid transparent;
+      }
+
+      .cards a:hover { border-left-color: var(--blue); }
+
+      .cards h2 { margin: 0 0 6px; font-size: 17px; color: var(--blue); }
+      .cards p { margin: 0; font-size: 14px; color: var(--subtext); }
+
+      .repo { font-size: 14px; }
+      a { color: var(--blue); }
+
+      @media (max-width: 560px) {
+        .hero { padding: 56px 20px 60px; }
+        h1 { font-size: 44px; }
+        .thesis { font-size: 19px; }
+      }
+    </style>
+  </body>
+</html>

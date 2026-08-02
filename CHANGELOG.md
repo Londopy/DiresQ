@@ -54,6 +54,23 @@ All notable changes to this project are documented here. Format follows
   START, the protocol used at real multiple-casualty scenes. It returns a
   category, the severity that files the report as, and a plain-English reason.
   The severity dropdown still works; not every report is a casualty.
+- When a responder stays silent fifteen minutes past their deadline, the
+  server stops waiting to be noticed and files a report itself, at their last
+  known position, marked as automatic. It behaves like any other report: it
+  can be joined and resolved. Only ever one per person while it is open.
+- A banner at the top of the feed counting the reports nobody is going to.
+  Distinct from understaffed: it counts only the ones where nobody has said
+  they are coming at all.
+- Check-ins can arrive as bytes instead of as a browser. A check-in packs into
+  fourteen bytes, which fits a LoRa payload with room to spare, and `POST
+  /api/uplink` accepts one from something that has no session to log in with.
+  Both routes in go through the same code, so they cannot drift apart. The
+  radio itself is not built.
+- Export an ICS-214 Activity Log — the form agencies already keep at a
+  multi-agency scene — built from logged records rather than from memory.
+  Every assignment, arrival, check-in and automatic alert, in time order.
+- A documentation site under `site/`, built from the same `docs/` files that
+  live in the repo, so the two can never disagree.
 - Written decisions, build log, known limits and API reference under `docs/`.
 - An icon, and a `robots.txt` that keeps the whole site out of search results.
   Live reports name real addresses; none of it should be findable.
@@ -115,6 +132,21 @@ All notable changes to this project are documented here. Format follows
 
 ### Security
 
+- Signing in could be made to bounce you to another website. The address to
+  return to was taken from the link you arrived on and used without being
+  checked, which turns a real login page on a real domain into a working
+  phishing page. Only same-site paths are accepted now.
+- Repeated wrong passwords lock a username for a few minutes, counted per
+  name so being guessed at cannot lock anybody else out.
+- Passwords are capped at a sensible length, since the hash is deliberately
+  slow and a very long one is a way to make the server do work.
+- Usernames must be ordinary characters, and one that differs from an existing
+  account only by capitalisation is refused — on a board where names are how
+  you tell people apart, two similar ones is a mix-up waiting to happen.
+- Session cookies are marked HttpOnly and SameSite, and HTTPS-only when the
+  environment says the site is served over HTTPS.
+- A Caps Lock warning, a show-password button and a live check that the two
+  password boxes agree, so a rejected sign-in is something you can see coming.
 - Passwords are hashed with `werkzeug.security`, never stored or logged in the
   clear.
 - The session signing key is read from the environment and randomly generated

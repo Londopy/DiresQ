@@ -1,0 +1,77 @@
+/* The coverage banner, and the badge on a report the server filed itself.
+   Separate file so nothing here collides with Skythe's stylesheets. */
+
+.gap-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0 0 18px;
+    padding: 14px 18px;
+    border-radius: 10px;
+    background: #313244;
+    /* Amber, not red. Red is for a person we have lost contact with; this is
+       a queue that nobody has picked up yet. Different problem, different
+       colour, or neither means anything. */
+    border-left: 4px solid #fab387;
+    color: #cdd6f4;
+    font-family: system-ui, sans-serif;
+}
+
+.gap-banner .n {
+    font-size: 26px;
+    font-weight: 700;
+    color: #fab387;
+    line-height: 1;
+}
+
+.gap-banner .what {
+    font-size: 14px;
+}
+
+.gap-banner .what strong {
+    display: block;
+    font-size: 15px;
+    margin-bottom: 2px;
+}
+
+.gap-banner .what span {
+    color: #a6adc8;
+}
+
+/* Shown when the number is zero. Saying so out loud is the point — an empty
+   space looks like a page that hasn't loaded. */
+.gap-banner.clear {
+    border-left-color: #a6e3a1;
+}
+
+.gap-banner.clear .n {
+    color: #a6e3a1;
+}
+
+.auto-filed {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #45475a;
+    color: #f9e2af;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    vertical-align: middle;
+}
+
+.export-btn {
+    padding: 7px 12px;
+    border-radius: 8px;
+    background: #313244;
+    color: #a6adc8;
+    text-decoration: none;
+    font-size: 13px;
+    font-family: system-ui, sans-serif;
+}
+
+.export-btn:hover {
+    background: #45475a;
+    color: #cdd6f4;
+}

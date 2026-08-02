@@ -11,7 +11,12 @@ Set DIRESQ_DEV_USER=londo to skip the login wall while building.
 
 from __future__ import annotations
 
+import base64
+import binascii
+import csv
+import io
 import os
+import re
 import secrets
 import sqlite3
 from datetime import datetime, timedelta, timezone
@@ -21,11 +26,12 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from flask import (
-    Flask, flash, g, jsonify, redirect, render_template, request,
+    Flask, Response, flash, g, jsonify, redirect, render_template, request,
     send_from_directory, session, url_for
 )
 from werkzeug.security import check_password_hash, generate_password_hash
 
+import transport
 import triage
 from eta import parse_eta
 
@@ -54,8 +60,63 @@ PRIORITY_RANK = """
 # drown out someone asking for help, so we take the max, not the average.
 STAFFING_ORDER = ("stood_down", "overstaffed", "adequate", "need_more")
 
+USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9._-]{3,32}$")
+
+# werkzeug will happily hash a megabyte of text and take its time doing it.
+# Nobody's real password is this long.
+MAX_PASSWORD_LENGTH = 128
+MIN_PASSWORD_LENGTH = 8
+
+# Wrong guesses allowed before a username is locked out for a while. Counted
+# in memory, so it resets on restart — see docs/limits.md.
+MAX_LOGIN_ATTEMPTS = 8
+LOGIN_LOCKOUT_MINUTES = 5
+
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("DIRESQ_SECRET_KEY") or secrets.token_hex(32)
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    # Lax, not Strict: the login form posts across a redirect and Strict eats
+    # the cookie. Lax still blocks the cross-site POSTs that matter.
+    SESSION_COOKIE_SAMESITE="Lax",
+    # Only over HTTPS in production. The dev server is plain HTTP, so honour
+    # the flag rather than hardcoding it and breaking localhost.
+    SESSION_COOKIE_SECURE=os.environ.get("DIRESQ_HTTPS_ONLY") == "1",
+)
+
+# username -> (failures, locked until). Deliberately not in the database: a
+# lockout that survives a restart is a lockout an attacker can make permanent.
+LOGIN_FAILURES: dict[str, tuple[int, datetime]] = {}
+
+
+def safe_next(target: str | None) -> str | None:
+    """Only same-site paths. Anything else is somebody else's website.
+
+    `?next=https://elsewhere/` on a login page is the classic phishing setup:
+    a real login on a real domain that hands you off afterwards.
+    """
+    if not target or not target.startswith("/") or target.startswith("//"):
+        return None
+    return target
+
+
+def login_locked(username: str) -> int:
+    """Minutes remaining on a lockout, or 0."""
+    failures, until = LOGIN_FAILURES.get(username, (0, datetime.min))
+    if failures < MAX_LOGIN_ATTEMPTS:
+        return 0
+    remaining = (until - datetime.now(timezone.utc).replace(tzinfo=None))
+    if remaining.total_seconds() <= 0:
+        LOGIN_FAILURES.pop(username, None)
+        return 0
+    return max(1, int(remaining.total_seconds() // 60) + 1)
+
+
+def note_login_failure(username: str) -> None:
+    failures = LOGIN_FAILURES.get(username, (0, datetime.min))[0] + 1
+    until = (datetime.now(timezone.utc).replace(tzinfo=None)
+             + timedelta(minutes=LOGIN_LOCKOUT_MINUTES))
+    LOGIN_FAILURES[username] = (failures, until)
 
 
 def get_db() -> sqlite3.Connection:
@@ -143,21 +204,31 @@ def staffing_for(report_id: int) -> str:
     return resolve_staffing([r["staffing_vote"] for r in rows])
 
 
+def deadline_for(joined_at: str, eta: str | None,
+                 last_checkin: str | None) -> datetime | None:
+    """When we expect to hear from someone next.
+
+    Their ETA if they gave one, otherwise the default interval counted from
+    whichever of their last check-in or their joining is more recent.
+    """
+    deadline = parse_iso(eta)
+    if deadline is not None:
+        return deadline
+    last = parse_iso(last_checkin) or parse_iso(joined_at)
+    if last is None:
+        return None
+    return last + timedelta(minutes=DEFAULT_CHECKIN_MINUTES)
+
+
 def is_overdue(joined_at: str, eta: str | None, last_checkin: str | None) -> bool:
     """Derived at read time so there's no cron job to forget to start."""
-    now = datetime.now(timezone.utc)
-    deadline = parse_iso(eta)
-    if deadline is None:
-        last = parse_iso(last_checkin) or parse_iso(joined_at)
-        if last is None:
-            return False
-        deadline = last + timedelta(minutes=DEFAULT_CHECKIN_MINUTES)
-    return now > deadline
+    deadline = deadline_for(joined_at, eta, last_checkin)
+    return deadline is not None and datetime.now(timezone.utc) > deadline
 
 
 REPORT_COLUMNS = f"""
     r.id, r.subject, r.description, r.priority, r.lat, r.lng,
-    r.status, r.needed, r.sender, r.created_at,
+    r.status, r.needed, r.sender, r.auto_filed_for, r.created_at,
     a.username AS sender_name,
     COALESCE(SUM(asg.status = 'en_route'), 0) AS en_route_count,
     COALESCE(SUM(asg.status = 'on_scene'), 0) AS on_scene_count,
@@ -191,6 +262,30 @@ def fetch_reports(include_resolved: bool = False) -> list[dict]:
     reports.sort(key=lambda r: (-r["priority_rank"],
                                 -FEED_RANK.get(r["staffing"], 1)))
     return reports
+
+
+def coverage_gaps(reports: list[dict] | None = None) -> list[dict]:
+    """Open reports with nobody on the way and nobody there.
+
+    Not the same as understaffed. These are the ones where the count is zero
+    — nobody has even said they're coming — which is the failure the whole
+    project exists to make visible.
+    """
+    if reports is None:
+        reports = fetch_reports()
+    return [r for r in reports
+            if not r["en_route_count"] and not r["on_scene_count"]]
+
+
+@app.context_processor
+def inject_coverage_gap():
+    # A callable, not a value: pages that don't show the banner shouldn't pay
+    # for the query.
+    def coverage_gap_count() -> int:
+        if current_user() is None:
+            return 0
+        return len(coverage_gaps())
+    return {"coverage_gap_count": coverage_gap_count}
 
 
 def fetch_report(report_id: int) -> dict | None:
@@ -283,6 +378,16 @@ def login():
         username = (request.form.get("username") or "").strip()
         password = request.form.get("password") or ""
 
+        locked = login_locked(username)
+        if locked:
+            flash(f"Too many attempts. Try again in {locked} minutes.")
+            return render_template("login.html"), 429
+
+        # Long enough to be a denial of service rather than a password.
+        if len(password) > MAX_PASSWORD_LENGTH:
+            flash("Invalid username or password")
+            return render_template("login.html"), 401
+
         row = get_db().execute(
             "SELECT * FROM accounts WHERE username = ?", (username,)
         ).fetchone()
@@ -290,12 +395,17 @@ def login():
         # Same message whether the user exists or the password was wrong,
         # otherwise this endpoint enumerates accounts for free.
         if row is None or not check_password_hash(row["hashed_password"], password):
+            note_login_failure(username)
             flash("Invalid username or password")
             return render_template("login.html"), 401
 
+        LOGIN_FAILURES.pop(username, None)
         session.clear()
         session["user_id"] = row["id"]
-        return redirect(request.args.get("next") or url_for("homepage"))
+        # Straight from the query string, so it has to be checked. Otherwise
+        # /login?next=https://not-us.example is a working phishing page on our
+        # own domain.
+        return redirect(safe_next(request.args.get("next")) or url_for("homepage"))
 
     return render_template("login.html")
 
@@ -315,12 +425,23 @@ def signup():
             "SELECT 1 FROM accounts WHERE username = ?", (username,)
         ).fetchone()
 
-        if len(username) < 3:
-            flash("Username must be at least 3 characters")
-        elif taken:
+        # Someone signing up as "Londo" when "londo" exists is a mix-up
+        # waiting to happen on a board where names are how you tell people
+        # apart.
+        similar = db.execute(
+            "SELECT 1 FROM accounts WHERE username = ? COLLATE NOCASE",
+            (username,)).fetchone()
+
+        if not USERNAME_PATTERN.match(username):
+            flash("Usernames are 3-32 characters: letters, numbers, . _ -")
+        elif taken or similar:
             flash("That username is taken")
-        elif len(password) < 8:
-            flash("Password must be at least 8 characters")
+        elif len(password) < MIN_PASSWORD_LENGTH:
+            flash(f"Password must be at least {MIN_PASSWORD_LENGTH} characters")
+        elif len(password) > MAX_PASSWORD_LENGTH:
+            flash(f"Password must be under {MAX_PASSWORD_LENGTH} characters")
+        elif password.lower() in ("password", "diresq", username.lower()):
+            flash("Pick a password that isn't a guess")
         elif password != confirm:
             flash("Passwords do not match")
         elif role not in ("responder", "reporter"):
@@ -468,6 +589,12 @@ MAX_BACKDATE_HOURS = 12
 # so a coordinator can see someone was out of contact.
 LATE_SYNC_SECONDS = 60
 
+# How far past their deadline someone has to be before the server stops
+# waiting for a human to notice and files a report about them itself. Counted
+# from the deadline, not from their last check-in, so someone who said "back
+# in two hours" gets two hours plus this, not this.
+SILENT_ESCALATE_MINUTES = 15
+
 
 def metres_between(lat1, lng1, lat2, lng2) -> float | None:
     """Great-circle distance. Haversine, so no dependency for one sum."""
@@ -587,6 +714,108 @@ def late_sync(made_at: str | None, received_at: str | None) -> bool:
     return (got - made).total_seconds() > LATE_SYNC_SECONDS
 
 
+def sweep_silent_responders() -> list[int]:
+    """File a report for anyone who has gone quiet and stayed quiet.
+
+    A red row on the board only helps if somebody is looking at the board. If
+    a responder is this far past their deadline, the assumption that someone
+    will notice has already failed, so the server files a report at their last
+    known position and lets it compete for attention like any other.
+
+    Filed under their own name, because it is about them and there is nobody
+    else to attribute it to. The `auto_filed_for` column is what keeps it to
+    one: while an open report points at someone, we don't file another.
+    """
+    db = get_db()
+    rows = db.execute("""
+        SELECT asg.responder, asg.joined_at, asg.eta,
+               acc.username,
+               r.subject       AS report_subject,
+               r.lat           AS report_lat,
+               r.lng           AS report_lng,
+               chk.created_at  AS last_checkin,
+               chk.lat         AS last_lat,
+               chk.lng         AS last_lng
+        FROM assignments asg
+        JOIN accounts acc ON acc.id = asg.responder
+        JOIN reports  r   ON r.id = asg.report_id
+        LEFT JOIN (
+            SELECT responder, lat, lng, created_at,
+                   ROW_NUMBER() OVER (PARTITION BY responder
+                                      ORDER BY created_at DESC) AS rn
+            FROM checkins
+        ) chk ON chk.responder = asg.responder AND chk.rn = 1
+        WHERE asg.status != 'cleared'
+    """).fetchall()
+
+    now = datetime.now(timezone.utc)
+    filed = []
+
+    for row in rows:
+        deadline = deadline_for(row["joined_at"], row["eta"], row["last_checkin"])
+        if deadline is None:
+            continue
+        if now < deadline + timedelta(minutes=SILENT_ESCALATE_MINUTES):
+            continue
+
+        already = db.execute("""
+            SELECT 1 FROM reports
+            WHERE auto_filed_for = ? AND status NOT IN ('resolved', 'hidden')
+        """, (row["responder"],)).fetchone()
+        if already:
+            continue
+
+        # Their last check-in if they sent one, otherwise the scene they said
+        # they were going to. The second is a guess, and the description says
+        # so, because sending people to the wrong place is its own emergency.
+        seen = parse_iso(row["last_checkin"])
+        if row["last_lat"] is not None:
+            lat, lng = row["last_lat"], row["last_lng"]
+            where = "last known position"
+        else:
+            lat, lng = row["report_lat"], row["report_lng"]
+            where = "the scene they were heading to, no position ever received"
+
+        silent = int((now - (seen or parse_iso(row["joined_at"]) or now))
+                     .total_seconds() // 60)
+
+        db.execute("""
+            INSERT INTO reports
+                (subject, description, priority, lat, lng,
+                 status, sender, auto_filed_for, created_at)
+            VALUES (?, ?, 'HIGH', ?, ?, 'unassigned', ?, ?, ?)
+        """, (
+            f"No contact from {row['username']} for {silent} minutes",
+            f"Filed automatically. {row['username']} was working "
+            f"\"{row['report_subject']}\" and has not checked in since their "
+            f"deadline passed. Pin is their {where}. Nobody has confirmed "
+            f"they are alright — this needs a person, not a refresh.",
+            lat, lng, row["responder"], row["responder"], now_iso(),
+        ))
+        filed.append(db.execute("SELECT last_insert_rowid() AS id")
+                     .fetchone()["id"])
+
+    if filed:
+        db.commit()
+    return filed
+
+
+# Pages where it's worth checking whether anyone has gone quiet. There is no
+# scheduler — deliberately, since a timer process that dies takes the alarm
+# with it — so the sweep rides along on reads instead. A GET that writes is
+# not lovely, but it is idempotent, and the alternative is a cron job nobody
+# starts.
+SWEEP_ON = {"homepage", "board", "map_page", "api_reports", "api_responders"}
+
+
+@app.before_request
+def escalate_silence():
+    if (request.method == "GET"
+            and request.endpoint in SWEEP_ON
+            and current_user() is not None):
+        sweep_silent_responders()
+
+
 def claimed_time(raw: str) -> tuple[datetime, str | None]:
     """When a check-in says it happened. Empty means now.
 
@@ -685,12 +914,12 @@ def api_assignment_status(assignment_id: int):
 
     if wanted == "cleared":
         # Leaving retracts your staffing vote: you can no longer see the scene.
-        db.execute(
-            "UPDATE assignments SET status = ?, staffing_vote = NULL WHERE id = ?",
-            (wanted, assignment_id))
+        db.execute("UPDATE assignments SET status = ?, staffing_vote = NULL, "
+                   "status_changed_at = ? WHERE id = ?",
+                   (wanted, now_iso(), assignment_id))
     else:
-        db.execute("UPDATE assignments SET status = ? WHERE id = ?",
-                   (wanted, assignment_id))
+        db.execute("UPDATE assignments SET status = ?, status_changed_at = ? "
+                   "WHERE id = ?", (wanted, now_iso(), assignment_id))
 
     if wanted == "on_scene":
         db.execute("UPDATE assignments SET position_mismatch = ? WHERE id = ?",
@@ -770,9 +999,10 @@ def report_resolve(report_id: int):
     db.execute("UPDATE reports SET status = 'resolved' WHERE id = ?", (report_id,))
     # Everyone still attached is done here.
     db.execute("""
-        UPDATE assignments SET status = 'cleared', staffing_vote = NULL
+        UPDATE assignments SET status = 'cleared', staffing_vote = NULL,
+                               status_changed_at = ?
         WHERE report_id = ? AND status != 'cleared'
-    """, (report_id,))
+    """, (now_iso(), report_id))
     db.commit()
     return redirect(url_for("homepage"))
 
@@ -865,6 +1095,139 @@ def api_triage():
     })
 
 
+def stamp(value: str | None) -> str:
+    """ICS forms want date and time in separate, human columns."""
+    when = parse_iso(value)
+    return "" if when is None else when.strftime("%m/%d/%Y %H:%M")
+
+
+def ics214_rows() -> list[list[str]]:
+    """Build an ICS 214 Activity Log out of what the database already knows.
+
+    ICS 214 is the form an incident actually runs on — every agency at a
+    multi-agency scene keeps one, and afterwards it's the document that says
+    who was there and what they did. Coordinators fill these in by hand,
+    usually from memory, usually hours late.
+
+    We have every one of these events with a timestamp already, so producing
+    the form is a formatting problem rather than a remembering problem. That
+    is most of the argument for logging responders at all.
+    """
+    db = get_db()
+    now = datetime.now(timezone.utc)
+
+    responders = db.execute("""
+        SELECT acc.username, acc.capabilities, MIN(asg.joined_at) AS first_seen
+        FROM accounts acc
+        JOIN assignments asg ON asg.responder = acc.id
+        GROUP BY acc.id
+        ORDER BY first_seen
+    """).fetchall()
+
+    # Everything with a time on it, in one list, sorted at the end.
+    events: list[tuple[str, str]] = []
+
+    for row in db.execute("""
+        SELECT r.subject, r.priority, r.created_at, r.status, r.auto_filed_for,
+               acc.username
+        FROM reports r JOIN accounts acc ON acc.id = r.sender
+    """).fetchall():
+        if row["auto_filed_for"] is not None:
+            events.append((row["created_at"],
+                           f"AUTOMATIC: {row['subject']} — no human filed this"))
+        else:
+            events.append((row["created_at"],
+                           f"{row['priority']} report filed by "
+                           f"{row['username']}: {row['subject']}"))
+        if row["status"] == "resolved":
+            # Resolving isn't timestamped separately, so it's logged against
+            # the report rather than given a time we'd be making up.
+            events.append((row["created_at"], f"RESOLVED: {row['subject']}"))
+
+    for row in db.execute("""
+        SELECT acc.username, asg.status, asg.joined_at, asg.status_changed_at,
+               asg.eta, asg.position_mismatch, r.subject
+        FROM assignments asg
+        JOIN accounts acc ON acc.id = asg.responder
+        JOIN reports  r   ON r.id = asg.report_id
+    """).fetchall():
+        eta = f" (ETA {stamp(row['eta'])})" if row["eta"] else ""
+        events.append((row["joined_at"],
+                       f"{row['username']} assigned to {row['subject']}{eta}"))
+        if row["status_changed_at"]:
+            moved = {"on_scene": "arrived on scene at",
+                     "cleared": "cleared from"}.get(row["status"], "updated")
+            events.append((row["status_changed_at"],
+                           f"{row['username']} {moved} {row['subject']}"))
+        if row["position_mismatch"]:
+            events.append((row["status_changed_at"] or row["joined_at"],
+                           f"FLAG: {row['username']} reported on scene at "
+                           f"{row['subject']} from over "
+                           f"{ON_SCENE_RADIUS_M} m away"))
+
+    for row in db.execute("""
+        SELECT acc.username, c.created_at, c.received_at, c.lat, c.lng
+        FROM checkins c JOIN accounts acc ON acc.id = c.responder
+    """).fetchall():
+        where = ("" if row["lat"] is None
+                 else f" at {row['lat']:.5f}, {row['lng']:.5f}")
+        late = " [synced late]" if late_sync(row["created_at"],
+                                             row["received_at"]) else ""
+        events.append((row["created_at"],
+                       f"{row['username']} checked in{where}{late}"))
+
+    events.sort()
+    started = events[0][0] if events else now_iso()
+
+    rows = [
+        ["ICS 214 - ACTIVITY LOG"],
+        [],
+        ["1. Incident Name", "DiresQ activation - Katy, TX"],
+        ["2. Operational Period", "From", stamp(started),
+         "To", now.strftime("%m/%d/%Y %H:%M")],
+        ["3. Name", current_user()["username"],
+         "ICS Position", "Resource Unit Leader",
+         "Home Agency", "DiresQ (volunteer)"],
+        [],
+        ["4. Resources Assigned"],
+        ["Name", "ICS Position", "Home Agency", "First Assigned"],
+    ]
+    for row in responders:
+        rows.append([row["username"],
+                     row["capabilities"].replace(",", " / ") or "Unassigned",
+                     "DiresQ (volunteer)",
+                     stamp(row["first_seen"])])
+
+    rows += [[], ["5. Activity Log"], ["Date/Time", "Notable Activities"]]
+    rows += [[stamp(when), what] for when, what in events]
+
+    rows += [
+        [],
+        ["6. Prepared by", current_user()["username"],
+         "Position", "Resource Unit Leader",
+         "Date/Time", now.strftime("%m/%d/%Y %H:%M")],
+        [],
+        ["Generated by DiresQ from logged activity. Times are UTC. Report "
+         "resolution and staffing changes are not separately timestamped and "
+         "are logged against the record they belong to."],
+    ]
+    return rows
+
+
+@app.get("/export/ics214")
+@login_required
+def export_ics214():
+    buffer = io.StringIO()
+    csv.writer(buffer).writerows(ics214_rows())
+    stamped = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M")
+    return Response(
+        buffer.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition":
+                 f'attachment; filename="ICS-214-diresq-{stamped}.csv"'},
+    )
+
+
 # Not linked from anywhere. Whoever goes looking has earned it.
 @app.get("/credits")
 def credits_page():
@@ -880,6 +1243,32 @@ def api_reports():
 @login_required
 def api_responders():
     return jsonify(fetch_responders())
+
+
+def record_checkin(responder_id: int, lat, lng, happened_at: datetime) -> dict:
+    """Write a check-in and say what we made of it.
+
+    Every route in ends up here — the phone, and the radio. If they ever
+    disagree about what a check-in means, it will be because someone added a
+    second copy of this function.
+    """
+    received = datetime.now(timezone.utc)
+    db = get_db()
+    db.execute("""
+        INSERT INTO checkins (responder, lat, lng, created_at, received_at)
+        VALUES (?, ?, ?, ?, ?)
+    """, (responder_id, lat, lng,
+          happened_at.isoformat(timespec="seconds"),
+          received.isoformat(timespec="seconds")))
+    db.commit()
+
+    return {
+        "ok": True,
+        "at": happened_at.isoformat(timespec="seconds"),
+        "received_at": received.isoformat(timespec="seconds"),
+        "synced_late":
+            (received - happened_at).total_seconds() > LATE_SYNC_SECONDS,
+    }
 
 
 @app.post("/api/checkin")
@@ -899,23 +1288,55 @@ def api_checkin():
     if error:
         return answer({"error": error}, 400, error)
 
-    received = datetime.now(timezone.utc)
-    db = get_db()
-    db.execute("""
-        INSERT INTO checkins (responder, lat, lng, created_at, received_at)
-        VALUES (?, ?, ?, ?, ?)
-    """, (current_user()["id"], lat, lng,
-          happened_at.isoformat(timespec="seconds"),
-          received.isoformat(timespec="seconds")))
-    db.commit()
+    result = record_checkin(current_user()["id"], lat, lng, happened_at)
+    return answer(result, 201,
+                  "Queued check-in synced." if result["synced_late"]
+                  else "Checked in. Timer reset.")
 
-    late = (received - happened_at).total_seconds() > LATE_SYNC_SECONDS
-    return answer({"ok": True,
-                   "at": happened_at.isoformat(timespec="seconds"),
-                   "received_at": received.isoformat(timespec="seconds"),
-                   "synced_late": late},
-                  201,
-                  "Queued check-in synced." if late else "Checked in. Timer reset.")
+
+@app.post("/api/uplink")
+def api_uplink():
+    """A check-in that arrived as bytes rather than as a logged-in browser.
+
+    This is the seam for a radio. A LoRa gateway has no session and no cookie
+    — it has a packet it heard and a socket to hand it over on — so this
+    endpoint identifies the responder from inside the packet instead.
+
+    Which means it is unauthenticated, and anyone who can reach it can move a
+    pin. That is the honest state of it: see docs/limits.md. It exists to
+    prove the shape is right, not to be exposed to the internet.
+    """
+    raw = form_or_json("packet")
+    if not raw:
+        return jsonify({"error": "no packet"}), 400
+
+    try:
+        packet = base64.b64decode(raw, validate=True)
+    except (binascii.Error, ValueError):
+        return jsonify({"error": "packet is not valid base64"}), 400
+
+    try:
+        checkin = transport.unpack_checkin(packet)
+    except transport.PacketError as err:
+        # Radio links corrupt things. A bad packet is expected traffic, not an
+        # incident, so say what was wrong and drop it.
+        return jsonify({"error": str(err)}), 400
+
+    who = get_db().execute("SELECT id FROM accounts WHERE id = ?",
+                           (checkin.responder_id,)).fetchone()
+    if who is None:
+        return jsonify({"error": "unknown responder"}), 404
+
+    # The packet carries an age, not a timestamp — a node running off a
+    # battery in a flood is the last clock you want to trust.
+    happened_at = (datetime.now(timezone.utc)
+                   - timedelta(minutes=checkin.age_minutes))
+
+    result = record_checkin(checkin.responder_id, checkin.lat, checkin.lng,
+                            happened_at)
+    result["responder_id"] = checkin.responder_id
+    result["bytes"] = len(packet)
+    return jsonify(result), 201
 
 
 # Resolved against this file, not the working directory, so pytest can run
@@ -1101,13 +1522,18 @@ def seed_data() -> tuple[int, int]:
                 eta = (now - timedelta(minutes=joined)
                        + timedelta(minutes=eta_mins)).isoformat(timespec="seconds")
 
+            # Someone still en route hasn't changed status since joining, so
+            # they get no stamp. The others arrived a few minutes after they
+            # set off, which is what the activity log will show.
+            moved = None if status == "en_route" else ago(max(joined - 8, 0))
+
             db.execute("""
                 INSERT INTO assignments
                     (report_id, responder, status, staffing_vote,
-                     eta, eta_confidence, joined_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                     eta, eta_confidence, joined_at, status_changed_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (report_id, who[username], status, vote, eta,
-                  0.95 if eta else None, ago(joined)))
+                  0.95 if eta else None, ago(joined), moved))
 
             db.execute(
                 "UPDATE reports SET status = 'active' WHERE id = ? "

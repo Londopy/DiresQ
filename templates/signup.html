@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="../static/styles/signup.css">
+    <link rel="stylesheet" href="../static/styles/authform.css">
     <title>Sign Up</title>
 </head>
 <body>
@@ -27,7 +28,7 @@
 
             {% with messages = get_flashed_messages() %}
             {% if messages %}
-            <ul class="flashes">
+            <ul class="flashes" role="alert" aria-live="assertive">
                 {% for message in messages %}
                 <li>{{ message }}</li>
                 {% endfor %}
@@ -41,20 +42,36 @@
                 type="text"
                 name="username"
                 placeholder="Username"
+                autocomplete="username"
+                autocapitalize="none"
+                autocorrect="off"
+                spellcheck="false"
+                pattern="[A-Za-z0-9._\-]{3,32}"
+                title="3-32 characters: letters, numbers, . _ -"
+                minlength="3"
+                maxlength="32"
                 required
             >
+            <p class="hint">3-32 characters. Letters, numbers, . _ -</p>
 
             <input
                 type="password"
                 name="password"
                 placeholder="Password"
+                autocomplete="new-password"
+                minlength="8"
+                maxlength="128"
                 required
             >
+            <p class="hint">At least 8 characters.</p>
 
             <input
                 type="password"
                 name="confirm_password"
                 placeholder="Confirm Password"
+                autocomplete="new-password"
+                minlength="8"
+                maxlength="128"
                 required
             >
 
@@ -74,6 +91,7 @@
 </div>
 
 <script src="../static/scripts/signup.js"></script>
+<script src="../static/scripts/authform.js"></script>
 
 </body>
 </html>

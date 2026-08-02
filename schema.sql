@@ -42,6 +42,10 @@ CREATE TABLE reports (
     -- but stays visible to whoever filed it and anyone already on it.
     flags       INTEGER NOT NULL DEFAULT 0,
     sender      INTEGER NOT NULL REFERENCES accounts(id),
+    -- Set when the server filed this itself because a responder went silent.
+    -- Also what stops it filing a second one: an open report pointing at the
+    -- same person means the alarm has already been raised.
+    auto_filed_for INTEGER REFERENCES accounts(id),
     created_at  TEXT    NOT NULL
 );
 
@@ -54,6 +58,7 @@ CREATE TABLE report_flags (
 );
 
 CREATE INDEX idx_reports_status ON reports(status);
+CREATE INDEX idx_reports_auto_filed ON reports(auto_filed_for);
 
 
 -- Many responders to one report. No claim lock, by design.
@@ -76,6 +81,10 @@ CREATE TABLE assignments (
     -- a long way from the report. Detection, not prevention.
     position_mismatch INTEGER NOT NULL DEFAULT 0,
     joined_at      TEXT    NOT NULL,
+
+    -- When status last moved. Only the most recent one, so the activity log
+    -- can say when someone arrived but not replay every step they took.
+    status_changed_at TEXT,
 
     -- This constraint is what makes a double-join a 409.
     UNIQUE (report_id, responder)

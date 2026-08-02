@@ -62,20 +62,30 @@ like.
 - [ ] **Offline map tiles** *(frontend)*. Service worker, cache-first. Only
       after the queue works — tiles without the queue is backwards. Do NOT
       bulk-download tiles, the OSM usage policy forbids it.
-- [ ] **Astro site.** Content is already written in `docs/`. Mostly a deploy
-      job. First thing to cut.
+- [x] **Astro site.** Built under `site/`, pages generated from `docs/` at
+      build time. Still needs Pages switched on in the repo settings — see
+      below.
+- [ ] **Turn on GitHub Pages.** Settings → Pages → Source: *GitHub Actions*.
+      The `pages.yml` workflow deploys on every push that touches `site/` or
+      `docs/`. It will fail until this is switched on, and the error doesn't
+      say why.
+- [ ] **Commit `site/package-lock.json`.** Run `npm install` in `site/` once
+      and commit the lockfile, or CI's `npm ci` has nothing to install from.
+
+## Done since the list was written
+
+- [x] Dead man's switch. Fifteen minutes past deadline, not ten — ten made
+      every dropped signal a callout.
+- [x] ICS-214 activity log export, from `/board`.
+- [x] Coverage gap banner on the feed.
+- [x] Transport seam: `transport.py` plus `/api/uplink`.
+- [x] Login and sign-up guardrails, and the open redirect they turned up.
 
 ## Worth doing if there's time
 
-- [ ] Dead man's switch: 10 min after someone goes overdue, auto-file a report
-      at their last known position. This is the thesis finishing itself.
-- [ ] ICS-214 activity log export. Produces a form a real agency files.
-- [ ] Coverage gap banner: "nobody is going here" on the report with zero
-      responders furthest from anyone.
-- [ ] Transport seam — check-ins from a pipe or serial, proving the app takes
-      input from something that isn't a browser. The honest version of the
-      LoRa idea.
 - [ ] Role picker on signup. Everyone is a responder right now.
+- [ ] Sign the uplink packet. Four more bytes and a key per node; without it
+      the endpoint can't ever face the internet.
 
 ## Not doing
 

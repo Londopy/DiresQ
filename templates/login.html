@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="../static/styles/login.css">
+    <link rel="stylesheet" href="../static/styles/authform.css">
     <title>Login Page</title>
 </head>
 <body>
@@ -33,7 +34,7 @@
 
             {% with messages = get_flashed_messages() %}
             {% if messages %}
-            <ul class="flashes">
+            <ul class="flashes" role="alert" aria-live="assertive">
                 {% for message in messages %}
                 <li>{{ message }}</li>
                 {% endfor %}
@@ -45,6 +46,11 @@
                 type="text"
                 name="username"
                 placeholder="Username"
+                autocomplete="username"
+                autocapitalize="none"
+                autocorrect="off"
+                spellcheck="false"
+                maxlength="32"
                 required
             >
 
@@ -52,6 +58,8 @@
                 type="password"
                 name="password"
                 placeholder="Password"
+                autocomplete="current-password"
+                maxlength="128"
                 required
             >
 
@@ -71,5 +79,6 @@
 </div>
 
 <script src="../static/scripts/login.js"></script>
+<script src="../static/scripts/authform.js"></script>
 </body>
 </html>

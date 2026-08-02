@@ -92,6 +92,49 @@ The server records both times. `last_position` on the board carries `at`
 coordinator can see someone was out of contact rather than just seeing a
 green row.
 
+### Check-ins over a radio
+
+| Method | Route | Body |
+| --- | --- | --- |
+| `POST` | `/api/uplink` | `packet` — base64 of a 14-byte check-in |
+
+The same check-in, arriving as bytes instead of as a browser. A gateway has no
+session, so the responder is identified from inside the packet — which is also
+why this endpoint is unauthenticated, and why it isn't something to expose.
+See `docs/limits.md`.
+
+The layout, from `transport.py`:
+
+| Bytes | Field |
+| --- | --- |
+| 1 | protocol version |
+| 1 | packet type (1 = check-in) |
+| 2 | responder id |
+| 4 | latitude × 100000 |
+| 4 | longitude × 100000 |
+| 2 | age in minutes |
+
+Fourteen bytes total, against a 53-byte budget — the smallest LoRa payload we
+were willing to design for. Coordinates land within about a metre.
+
+It carries an *age*, not a timestamp: a node running off a battery in a flood
+is the last clock you want to trust. The server subtracts it from now, and the
+result goes through the same overdue rules as any other check-in.
+
+A malformed packet is a 400 with a reason, not an error. Radio links corrupt
+things; that's expected traffic.
+
+## Export
+
+| Method | Route | |
+| --- | --- | --- |
+| `GET` | `/export/ics214` | Activity log as CSV |
+
+ICS 214 is the activity log an agency already keeps at a multi-agency scene.
+Built from records rather than memory: every assignment, arrival, check-in and
+auto-filed alert, in time order, with the resources-assigned table filled in
+from who actually went out.
+
 ## Triage
 
 | Method | Route | Body |

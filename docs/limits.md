@@ -80,6 +80,50 @@ The triage helper runs a real protocol and gives a real category. It decides
 who gets reached first. It is not medical advice, it doesn't tell you what to
 do when you get there, and it doesn't replace a clinician.
 
+## The uplink endpoint is unauthenticated
+
+`/api/uplink` takes a check-in as bytes rather than as a logged-in browser,
+because a radio gateway has no session and no cookie — it has a packet it
+heard and a socket to hand it over on. The responder is identified from
+inside the packet.
+
+Which means anyone who can reach that endpoint can move a pin. It exists to
+prove the message shape is right, not to face the internet. Doing it properly
+needs a shared key per node and a signature over the packet, which is another
+four bytes and a key distribution problem we haven't solved.
+
+## The dead man's switch needs somebody to open the app
+
+The check for silence runs when a page is loaded, not on a timer. If nobody
+opens DiresQ at all, nothing is swept and no report is filed.
+
+In practice, one browser left on the board polls every three seconds, which
+is enough. But "someone has a tab open" is a dependency, and it should be
+written down as one rather than assumed.
+
+It also can't tell the difference between a phone that died and a person who
+is hurt. It files the same report either way, which is the right failure —
+sending someone to check on a flat battery costs an hour, and the other
+mistake costs more than that.
+
+## The activity log is only as complete as what we timestamp
+
+The ICS-214 export is built from real records, not typed up afterwards, but
+it can only report what the database dates. Joining, arriving, clearing and
+every check-in have times. Resolving a report and changing a staffing signal
+do not — they're logged against the record they belong to, and the export
+says so at the bottom rather than inventing a time.
+
+## Lockouts live in memory
+
+Repeated failed logins lock a username for a few minutes. The counter is a
+dictionary in the process, so it resets when the server restarts and it isn't
+shared if you ever run more than one worker.
+
+That's deliberate at this size: a lockout that survives restarts is a lockout
+an attacker can make permanent by guessing at somebody on purpose. It is
+still not real rate limiting, and it does nothing about a distributed attempt.
+
 ## It has never been used in a real disaster
 
 Everything here is reasoned from accounts of Harvey, Kathmandu and Mexico
