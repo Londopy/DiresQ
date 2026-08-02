@@ -7,10 +7,13 @@
     <link rel="stylesheet" href="../static/styles/authform.css">
     <link rel="stylesheet" href="../static/styles/disclaimer.css">
     <title>Sign Up</title>
+    <link rel="stylesheet" href="../static/styles/a11y.css">
 </head>
 <body>
 
-<div class="container">
+<a class="skip-link" href="#main">Skip to content</a>
+
+<div class="container" id="main" role="main">
 
     <div class="left-panel">
         <div class="hero">
@@ -39,7 +42,9 @@
 
             <h2>Create Account</h2>
 
+            <label class="visually-hidden" for="signup-username">Username</label>
             <input
+                id="signup-username"
                 type="text"
                 name="username"
                 placeholder="Username"
@@ -55,7 +60,9 @@
             >
             <p class="hint">3-32 characters. Letters, numbers, . _ -</p>
 
+            <label class="visually-hidden" for="signup-password">Password</label>
             <input
+                id="signup-password"
                 type="password"
                 name="password"
                 placeholder="Password"
@@ -66,7 +73,11 @@
             >
             <p class="hint">At least 8 characters.</p>
 
+            <label class="visually-hidden" for="signup-confirm">
+                Confirm password
+            </label>
             <input
+                id="signup-confirm"
                 type="password"
                 name="confirm_password"
                 placeholder="Confirm Password"

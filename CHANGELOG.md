@@ -171,6 +171,22 @@ All notable changes to this project are documented here. Format follows
   are now torn down in the order their foreign keys allow, and a test reads the
   schema and fails if anything is created that is never dropped.
 
+### Accessibility
+
+- Every page can be skipped straight into with one keypress, has a main
+  landmark, and declares its language.
+- A visible focus outline on every control, on every page. Six stylesheets had
+  none at all, which makes the app unusable by keyboard without a mouse to
+  guess with.
+- Every input has a real label. Several relied on a placeholder, which
+  disappears the moment you type and may never be announced at all.
+- Two colours were unreadable — capability tags at 1.8:1 against their
+  background, and the footer at 3.4:1. Both moved to a tone that passes.
+- The board announces changes politely rather than assertively, so a screen
+  reader is not interrupted mid-sentence every three seconds.
+- Buttons and links people tap in the rain are at least 44 by 44 pixels.
+- All movement stops for anyone whose system asks for reduced motion.
+
 ### Security
 
 - Signing in could be made to bounce you to another website. The address to

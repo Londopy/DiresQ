@@ -6,10 +6,13 @@
     <link rel="stylesheet" href="../static/styles/board.css">
     <link rel="stylesheet" href="../static/styles/banner.css">
     <title>Accountability Board</title>
+    <link rel="stylesheet" href="../static/styles/a11y.css">
 </head>
 <body>
 
-<div class="container">
+<a class="skip-link" href="#main">Skip to content</a>
+
+<div class="container" id="main" role="main">
 
     <div class="topbar">
 
@@ -53,7 +56,12 @@
 
     <!-- Rendered server-side for first paint, then replaced by board.js on
          each poll. The page is readable with JavaScript disabled. -->
-    <div class="responders" id="responders">
+    <!-- The list is replaced wholesale every three seconds. aria-live=polite
+         so a screen reader announces someone going overdue at the next
+         natural pause, rather than interrupting mid-sentence every poll. -->
+    <div class="responders" id="responders"
+         role="region" aria-label="Responders" aria-live="polite"
+         aria-relevant="additions text">
         {% for r in responders %}
         <article class="row {{ r.state }}">
 

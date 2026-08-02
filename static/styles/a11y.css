@@ -1,0 +1,101 @@
+/* Accessibility basics, applied to every page.
+   Loaded last so it wins, and kept in its own file so none of it can be
+   accidentally deleted while restyling something else. */
+
+/* A label that only a screen reader hears. Used where a placeholder was doing
+   a label's job — placeholders vanish the moment you type, so anyone using a
+   screen reader or coming back to a half-filled form has nothing left. */
+.visually-hidden {
+    position: absolute !important;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* Jump straight to the content. First thing in the tab order on every page,
+   invisible until it has focus. On the board, tabbing through the whole nav
+   before reaching the rows is the difference between usable and not. */
+.skip-link {
+    position: absolute;
+    left: 8px;
+    top: -100px;
+    z-index: 9999;
+    padding: 10px 16px;
+    border-radius: 0 0 8px 8px;
+    background: #89b4fa;
+    color: #11111b;
+    font: 600 0.9rem system-ui, sans-serif;
+    text-decoration: none;
+    transition: top 140ms ease;
+}
+
+.skip-link:focus {
+    top: 0;
+}
+
+/* One visible focus ring everywhere.
+   :focus-visible rather than :focus, so it shows for keyboard users without
+   putting a ring around every button a mouse touches. Two colours so it
+   stands out on both the base and the surface. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible,
+summary:focus-visible {
+    outline: 3px solid #89b4fa;
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+/* Windows High Contrast Mode throws away our colours. Keep a ring. */
+@media (forced-colors: active) {
+    a:focus-visible,
+    button:focus-visible,
+    input:focus-visible {
+        outline: 3px solid Highlight;
+    }
+}
+
+/* 44x44 is the WCAG 2.5.5 target. These are the controls somebody taps with
+   wet hands, one-handed, in the rain. */
+.board-btn,
+.map-btn,
+.feed-btn,
+.export-btn,
+.back-btn,
+.check-in,
+button[type="submit"] {
+    min-height: 44px;
+}
+
+/* #45475a on #313244 is 1.8:1 — effectively invisible. #6c7086 on the base is
+   3.36:1, which passes only at large sizes and these are 12-13px. Both moved
+   up to the muted text colour, which is 7.4:1 and still reads as secondary. */
+.responder .caps,
+.vote.stood_down,
+.legal-link,
+.legal-link a,
+.foot {
+    color: #a6adc8 !important;
+}
+
+/* Motion, for anyone who has asked their system for less of it. The app has
+   very little, but the pill and the row flashes are enough to matter. */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}

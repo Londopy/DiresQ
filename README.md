@@ -13,7 +13,7 @@ DiresQ tracks the people going into it.**
 
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
 [![Flask](https://img.shields.io/badge/flask-3.1-black)](https://flask.palletsprojects.com)
-[![Tests](https://img.shields.io/badge/tests-259%20passing-brightgreen)](tests/test_app.py)
+[![Tests](https://img.shields.io/badge/tests-268%20passing-brightgreen)](tests/test_app.py)
 [![Changelog](https://img.shields.io/badge/changelog-keep--a--changelog-orange)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
@@ -205,7 +205,7 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
-259 test functions covering every route, the permission rules, feed ordering,
+268 test functions covering every route, the permission rules, feed ordering,
 staffing resolution, ETA parsing, overdue calculation, packet signing, the
 offline queue, the auth guardrails and an adversarial pass. CI runs them on
 every push, along with a boot check against a real server.

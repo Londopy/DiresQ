@@ -160,6 +160,19 @@ both because of what it would mean to send a minor towards a flood, and
 because collecting personal data from under-13s in the US brings obligations
 we have not met.
 
+## Accessibility is checked, not audited
+
+The markup is tested against the parts of WCAG 2.1 AA that can be tested:
+language, landmarks, skip links, labels on every input, alt text, live-region
+politeness, and the contrast ratio of every colour pair used for real text.
+Those tests run in CI.
+
+What has **not** happened is a person using a screen reader on it. Automated
+checks catch roughly a third of real accessibility problems, and the third
+they catch is the easy third. The map in particular is a Leaflet canvas with
+no non-visual equivalent — the board carries the same information as text,
+but nobody has confirmed that is enough.
+
 ## Limits we closed, and how
 
 Kept here rather than deleted, because a limitations page that only ever grows

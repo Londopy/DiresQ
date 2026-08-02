@@ -1965,6 +1965,94 @@ class TestTheDocsAreNotOutOfDate:
             assert "MIT" not in body, f"{name} still says MIT"
 
 
+class TestAccessibility:
+    """WCAG 2.1 AA basics, checked in the markup. An audit nobody can rerun
+    is a claim, not a result."""
+
+    PAGES = ["/", "/board", "/map", "/triage", "/report/1", "/report/new",
+             "/login", "/signup", "/disclaimer", "/credits"]
+
+    @pytest.mark.parametrize("page", PAGES)
+    def test_every_page_declares_its_language(self, client, page):
+        assert 'lang="en"' in client.get(page).get_data(as_text=True)
+
+    @pytest.mark.parametrize("page", PAGES)
+    def test_every_page_can_be_skipped_into(self, client, page):
+        # Without this, a keyboard user tabs the whole nav on every page.
+        body = client.get(page).get_data(as_text=True)
+        assert 'class="skip-link" href="#main"' in body
+        assert 'id="main"' in body, f"{page} has no main landmark to skip to"
+
+    @pytest.mark.parametrize("page", PAGES)
+    def test_every_page_loads_the_focus_styles(self, client, page):
+        assert "a11y.css" in client.get(page).get_data(as_text=True)
+
+    @pytest.mark.parametrize("page", PAGES)
+    def test_no_image_is_missing_alt_text(self, client, page):
+        body = client.get(page).get_data(as_text=True)
+        for tag in re.findall(r"<img\b[^>]*>", body):
+            assert "alt=" in tag, f"{page}: {tag}"
+
+    @pytest.mark.parametrize("page", ["/login", "/signup", "/", "/map"])
+    def test_no_input_relies_on_a_placeholder_for_its_name(self, client, page):
+        """Placeholders vanish as soon as you type and screen readers may not
+        announce them at all."""
+        body = client.get(page).get_data(as_text=True)
+        labelled = set(re.findall(r'<label[^>]*\bfor="([^"]+)"', body))
+        for tag in re.findall(r"<input\b[^>]*>", body):
+            if re.search(r'type="(hidden|checkbox|radio|submit)"', tag):
+                continue
+            ident = re.search(r'id="([^"]+)"', tag)
+            named = (ident and ident.group(1) in labelled) or "aria-label" in tag
+            assert named, f"{page}: unlabelled input {tag}"
+
+    def test_the_board_announces_changes_without_shouting(self, client):
+        # It repaints every three seconds. assertive would interrupt a screen
+        # reader mid-sentence on every poll.
+        body = client.get("/board").get_data(as_text=True)
+        assert 'aria-live="polite"' in body
+        assert 'aria-live="assertive"' not in body
+
+    def test_errors_are_announced(self, anon):
+        body = anon.post("/login", data={"username": "x", "password": "y"}
+                         ).get_data(as_text=True)
+        assert 'role="alert"' in body
+
+    def test_contrast_of_the_colours_we_rely_on(self):
+        """Every foreground/background pair used for real text, against the
+        4.5:1 that WCAG AA asks for."""
+        def luminance(hex_colour):
+            hex_colour = hex_colour.lstrip("#")
+            channels = [int(hex_colour[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+            adjusted = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+                        for c in channels]
+            return (0.2126 * adjusted[0] + 0.7152 * adjusted[1]
+                    + 0.0722 * adjusted[2])
+
+        def ratio(fg, bg):
+            light, dark = sorted([luminance(fg), luminance(bg)], reverse=True)
+            return (light + 0.05) / (dark + 0.05)
+
+        base, surface = "#1e1e2e", "#313244"
+        pairs = [
+            ("body", "#cdd6f4", base), ("body on surface", "#cdd6f4", surface),
+            ("muted", "#a6adc8", base), ("muted on surface", "#a6adc8", surface),
+            ("link", "#89b4fa", base), ("ok", "#a6e3a1", base),
+            ("overdue", "#f38ba8", base),
+            ("overdue on surface", "#f38ba8", surface),
+            ("warning", "#fab387", base), ("caution", "#f9e2af", surface),
+        ]
+        for name, fg, bg in pairs:
+            assert ratio(fg, bg) >= 4.5, (
+                f"{name}: {ratio(fg, bg):.2f}:1, needs 4.5:1")
+
+    def test_the_palette_file_does_not_reintroduce_the_unreadable_greys(self):
+        # #45475a on #313244 is 1.8:1. It was being used for capability tags.
+        css = (diresq.SCHEMA.parent / "static" / "styles" / "a11y.css"
+               ).read_text(encoding="utf-8")
+        assert "#a6adc8 !important" in css, "the contrast override is gone"
+
+
 class TestSafetyNotices:
     """The app runs a real medical protocol and looks like an emergency
     service. Both of those need saying out loud, in the app, not only in a

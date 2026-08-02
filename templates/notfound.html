@@ -5,10 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="../static/styles/credits.css">
     <title>Not found</title>
+    <link rel="stylesheet" href="../static/styles/a11y.css">
 </head>
 <body>
 
-<div class="container">
+<a class="skip-link" href="#main">Skip to content</a>
+
+<div class="container" id="main" role="main">
 
     <h1>{{ message or "That report doesn't exist." }}</h1>
 

@@ -11,10 +11,13 @@
         rel="stylesheet"
         href="https://unpkg.com/leaflet/dist/leaflet.css">
     <link rel="stylesheet" href="../static/styles/nav.css">
+    <link rel="stylesheet" href="../static/styles/a11y.css">
 </head>
 <body>
 
-<div class="container">
+<a class="skip-link" href="#main">Skip to content</a>
+
+<div class="container" id="main" role="main">
 
     <header>
 
@@ -27,6 +30,7 @@
             {% endif %}
         </a>
 
+        <label class="visually-hidden" for="search">Search reports on the map</label>
         <input
             type="text"
             id="search"

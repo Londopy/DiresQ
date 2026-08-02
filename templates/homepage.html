@@ -8,18 +8,22 @@
     <link rel="stylesheet" href="../static/styles/nav.css">
     <link rel="stylesheet" href="../static/styles/banner.css">
     <link rel="stylesheet" href="../static/styles/disclaimer.css">
+    <link rel="stylesheet" href="../static/styles/a11y.css">
 </head>
 <body>
 
+<a class="skip-link" href="#main">Skip to content</a>
+
 <div class="container">
 
-    <main>
+    <main id="main">
 
         <div class="topbar">
 
+            <label class="visually-hidden" for="search">Search reports</label>
             <input
                 id="search"
-                type="text"
+                type="search"
                 placeholder="Search reports..."
             >
 

@@ -7,10 +7,13 @@
     <link rel="stylesheet" href="../static/styles/authform.css">
     <link rel="stylesheet" href="../static/styles/disclaimer.css">
     <title>Login Page</title>
+    <link rel="stylesheet" href="../static/styles/a11y.css">
 </head>
 <body>
 
-<div class="container">
+<a class="skip-link" href="#main">Skip to content</a>
+
+<div class="container" id="main" role="main">
 
     <div class="left-panel">
         <div class="hero">
@@ -43,7 +46,12 @@
             {% endif %}
             {% endwith %}
 
+            <!-- Placeholders disappear the moment you type. A screen reader
+                 gets nothing, and anyone returning to a half-filled form has
+                 no idea which box is which. -->
+            <label class="visually-hidden" for="login-username">Username</label>
             <input
+                id="login-username"
                 type="text"
                 name="username"
                 placeholder="Username"
@@ -55,7 +63,9 @@
                 required
             >
 
+            <label class="visually-hidden" for="login-password">Password</label>
             <input
+                id="login-password"
                 type="password"
                 name="password"
                 placeholder="Password"
