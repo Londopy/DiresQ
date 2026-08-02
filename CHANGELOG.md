@@ -10,69 +10,63 @@ All notable changes to this project are documented here. Format follows
 ## [Unreleased]
 
 ### Added
-- Flask backend with SQLite storage and a four-table schema: accounts,
-  reports, assignments, checkins.
-- Report feed sorted by priority, then most recent, with en-route and
-  on-scene responder counts per report.
-- Report creation with a Leaflet map for setting the location, by map click
-  or by browser geolocation.
-- Report detail page listing every responder currently assigned.
-- Join a report. Any number of responders can join the same one.
-- Map page showing every located report as a pin.
-- Login with hashed passwords, and a shared generic failure message so the
-  endpoint does not reveal which usernames exist.
-- `GET /api/reports` returning the feed as JSON.
-- Seed command with Katy-area reports and three test accounts.
-- `DIRESQ_DEV_USER` environment variable to bypass login during development.
-- Test suite covering every route, the four invalid report submissions, joining
-  and double-joining, login failure modes, staffing resolution and overdue.
-- GitHub Actions: tests and a boot check on every push, advisory linting,
-  changelog validation, and security scanning.
-- Flashed messages are rendered on the login, report creation and report
-  detail pages.
-- Sign up, with checks on username length and availability, password length
-  and confirmation, and role. New accounts are signed in on creation.
-- `GET /api/responders`, the accountability board. Every responder with their
-  current assignment, last known position, minutes since contact, and a single
-  `state` field of overdue, on scene, en route or available. Sorted worst
-  first, so anyone overdue is the first row.
-- `POST /api/checkin` records a responder's position and resets their timer.
-- `.env` support via python-dotenv, with a documented `.env.example`. Real
-  environment variables take precedence over the file.
-- `POST /api/assignments/<id>/status` advances a responder through en route,
-  on scene and cleared. Forward only, and only for your own assignment.
-  Clearing retracts your staffing vote.
-- `POST /api/reports/<id>/staffing` records a staffing signal. Restricted to
-  responders currently on scene, since they are the only people who can see
-  how busy it is.
+
+- File a report from your phone: what is happening, how bad it is, and where.
+  The location comes from tapping a map or from your device's GPS, so it works
+  when you cannot name the street you are standing on.
+- A feed of every open report, worst first. Each card shows how many people are
+  already on their way and how many have arrived, so a report nobody has
+  touched is visible as such.
+- Search and filter the feed by severity.
+- Open any report to see everything known about it, including every responder
+  currently assigned to it rather than a single named rescuer.
+- Join a report. Any number of people can join the same one. There is no claim
+  lock, because in a real disaster the failure is convergence, not collision.
+- Move yourself through en route, on scene, and cleared as you go, so the board
+  reflects where people actually are.
+- Once on scene, tell everyone else how staffed it is: needs more help,
+  adequate, overstaffed, or stood down. Only people physically there can set
+  this, because only they can see it.
+- The accountability board: every responder, what they are doing, where they
+  were last seen, and how long since anyone heard from them. Anyone overdue
+  sorts to the top.
+- Check in to reset your timer and update your position.
+- A map of every located report.
+- Sign up and sign in, with passwords stored hashed.
+- Seeded demo data covering the Katy area, so the board is never empty in a
+  demo.
 
 ### Changed
-- Priority is stored as `HIGH`, `MEDIUM` or `LOW` rather than an integer
-  scale, matching the filter controls and map counters in the frontend.
-- Staffing state is derived from the votes of responders currently on scene
-  rather than stored on the report. Where votes disagree the most cautious
-  one wins, so an optimistic signal can never suppress a request for help.
-- Report location fields renamed to `lat` and `lng` across the frontend.
-- Staffing now reorders the feed. Within a priority band, a report asking for
-  help sorts first, one with nobody on it next, then covered, then
-  overstaffed. Staffing never crosses a priority band, so a low-priority
-  report cannot bury a high-priority one no matter how many people ask.
-- Database setup and seeding are plain functions the CLI commands wrap, so
-  tests can call them directly. The schema path resolves against the
-  application file rather than the working directory.
-- `pygeospy` is marked Windows-only in `requirements.txt`. It publishes no
-  Linux wheel or sdist, so installing it unconditionally broke CI.
+
+- Staffing reorders the feed. Within a severity band, a report asking for help
+  sorts first, one with nobody on it next, then covered, then overstaffed.
+  Staffing never crosses a band, so a minor report cannot bury a critical one
+  no matter how many people ask for help on it.
+- Where responders on scene disagree about staffing, the most cautious signal
+  wins. Someone reporting "we have enough" can never suppress someone else
+  asking for more.
+- Severity is HIGH, MEDIUM or LOW throughout, replacing an earlier numeric
+  scale that the interface never used.
+- Whether someone is overdue is worked out when the board is read, not tracked
+  by a background job. There is no timer process to crash.
+- Report coordinates are named `lat` and `lng` end to end.
+- Leaving a scene retracts your staffing vote, since you can no longer see it.
 
 ### Fixed
-- Reports could be submitted with no location. The hidden latitude and
-  longitude inputs carried `required`, but hidden inputs are exempt from
-  browser constraint validation, so an untouched map still submitted. The
-  server now rejects these, and both columns are `NOT NULL`.
-- Error messages were never shown. Five `flash()` calls had no template
-  rendering `get_flashed_messages()`, so a rejected login or an incomplete
-  report form appeared to do nothing at all.
+
+- Reports could be filed with no location at all. The location fields were
+  marked required, but browsers do not validate hidden fields, so an untouched
+  map submitted silently and the report never appeared on the map.
+- Error messages were written but never displayed. A rejected sign-in or an
+  incomplete report form appeared to do nothing at all.
 
 ### Security
-- Secret key is read from `DIRESQ_SECRET_KEY` and falls back to
-  `secrets.token_hex`, never a hardcoded value.
-- Passwords are stored with `werkzeug.security.generate_password_hash`.
+
+- Passwords are hashed with `werkzeug.security`, never stored or logged in the
+  clear.
+- The session signing key is read from the environment and randomly generated
+  when absent, never hardcoded.
+- A failed sign-in returns the same message whether or not the account exists,
+  so the form cannot be used to discover usernames.
+- Continuous integration blocks any commit containing a database file, a
+  hardcoded signing key, or `random` used where `secrets` belongs.
