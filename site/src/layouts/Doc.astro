@@ -1,14 +1,26 @@
 ---
-const { frontmatter } = Astro;
+// A markdown page's frontmatter arrives as a prop, not on the Astro global.
+// Astro.frontmatter does not exist, and reading .title off undefined fails
+// the build rather than rendering an empty heading.
+const { frontmatter } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 const NAV = [
-  ["", "Home"],
   ["/decisions", "Decisions"],
   ["/process", "Process"],
   ["/limits", "Limits"],
   ["/api", "API"],
 ];
+
+// Worked out here rather than inline. A multi-line ternary inside a JSX
+// attribute is the kind of thing that parses on one Astro version and not the
+// next, and this file only gets built by CI.
+const here = Astro.url.pathname.replace(/\/$/, "");
+const links = NAV.map(([href, label]) => ({
+  href: `${base}${href}`,
+  label,
+  current: here.endsWith(href) ? "page" : undefined,
+}));
 ---
 
 <!DOCTYPE html>
@@ -25,11 +37,8 @@ const NAV = [
     <header>
       <a class="wordmark" href={base || "/"}>DiresQ</a>
       <nav>
-        {NAV.slice(1).map(([href, label]) => (
-          <a href={`${base}${href}`} aria-current={
-            Astro.url.pathname.replace(/\/$/, "").endsWith(href)
-              ? "page" : undefined
-          }>{label}</a>
+        {links.map((link) => (
+          <a href={link.href} aria-current={link.current}>{link.label}</a>
         ))}
       </nav>
     </header>
