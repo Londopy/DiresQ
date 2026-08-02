@@ -38,9 +38,11 @@ All three were found by reading her templates against the schema, not by
 anything breaking. We took her names in every case — the templates were real
 and working, the schema was still just a document.
 
-## Three bugs found by tooling, not by reading code
+## Five bugs found by tooling, not by reading code
 
-This is the part we'd point at if someone asked what we learned.
+This is the part we'd point at if someone asked what we learned. Four are
+below; the fifth has its own section after them, because it's the strangest
+one.
 
 **Error messages that went nowhere.** The backend was calling `flash()` in
 five places — bad login, missing subject, no map pin, double-join. No template
@@ -61,6 +63,23 @@ Found by a parametrised test that tried submitting with the map never clicked.
 **CI that couldn't install our own dependency.** `pygeospy` published a single
 Windows wheel. `pip install -r requirements.txt` worked on both our machines
 and died on ubuntu, before a single check ran. Found the first time CI ran.
+
+**A table that was created but never dropped.** `schema.sql` tears everything
+down before rebuilding it. A table added late — `report_flags` — got its
+`CREATE` and not its `DROP`. Rebuilding a database that already existed
+dropped four tables, hit the fifth, and stopped, leaving it in pieces. The
+next command then failed complaining about a *different* missing table, which
+sent us looking in the wrong place entirely.
+
+Found by running it on a real machine with real data in it. Every test had
+been passing, because tests build from empty every time and empty is the one
+case that works.
+
+The fix was one line. The interesting part is the test we wrote after: it
+reads `schema.sql`, pulls out every `CREATE TABLE` and every `DROP TABLE`, and
+fails if anything appears in the first list and not the second. It can't be
+made to pass by adding a drop for `report_flags` — only by keeping the whole
+file consistent, including tables nobody has written yet.
 
 ## The security check that failed for the wrong reason
 
@@ -97,3 +116,7 @@ have saved all three mismatches above.
 Write the first test earlier. The test suite found two real bugs within
 minutes of existing, both of which had been sitting there for hours looking
 like working features.
+
+Run it against a database that already has something in it. Tests start from
+empty every time, so anything that only breaks on the *second* run — which is
+every run the judges will do — is invisible to them by construction.

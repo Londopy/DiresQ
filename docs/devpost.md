@@ -81,7 +81,7 @@ Four of the libraries are ours — written, published to PyPI, then used here:
 
 ### What we learned
 
-**Tests found bugs that looked like working features.** Three of them. The
+**Tests found bugs that looked like working features.** Five of them. The
 backend was calling `flash()` in five places to report errors — no template
 rendered them, so every rejected form just sat there looking frozen. Nobody
 would have found that by clicking around, because the page looks *fine*. A
@@ -97,6 +97,14 @@ hardcoded secrets. The pattern needed both quote characters, and escaping that
 inside a YAML block scalar produced an unterminated string. The job went red
 having searched nothing. We rewrote it in Python and tested it against a
 deliberately broken file, to prove it still catches a real one.
+
+**Test on a database that already has something in it.** A table added late to
+our schema got its `CREATE` and not its `DROP`, so rebuilding an *existing*
+database stopped halfway and left it in pieces. Every test passed, because
+tests build from empty and empty is the one case that works. The fix was one
+line; the test we wrote afterwards reads the schema file itself and fails if
+anything is ever created without being dropped, including tables nobody has
+written yet.
 
 **Agree your field names in writing before either person starts.** We didn't.
 The frontend said `HIGH`/`MEDIUM`/`LOW` and `latitude`; the schema said

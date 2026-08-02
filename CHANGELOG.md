@@ -55,6 +55,8 @@ All notable changes to this project are documented here. Format follows
   category, the severity that files the report as, and a plain-English reason.
   The severity dropdown still works; not every report is a casualty.
 - Written decisions, build log, known limits and API reference under `docs/`.
+- An icon, and a `robots.txt` that keeps the whole site out of search results.
+  Live reports name real addresses; none of it should be findable.
 - A Board link on the feed, the map and every report page. It turns red and
   shows a count the moment anyone goes overdue, so you learn somebody is late
   wherever you happen to be rather than only while watching the board.
@@ -72,10 +74,15 @@ All notable changes to this project are documented here. Format follows
 - Resolve a report when it is handled. Open to whoever filed it and to anyone
   on scene, since those are the only people in a position to know. Resolving
   clears everyone still attached and drops it out of the feed.
-- A map of every located report.
+- A map of every located report. It opens centred on the newest one, zoomed out
+  just far enough that everything else is still on screen, so the thing that
+  brought you to the map is in the middle of it.
 - Sign up and sign in, with passwords stored hashed.
-- Seeded demo data covering the Katy area, so the board is never empty in a
-  demo.
+- Seed data that loads an incident already two hours old: eight Katy-area
+  reports, responders en route and on scene, staffing already signalled, and
+  one person forty-seven minutes out of contact. The board is red and the feed
+  tells the story the moment you open it, instead of looking like an empty
+  to-do list.
 
 ### Changed
 
@@ -92,6 +99,7 @@ All notable changes to this project are documented here. Format follows
   by a background job. There is no timer process to crash.
 - Report coordinates are named `lat` and `lng` end to end.
 - Leaving a scene retracts your staffing vote, since you can no longer see it.
+- The map used to open over Indonesia regardless of where the reports were.
 
 ### Fixed
 
@@ -100,6 +108,10 @@ All notable changes to this project are documented here. Format follows
   map submitted silently and the report never appeared on the map.
 - Error messages were written but never displayed. A rejected sign-in or an
   incomplete report form appeared to do nothing at all.
+- Rebuilding the database on top of an existing one stopped halfway and left it
+  in pieces, because a table had been added without a matching drop. The tables
+  are now torn down in the order their foreign keys allow, and a test reads the
+  schema and fails if anything is created that is never dropped.
 
 ### Security
 

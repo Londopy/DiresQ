@@ -21,7 +21,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from flask import (
-    Flask, flash, g, jsonify, redirect, render_template, request, session, url_for
+    Flask, flash, g, jsonify, redirect, render_template, request,
+    send_from_directory, session, url_for
 )
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -252,6 +253,20 @@ def map_page():
     # tojson can't serialise sqlite3.Row, so fetch_reports hands back dicts.
     located = [r for r in fetch_reports() if r["latitude"] is not None]
     return render_template("map.html", reports=located)
+
+
+# Browsers ask for both of these on every page whether you have them or not.
+# No template shares a <head>, so serving them here beats adding a link tag to
+# nine files — and it keeps the console clean while we're recording.
+@app.get("/favicon.ico")
+def favicon():
+    return send_from_directory(app.static_folder + "/images", "favicon.ico")
+
+
+@app.get("/robots.txt")
+def robots():
+    # Live reports name real addresses. None of it should be searchable.
+    return "User-agent: *\nDisallow: /\n", 200, {"Content-Type": "text/plain"}
 
 
 @app.get("/board")
@@ -915,7 +930,92 @@ def init_db() -> None:
         get_db().commit()
 
 
-def seed_data() -> tuple[int, int]:
+# An incident already two hours old, not a fresh empty board. Everything below
+# is timed relative to now, so the demo looks live whenever you seed it.
+#
+# Two pairs are doing the real work:
+#   Kingsland (nobody on it) sits ABOVE Mayde Creek (four people, overstaffed)
+#   Sam has been silent 47 minutes and is red before you touch anything
+SEED_ACCOUNTS = [
+    # username, role, capabilities, password
+    ("londo",    "responder", "boat,medical"),
+    ("skythe",   "responder", "truck,chainsaw"),
+    ("kiyan",    "reporter",  ""),
+    ("m.torres", "responder", "boat,swiftwater"),
+    ("j.okafor", "responder", "truck,chainsaw,generator"),
+    ("d.nguyen", "responder", "medical"),
+    ("s.reyes",  "responder", "boat,medical"),
+    ("a.whitlock", "reporter", ""),
+]
+
+# subject, description, priority, lat, lng, filed_by, minutes_ago
+SEED_REPORTS = [
+    ("Water rising, two adults and a dog upstairs",
+     "1400 block Katy Fort Bend Rd. Water was at the porch an hour ago, now "
+     "it's over the first step inside. They've gone up to the second floor. "
+     "Nobody has a boat on this street.",
+     "HIGH", 29.7858, -95.8244, "a.whitlock", 96),
+
+    ("Power line down across Kingsland, sparking",
+     "Across both lanes just past the school. Still arcing. Two cars turned "
+     "around, one drove over it. Nobody is standing traffic off.",
+     "HIGH", 29.7834, -95.8321, "kiyan", 71),
+
+    ("Elderly man, oxygen concentrator, power out 3 hrs",
+     "22100 Highland Knolls. Tank backup won't last the night and his "
+     "daughter can't get through on the roads.",
+     "HIGH", 29.7433, -95.7688, "a.whitlock", 58),
+
+    ("Car in the water at Mayde Creek crossing",
+     "Driver got out and is on the bank. Vehicle is going nowhere. Needs "
+     "someone to close the road before the next person tries it.",
+     "MEDIUM", 29.7961, -95.7890, "kiyan", 84),
+
+    ("Roof peeled back, family of four inside",
+     "5300 Fry Rd. Tarp would hold it until morning. They're dry for now but "
+     "the next band is due around two.",
+     "MEDIUM", 29.8011, -95.7205, "a.whitlock", 47),
+
+    ("Tree across driveway, can't get the car out",
+     "Not hurt, not flooding, just stuck. Chainsaw job. Happy to wait.",
+     "MEDIUM", 29.7752, -95.8103, "kiyan", 39),
+
+    ("Storm drain blocked, water backing up Green Trails",
+     "Ankle deep and climbing at the low end. Might be nothing, might be four "
+     "houses in an hour.",
+     "MEDIUM", 29.7529, -95.7402, "a.whitlock", 25),
+
+    ("Fence down, two dogs loose on Westheimer Pkwy",
+     "Reporting so somebody has a record of it. Please don't send anyone.",
+     "LOW", 29.7690, -95.8012, "kiyan", 18),
+]
+
+# report index, responder, status, staffing vote, joined how long ago,
+# eta minutes from joining (None = default interval), last check-in mins ago
+SEED_ASSIGNMENTS = [
+    # Mayde Creek: four people on a job that needs two. This is the point.
+    (3, "m.torres", "on_scene", "overstaffed", 74, None, 6),
+    (3, "j.okafor", "on_scene", "overstaffed", 68, None, 9),
+    (3, "d.nguyen", "on_scene", None,          61, None, 4),
+    (3, "skythe",   "en_route", None,          12, 25,   None),
+
+    # Water rising: one person, asking for help, nobody else coming.
+    (0, "londo",    "on_scene", "need_more",   80, None, 11),
+
+    # Oxygen: someone en route with a sensible ETA.
+    (2, "a.whitlock", "en_route", None,        20, 30,   14),
+
+    # Roof: Sam went, and nobody has heard from him since.
+    (4, "s.reyes",  "on_scene", None,          62, None, 47),
+]
+
+
+def seed_minimal() -> tuple[int, int]:
+    """Three accounts, five untouched reports, nobody responding.
+
+    What the tests run against. Kept separate from the demo seed so that
+    making the demo look better can't quietly change what the tests mean.
+    """
     accounts = [
         ("londo", "responder", "boat,medical"),
         ("skythe", "responder", "truck,chainsaw"),
@@ -957,6 +1057,77 @@ def seed_data() -> tuple[int, int]:
 
         db.commit()
     return len(accounts), len(reports)
+
+
+def seed_data() -> tuple[int, int]:
+    """Load a disaster already in progress.
+
+    Seeding an empty board makes the app look like a to-do list. Seeding it
+    mid-incident shows what it's for.
+    """
+    now = datetime.now(timezone.utc)
+
+    def ago(minutes):
+        return (now - timedelta(minutes=minutes)).isoformat(timespec="seconds")
+
+    with app.app_context():
+        db = get_db()
+
+        for username, role, caps in SEED_ACCOUNTS:
+            db.execute("""
+                INSERT OR IGNORE INTO accounts
+                    (username, hashed_password, role, capabilities, created_at)
+                VALUES (?, ?, ?, ?, ?)
+            """, (username, generate_password_hash("diresq"), role, caps,
+                  ago(240)))
+
+        who = {r["username"]: r["id"] for r in
+               db.execute("SELECT id, username FROM accounts").fetchall()}
+
+        report_ids = []
+        for subject, desc, priority, lat, lng, filed_by, minutes in SEED_REPORTS:
+            cur = db.execute("""
+                INSERT INTO reports
+                    (subject, description, priority, lat, lng,
+                     status, sender, created_at)
+                VALUES (?, ?, ?, ?, ?, 'unassigned', ?, ?)
+            """, (subject, desc, priority, lat, lng, who[filed_by], ago(minutes)))
+            report_ids.append(cur.lastrowid)
+
+        for idx, username, status, vote, joined, eta_mins, checkin in SEED_ASSIGNMENTS:
+            report_id = report_ids[idx]
+            eta = None
+            if eta_mins is not None:
+                eta = (now - timedelta(minutes=joined)
+                       + timedelta(minutes=eta_mins)).isoformat(timespec="seconds")
+
+            db.execute("""
+                INSERT INTO assignments
+                    (report_id, responder, status, staffing_vote,
+                     eta, eta_confidence, joined_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (report_id, who[username], status, vote, eta,
+                  0.95 if eta else None, ago(joined)))
+
+            db.execute(
+                "UPDATE reports SET status = 'active' WHERE id = ? "
+                "AND status = 'unassigned'", (report_id,))
+
+            if checkin is not None:
+                # Scatter positions near the report so the map has something.
+                report = db.execute(
+                    "SELECT lat, lng FROM reports WHERE id = ?", (report_id,)
+                ).fetchone()
+                jitter = (hash(username) % 9 - 4) / 5000
+                db.execute("""
+                    INSERT INTO checkins
+                        (responder, lat, lng, created_at, received_at)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (who[username], report["lat"] + jitter,
+                      report["lng"] - jitter, ago(checkin), ago(checkin)))
+
+        db.commit()
+    return len(SEED_ACCOUNTS), len(SEED_REPORTS)
 
 
 @app.cli.command("init-db")

@@ -1,4 +1,7 @@
-const map = L.map("map").setView([-2.5,118],5);
+// Katy, TX. Only ever seen if there are no located reports at all.
+const FALLBACK = [29.7858,-95.8244];
+
+const map = L.map("map").setView(FALLBACK,11);
 
 const reports = JSON.parse(
     document.getElementById("reports-data").textContent
@@ -38,6 +41,39 @@ reports.forEach(report=>{
     markers.push(marker);
 
 });
+
+// The newest report is the one you opened the map to look at, so it goes in
+// the middle. Then push the edges out far enough that everything else still
+// fits — mirroring the furthest pin keeps the newest one dead centre instead
+// of letting fitBounds drift towards wherever the crowd is.
+if(reports.length){
+
+    const newest=[...reports].sort(
+        (a,b)=>b.created_at.localeCompare(a.created_at)
+    )[0];
+
+    const centre=[newest.latitude,newest.longitude];
+
+    let reach=0;
+
+    reports.forEach(report=>{
+        reach=Math.max(
+            reach,
+            Math.abs(report.latitude-centre[0]),
+            Math.abs(report.longitude-centre[1])
+        );
+    });
+
+    if(reach===0){
+        map.setView(centre,14);
+    }else{
+        map.fitBounds([
+            [centre[0]-reach,centre[1]-reach],
+            [centre[0]+reach,centre[1]+reach],
+        ],{padding:[40,40]});
+    }
+
+}
 
 document.getElementById("high").textContent=high;
 document.getElementById("medium").textContent=medium;

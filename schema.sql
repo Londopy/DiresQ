@@ -5,7 +5,10 @@
 
 PRAGMA foreign_keys = ON;
 
+-- Children first, parents last. Every table below must appear here, or
+-- init-db half-runs and leaves the database in pieces.
 DROP TABLE IF EXISTS checkins;
+DROP TABLE IF EXISTS report_flags;
 DROP TABLE IF EXISTS assignments;
 DROP TABLE IF EXISTS reports;
 DROP TABLE IF EXISTS accounts;

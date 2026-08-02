@@ -27,7 +27,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("DIRESQ_DEV_USER", "londo")
     diresq.init_db()
     with diresq.app.app_context():
-        diresq.seed_data()
+        diresq.seed_minimal()
     return diresq.app.test_client()
 
 
@@ -37,7 +37,7 @@ def anon(tmp_path, monkeypatch):
     monkeypatch.delenv("DIRESQ_DEV_USER", raising=False)
     diresq.init_db()
     with diresq.app.app_context():
-        diresq.seed_data()
+        diresq.seed_minimal()
     return diresq.app.test_client()
 
 
@@ -974,6 +974,26 @@ class TestQueuedCheckins:
         assert self.row(client)["last_position"]["lat"] == 29.78
 
 
+class TestSchemaRebuilds:
+    """init-db has to be safe to run twice, or a schema change leaves the
+    database half-demolished."""
+
+    def test_running_it_twice_works(self, client):
+        diresq.init_db()
+        diresq.init_db()
+        with diresq.app.app_context():
+            diresq.seed_minimal()
+        assert client.get("/").status_code == 200
+
+    def test_every_table_is_dropped_before_it_is_created(self):
+        sql = diresq.SCHEMA.read_text(encoding="utf-8")
+        created = set(re.findall(r"CREATE TABLE (\w+)", sql))
+        dropped = set(re.findall(r"DROP TABLE IF EXISTS (\w+)", sql))
+        assert created <= dropped, (
+            f"created but never dropped: {sorted(created - dropped)}"
+        )
+
+
 class TestTriage:
     def test_page_renders(self, client):
         assert client.get("/triage").status_code == 200
@@ -1135,3 +1155,17 @@ class TestOverdue:
 
     def test_garbage_timestamps_do_not_raise(self):
         assert diresq.is_overdue("not a date", None, None) is False
+
+
+class TestTheThingsBrowsersAskForAnyway:
+    """Both of these 404'd on every page load. Harmless, but it's noise in the
+    console the whole time we're recording."""
+
+    def test_there_is_a_favicon(self, anon):
+        res = anon.get("/favicon.ico")
+        assert res.status_code == 200
+
+    def test_search_engines_are_told_to_stay_out(self, anon):
+        # Real reports name real addresses.
+        body = anon.get("/robots.txt").get_data(as_text=True)
+        assert "Disallow: /" in body

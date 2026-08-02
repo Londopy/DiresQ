@@ -10,4 +10,4 @@ vitalscore==0.1.1
 
 # parse() raises ParseError on no match, and returns Instant | Range | Ambiguous.
 # Wrap every call.
-timefuzz==0.3.1
+timefuzz==0.4.0
