@@ -18,10 +18,15 @@ from datetime import datetime, timedelta, timezone
 from functools import wraps
 from pathlib import Path
 
+from dotenv import load_dotenv
 from flask import (
     Flask, flash, g, jsonify, redirect, render_template, request, session, url_for
 )
 from werkzeug.security import check_password_hash, generate_password_hash
+
+# Must run before anything reads os.environ. Real environment variables win
+# over .env, so CI and your shell always override the file.
+load_dotenv(Path(__file__).with_name(".env"))
 
 DATABASE = os.environ.get("DIRESQ_DB", "diresq.db")
 
@@ -228,6 +233,47 @@ def login():
     return render_template("login.html")
 
 
+@app.route("/signup", methods=["GET", "POST"])
+def signup():
+    if request.method == "POST":
+        username = (request.form.get("username") or "").strip()
+        password = request.form.get("password") or ""
+        confirm = request.form.get("confirm_password") or ""
+        # signup.html has no role selector yet. One account can do both jobs,
+        # so responder is the safe default.
+        role = (request.form.get("role") or "responder").strip().lower()
+
+        db = get_db()
+        taken = db.execute(
+            "SELECT 1 FROM accounts WHERE username = ?", (username,)
+        ).fetchone()
+
+        if len(username) < 3:
+            flash("Username must be at least 3 characters")
+        elif taken:
+            flash("That username is taken")
+        elif len(password) < 8:
+            flash("Password must be at least 8 characters")
+        elif password != confirm:
+            flash("Passwords do not match")
+        elif role not in ("responder", "reporter"):
+            flash("Role must be responder or reporter")
+        else:
+            cur = db.execute("""
+                INSERT INTO accounts
+                    (username, hashed_password, role, capabilities, created_at)
+                VALUES (?, ?, ?, '', ?)
+            """, (username, generate_password_hash(password), role, now_iso()))
+            db.commit()
+            session.clear()
+            session["user_id"] = cur.lastrowid
+            return redirect(url_for("homepage"))
+
+        return render_template("signup.html"), 400
+
+    return render_template("signup.html")
+
+
 @app.post("/logout")
 def logout():
     session.clear()
@@ -306,9 +352,120 @@ def report_rescue(report_id: int):
     return redirect(url_for("report_detail", report_id=report_id))
 
 
+# Worst first. This is the order the board renders in.
+BOARD_ORDER = ("overdue", "on_scene", "en_route", "available")
+
+
+def fetch_responders() -> list[dict]:
+    """The accountability board: who is out, where, and who is late.
+
+    Each row carries a single `state` field so the frontend switches on one
+    value instead of recomputing the rules.
+    """
+    rows = get_db().execute("""
+        SELECT acc.id, acc.username, acc.capabilities,
+               asg.id       AS assignment_id,
+               asg.report_id,
+               asg.status   AS assignment_status,
+               asg.eta, asg.joined_at, asg.staffing_vote,
+               r.subject    AS report_subject,
+               chk.created_at AS last_checkin,
+               chk.lat      AS last_lat,
+               chk.lng      AS last_lng
+        FROM accounts acc
+        LEFT JOIN assignments asg
+               ON asg.responder = acc.id AND asg.status != 'cleared'
+        LEFT JOIN reports r ON r.id = asg.report_id
+        LEFT JOIN (
+            SELECT responder, lat, lng, created_at,
+                   ROW_NUMBER() OVER (PARTITION BY responder
+                                      ORDER BY created_at DESC) AS rn
+            FROM checkins
+        ) chk ON chk.responder = acc.id AND chk.rn = 1
+        WHERE acc.role = 'responder'
+        ORDER BY acc.username, asg.joined_at DESC
+    """).fetchall()
+
+    now = datetime.now(timezone.utc)
+    board, seen = [], set()
+
+    for row in rows:
+        # A responder can be on two reports at once; show the latest.
+        if row["id"] in seen:
+            continue
+        seen.add(row["id"])
+
+        overdue = False
+        minutes = None
+        if row["assignment_id"] is not None:
+            overdue = is_overdue(row["joined_at"], row["eta"], row["last_checkin"])
+            contact = parse_iso(row["last_checkin"]) or parse_iso(row["joined_at"])
+            if contact is not None:
+                minutes = int((now - contact).total_seconds() // 60)
+
+        if row["assignment_id"] is None:
+            state = "available"
+        elif overdue:
+            state = "overdue"
+        else:
+            state = row["assignment_status"]
+
+        board.append({
+            "id": row["id"],
+            "username": row["username"],
+            "capabilities": [c for c in (row["capabilities"] or "").split(",") if c],
+            "state": state,
+            "overdue": overdue,
+            "minutes_since_contact": minutes,
+            "assignment": None if row["assignment_id"] is None else {
+                "id": row["assignment_id"],
+                "report_id": row["report_id"],
+                "report_subject": row["report_subject"],
+                "status": row["assignment_status"],
+                "staffing_vote": row["staffing_vote"],
+                "eta": row["eta"],
+                "joined_at": row["joined_at"],
+            },
+            "last_position": None if row["last_checkin"] is None else {
+                "lat": row["last_lat"],
+                "lng": row["last_lng"],
+                "at": row["last_checkin"],
+            },
+        })
+
+    board.sort(key=lambda r: (BOARD_ORDER.index(r["state"]),
+                             -(r["minutes_since_contact"] or 0)))
+    return board
+
+
 @app.get("/api/reports")
 def api_reports():
     return jsonify(fetch_reports())
+
+
+@app.get("/api/responders")
+@login_required
+def api_responders():
+    return jsonify(fetch_responders())
+
+
+@app.post("/api/checkin")
+@login_required
+def api_checkin():
+    lat = request.form.get("lat", type=float)
+    lng = request.form.get("lng", type=float)
+    if request.is_json:
+        payload = request.get_json(silent=True) or {}
+        lat = payload.get("lat", lat)
+        lng = payload.get("lng", lng)
+
+    db = get_db()
+    db.execute("""
+        INSERT INTO checkins (responder, lat, lng, created_at)
+        VALUES (?, ?, ?, ?)
+    """, (current_user()["id"], lat, lng, now_iso()))
+    db.commit()
+    return jsonify({"ok": True, "at": now_iso()}), 201
 
 
 # Resolved against this file, not the working directory, so pytest can run

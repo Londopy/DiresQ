@@ -147,6 +147,112 @@ class TestLogin:
         r = anon.get("/")
         assert r.status_code == 302 and "/login" in r.headers["Location"]
 
+    def test_logout_clears_the_session(self, anon):
+        anon.post("/login", data={"username": "londo", "password": "diresq"})
+        assert anon.get("/").status_code == 200
+        assert anon.post("/logout").status_code == 302
+        r = anon.get("/")
+        assert r.status_code == 302 and "/login" in r.headers["Location"], (
+            "still authenticated after logout"
+        )
+
+
+class TestSignup:
+    def test_page_renders(self, anon):
+        assert anon.get("/signup").status_code == 200
+
+    def test_valid_signup_creates_an_account_and_logs_in(self, anon):
+        r = anon.post("/signup", data={
+            "username": "newbie", "password": "longenough1",
+            "confirm_password": "longenough1",
+        })
+        assert r.status_code == 302
+        with diresq.app.app_context():
+            row = diresq.get_db().execute(
+                "SELECT role, hashed_password FROM accounts WHERE username = 'newbie'"
+            ).fetchone()
+        assert row["role"] == "responder"
+        assert row["hashed_password"] != "longenough1", "password stored in the clear"
+
+    @pytest.mark.parametrize("payload,reason", [
+        ({"username": "londo", "password": "longenough1",
+          "confirm_password": "longenough1"}, "username already taken"),
+        ({"username": "bob", "password": "longenough1",
+          "confirm_password": "different111"}, "confirmation does not match"),
+        ({"username": "bob", "password": "short",
+          "confirm_password": "short"}, "password under 8 characters"),
+        ({"username": "ab", "password": "longenough1",
+          "confirm_password": "longenough1"}, "username under 3 characters"),
+        ({"username": "bob", "password": "longenough1",
+          "confirm_password": "longenough1", "role": "admin"}, "role not in the enum"),
+    ])
+    def test_invalid_signup_is_rejected(self, anon, payload, reason):
+        assert anon.post("/signup", data=payload).status_code == 400, reason
+        with diresq.app.app_context():
+            n = diresq.get_db().execute(
+                "SELECT COUNT(*) AS c FROM accounts"
+            ).fetchone()["c"]
+        assert n == 3, f"created an account despite {reason}"
+
+
+class TestBoard:
+    def test_lists_every_responder_as_available(self, client):
+        board = client.get("/api/responders").get_json()
+        assert {r["username"] for r in board} == {"londo", "skythe"}
+        assert all(r["state"] == "available" for r in board)
+        assert all(r["assignment"] is None for r in board)
+
+    def test_reporters_are_not_on_the_board(self, client):
+        board = client.get("/api/responders").get_json()
+        assert "kiyan" not in {r["username"] for r in board}
+
+    def test_joining_puts_a_responder_en_route(self, client):
+        client.post("/report/1/rescue")
+        row = next(r for r in client.get("/api/responders").get_json()
+                   if r["username"] == "londo")
+        assert row["state"] == "en_route"
+        assert row["assignment"]["report_subject"] == "Water rising, 2 trapped"
+
+    def test_checkin_records_a_position(self, client):
+        client.post("/report/1/rescue")
+        assert client.post("/api/checkin",
+                           json={"lat": 29.78, "lng": -95.82}).status_code == 201
+        row = next(r for r in client.get("/api/responders").get_json()
+                   if r["username"] == "londo")
+        assert row["last_position"]["lat"] == 29.78
+
+    def test_stale_assignment_goes_overdue_and_sorts_first(self, client):
+        client.post("/report/1/rescue")
+        stale = (datetime.now(timezone.utc) - timedelta(minutes=90)).isoformat(
+            timespec="seconds")
+        with diresq.app.app_context():
+            db = diresq.get_db()
+            db.execute("UPDATE assignments SET joined_at = ?", (stale,))
+            db.commit()
+
+        board = client.get("/api/responders").get_json()
+        assert board[0]["state"] == "overdue"
+        assert board[0]["overdue"] is True
+        assert board[0]["minutes_since_contact"] >= 89
+
+    def test_a_checkin_pulls_someone_back_off_overdue(self, client):
+        client.post("/report/1/rescue")
+        stale = (datetime.now(timezone.utc) - timedelta(minutes=90)).isoformat(
+            timespec="seconds")
+        with diresq.app.app_context():
+            db = diresq.get_db()
+            db.execute("UPDATE assignments SET joined_at = ?", (stale,))
+            db.commit()
+        client.post("/api/checkin", json={"lat": 29.78, "lng": -95.82})
+
+        row = next(r for r in client.get("/api/responders").get_json()
+                   if r["username"] == "londo")
+        assert row["state"] == "en_route"
+        assert row["overdue"] is False
+
+    def test_board_requires_login(self, anon):
+        assert anon.get("/api/responders").status_code == 302
+
 
 class TestStaffingResolution:
     @pytest.mark.parametrize("votes,expected", [

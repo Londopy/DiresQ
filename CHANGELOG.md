@@ -30,6 +30,15 @@ All notable changes to this project are documented here. Format follows
   changelog validation, and security scanning.
 - Flashed messages are rendered on the login, report creation and report
   detail pages.
+- Sign up, with checks on username length and availability, password length
+  and confirmation, and role. New accounts are signed in on creation.
+- `GET /api/responders`, the accountability board. Every responder with their
+  current assignment, last known position, minutes since contact, and a single
+  `state` field of overdue, on scene, en route or available. Sorted worst
+  first, so anyone overdue is the first row.
+- `POST /api/checkin` records a responder's position and resets their timer.
+- `.env` support via python-dotenv, with a documented `.env.example`. Real
+  environment variables take precedence over the file.
 
 ### Changed
 - Priority is stored as `HIGH`, `MEDIUM` or `LOW` rather than an integer

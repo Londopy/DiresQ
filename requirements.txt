@@ -1,5 +1,8 @@
 Flask==3.1.0
 
+# Loads .env. See .env.example for what goes in it.
+python-dotenv==1.0.1
+
 # Windows-only wheel, no sdist. The marker keeps `pip install -r` working on
 # Linux CI, which would otherwise die here before running a single check.
 # Anything importing this needs a non-Windows fallback.
