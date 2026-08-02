@@ -1,0 +1,15 @@
+Flask==3.1.0
+
+# Distance between responder and report.
+#
+# WARNING: pygeospy 0.2.0 publishes ONE file -- a cp39-abi3-win_amd64 wheel.
+# No sdist, no manylinux wheel. It installs on Windows and nowhere else.
+# ci.yml runs on ubuntu-latest, so this line will fail the build until a
+# Linux wheel or an sdist exists. Options: publish one, or move this to an
+# extras group and let CI skip it.
+pygeospy==0.2.0
+
+# Free-text ETA parsing with a confidence score.
+# Returns Instant | Range | Ambiguous, and RAISES ParseError on no match --
+# it does not return low confidence. Always wrap it. See eta.py.
+timefuzz==0.3.1
