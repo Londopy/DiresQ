@@ -20,8 +20,8 @@ L.tileLayer(
 
 let marker = null;
 
-const latInput = document.getElementById("latitude");
-const lngInput = document.getElementById("longitude");
+const latInput = document.getElementById("lat");
+const lngInput = document.getElementById("lng");
 
 const locationText =
 document.getElementById("locationText");
