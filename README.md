@@ -131,6 +131,7 @@ Pages are server-rendered; everything under `/api` returns JSON.
 | Method | Route | |
 | --- | --- | --- |
 | `GET` | `/` | Report feed |
+| `GET` | `/board` | Accountability board. Refreshes itself every 3s |
 | `GET` | `/map` | Map of located reports |
 | `GET` `POST` | `/login` · `/signup` | Auth |
 | `POST` | `/logout` | |
