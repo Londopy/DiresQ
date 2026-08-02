@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="../static/styles/login.css">
-    <title>Login Page</title>
+    <link rel="stylesheet" href="../static/styles/signup.css">
+    <title>Sign Up</title>
 </head>
 <body>
 
@@ -13,23 +13,19 @@
     <div class="left-panel">
         <div class="hero">
 
-            
-            <img class="logo-placeholder" src="../static/images/DiresQ.png" alt="DiresQ Icon">
-            
+            <img src="../static/images/DiresQ.png" alt="DiresQ Logo" class="logo-placeholder">
 
             <h1>DiresQ</h1>
-            <p>
-                Fast. Reliable. Community Powered.
-            </p>
+            <p>Join the community and help report disasters faster.</p>
 
         </div>
     </div>
 
     <div class="right-panel">
 
-        <form action="/login" method="POST" class="login-card">
+        <form action="/signup" method="POST" class="login-card">
 
-            <h2>Login</h2>
+            <h2>Create Account</h2>
 
             <input
                 type="text"
@@ -45,13 +41,20 @@
                 required
             >
 
+            <input
+                type="password"
+                name="confirm_password"
+                placeholder="Confirm Password"
+                required
+            >
+
             <button type="submit">
-                Login
+                Sign Up
             </button>
 
             <p class="auth-switch">
-                Don't have an account?
-                <a href="/signup">Sign Up</a>
+                Already have an account?
+                <a href="/login">Log In</a>
             </p>
 
         </form>
@@ -60,6 +63,7 @@
 
 </div>
 
-<script src="../static/scripts/login.js"></script>
+<script src="../static/scripts/signup.js"></script>
+
 </body>
 </html>
