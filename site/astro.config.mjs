@@ -5,7 +5,9 @@ import { defineConfig } from "astro/config";
 // .BASE_URL everywhere else. Getting this wrong is why project sites deploy
 // with no CSS.
 export default defineConfig({
-  site: "https://londopy.github.io",
+  // The repo lives under Skythe7, so Pages serves it from her subdomain, not
+  // whoever pushed last.
+  site: "https://skythe7.github.io",
   base: "/DiresQ",
   trailingSlash: "ignore",
 });

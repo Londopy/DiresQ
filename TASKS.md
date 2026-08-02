@@ -70,7 +70,9 @@ like.
       `docs/`. It will fail until this is switched on, and the error doesn't
       say why.
 - [ ] **Commit `site/package-lock.json`.** Run `npm install` in `site/` once
-      and commit the lockfile, or CI's `npm ci` has nothing to install from.
+      and commit the lockfile. The workflow copes without one, but `npm ci` is
+      faster and stricter, and `cache: npm` can only be turned back on in
+      `pages.yml` once the lockfile exists.
 
 ## Done since the list was written
 

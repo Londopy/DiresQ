@@ -28,15 +28,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # No `cache: npm` here. Caching keys off a lockfile, and setup-node
+      # fails outright when it can't find one rather than skipping the cache.
+      # Add it back once site/package-lock.json is committed.
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: site/package-lock.json
 
+      # npm ci is stricter and faster, but it needs a lockfile. Until one is
+      # committed, fall back rather than failing the whole deploy.
       - name: Install
         working-directory: site
-        run: npm ci
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --no-audit --no-fund
+          else
+            echo "No lockfile yet — using npm install."
+            npm install --no-audit --no-fund
+          fi
 
       # sync-docs copies ../docs into src/pages, so the site can never drift
       # from the docs in the repo.
