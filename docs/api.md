@@ -17,6 +17,7 @@ Everything except `/login`, `/signup` and `/credits` needs a session.
 | `GET` | `/report/<id>` | One report and everyone assigned to it |
 | `GET` `POST` | `/login` `/signup` | |
 | `POST` | `/logout` | |
+| `GET` | `/offline` | Shown when a navigation fails. No login, so the browser can store it before anybody signs in |
 
 ## Reports
 
@@ -37,11 +38,56 @@ derived from votes, never stored.
 | Method | Route | Body | |
 | --- | --- | --- | --- |
 | `GET` | `/api/responders` | | The board |
+| `GET` | `/api/me` | | Your own commitments, and nobody else's |
 | `POST` | `/api/assignments/<id>/status` | `status` | Your own assignment only |
 | `POST` | `/api/checkin` | `lat`, `lng`, `happened_at`, `client_id` *(all optional)* | Resets your timer |
 
 `status` moves forward only: `en_route` → `on_scene` → `cleared`. Anything
 else is a 400. Clearing retracts your staffing vote.
+
+### `/api/me`, and why it exists separately
+
+`/api/responders` is the board — everybody. `/api/me` is one person, and that
+person is you.
+
+They exist separately because of what the service worker is allowed to keep on
+a phone. A saved copy of the board is a claim about other people's safety
+frozen at a moment that has passed, and it is reassuring in exactly the way
+the dead man's switch exists to prevent. So the board is never cached.
+
+Your own state does not have that problem — which report you took, when you
+said you'd check in, and where you last were are all facts about you, and they
+stay true whether or not you can reach a server. So `/api/me` is the one
+response the worker stores, and the offline page renders from it.
+
+```json
+{
+  "username": "londo",
+  "capabilities": ["boat", "medical"],
+  "assignment": {
+    "id": 5,
+    "status": "on_scene",
+    "report_id": 1,
+    "subject": "Water rising, two adults and a dog upstairs",
+    "priority": "HIGH",
+    "joined_at": "2026-08-02T21:19:22+00:00",
+    "check_in_by": "2026-08-02T22:58:22+00:00"
+  },
+  "last_position": {
+    "lat": 29.7852, "lng": -95.8238,
+    "at": "2026-08-02T22:28:22+00:00"
+  },
+  "as_of": "2026-08-02T22:39:23+00:00"
+}
+```
+
+`as_of` is when the server answered. The offline page prints it, so a cached
+copy can never pass itself off as a live one. `assignment` is `null` if you
+are not currently on a report.
+
+A test asserts no other responder's username appears in this payload. If it
+ever grows into a second board, the caching rule quietly stops holding and
+nothing else would catch it.
 
 ### What a board row looks like
 

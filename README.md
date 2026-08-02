@@ -165,6 +165,13 @@ without limitations — it's one nobody checked.
 - **Check in** — resets your timer and updates your last known position. Works
   with no signal: it's kept on your phone, sent when there's a connection, and
   judged on when you pressed the button rather than when it arrived.
+- **Install it** — add DiresQ to your home screen and it opens without browser
+  chrome, with its own icon. With the radio off you still get the report you
+  took, when you're due to check in, and where you last were. What you don't
+  get is the feed or the board: those are claims about other people that stop
+  being true the moment they're saved, and a stale one sends somebody to an
+  address that was cleared twenty minutes ago. Offline they're absent rather
+  than wrong. [What's kept and what isn't →](docs/offline.md)
 - **The accountability board** — everyone who is out, what they're doing, and
   how long since anyone heard from them. Overdue sorts to the top.
 - **The dead man's switch** — stay silent fifteen minutes past your deadline
@@ -260,6 +267,7 @@ Pages are server-rendered; everything under `/api` returns JSON.
 | `GET` | `/board` | Accountability board. Refreshes itself every 3s |
 | `GET` | `/triage` | START triage helper |
 | `GET` | `/disclaimer` | What this is and isn't. No login required |
+| `GET` | `/offline` | Shown when a navigation fails. No login, so it can be cached ahead of time |
 | `GET` | `/map` | Map of located reports |
 | `GET` `POST` | `/login` · `/signup` | Auth |
 | `POST` | `/logout` | |
@@ -269,6 +277,7 @@ Pages are server-rendered; everything under `/api` returns JSON.
 | `POST` | `/report/<id>/resolve` | Close it. Reporter or on-scene only |
 | `GET` | `/api/reports` | Feed as JSON |
 | `GET` | `/api/responders` | The accountability board |
+| `GET` | `/api/me` | Your own commitments and nothing else. The one response kept on the device |
 | `POST` | `/api/reports/<id>/staffing` | `need_more` · `adequate` · `overstaffed` · `stood_down`. On-scene only |
 | `POST` | `/api/assignments/<id>/status` | `on_scene` then `cleared`. Forward only, your own only |
 | `POST` | `/api/checkin` | `{lat, lng}` — resets your timer |
