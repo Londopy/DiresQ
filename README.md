@@ -13,7 +13,7 @@ DiresQ tracks the people going into it.**
 
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
 [![Flask](https://img.shields.io/badge/flask-3.1-black)](https://flask.palletsprojects.com)
-[![Tests](https://img.shields.io/badge/tests-111%20passing-brightgreen)](tests/test_app.py)
+[![Tests](https://img.shields.io/badge/tests-117%20passing-brightgreen)](tests/test_app.py)
 [![Changelog](https://img.shields.io/badge/changelog-keep--a--changelog-orange)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
@@ -37,6 +37,38 @@ DiresQ tracks the responders, not just the incidents. You join a report, you
 check in on a timer, you check out. Miss a check-in and the board turns red.
 Every report shows how many people are already on it, so help spreads out
 instead of piling up.
+
+## What it actually looks like
+
+A storm comes through Katy. Here is one hour on the app.
+
+**A neighbour files a report.** Her street is flooding. She opens DiresQ, taps
+the spot on the map, and writes *"Water rising, 2 trapped."* Marks it HIGH. It
+lands at the top of the feed, and the card reads **0 responding**.
+
+**You have a boat.** You see that card sitting above one with six people
+already on it. You tap join, and type *"30 min"* — that's how long before
+anyone should start worrying about you. The card now reads **1 en route**. On
+the board, your row turns blue.
+
+**You get there.** You mark yourself on scene, and your row goes green. It's
+worse than she described, so you tag the report **NEEDS MORE** — it climbs the
+feed. Two streets over, someone on a job with plenty of hands tags theirs
+**OVERSTAFFED**, and that card sinks. The next person who opens the app comes
+to you instead of there. Nobody coordinated that. The feed did it.
+
+**Then you stop checking in.** You're inside a flooded house and your phone is
+in your pocket. Thirty minutes pass. Your row on the board turns red:
+
+```
+londo    OVERDUE    Water rising, 2 trapped    last contact 47 min ago
+                    last position 29.7858, -95.8244
+```
+
+Nobody had to notice. Nobody had to remember you went out. The board went red
+on its own, and now somebody knows where to start looking.
+
+**That last part is the product.** Everything else is how you get there.
 
 ## What it does
 
