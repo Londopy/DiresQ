@@ -1,0 +1,44 @@
+# Line endings.
+#
+# We develop on Windows and deploy on Linux, which is exactly the situation
+# that produces a commit touching every file in the repository and changing
+# nothing in any of them. It happened once: 39 files, 10,462 lines added,
+# 10,462 removed, `git diff --ignore-all-space` completely empty.
+#
+# The fix is to let git decide. `text=auto` means git works out which files
+# are text and stores those with LF no matter what the working tree looks
+# like; `eol=lf` means they come back out as LF too, so the two never drift
+# apart again. Nobody has to remember to configure anything.
+* text=auto eol=lf
+
+# Shell scripts and the Procfile run on Linux. A stray carriage return in a
+# shebang gives you `/usr/bin/env: 'bash\r': No such file or directory`,
+# which is a genuinely unpleasant hour of your life.
+*.sh    text eol=lf
+start.sh text eol=lf
+
+# Binary. Git guesses right most of the time, but "most" is doing real work
+# in that sentence and a mangled PNG is not obviously a line-ending problem.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.webp  binary
+*.mp4   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.db    binary
+
+# Keep the diff readable for the things a reviewer actually reads.
+*.md    text eol=lf diff=markdown
+*.py    text eol=lf diff=python
+*.sql   text eol=lf
+*.css   text eol=lf
+*.js    text eol=lf
+*.html  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.json  text eol=lf
+*.cff   text eol=lf

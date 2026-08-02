@@ -15,7 +15,7 @@ DiresQ tracks the people going into it.**
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
 [![Flask](https://img.shields.io/badge/flask-3.1-black)](https://flask.palletsprojects.com)
 [![SQLite](https://img.shields.io/badge/sqlite-3-003B57)](https://sqlite.org)
-[![Tests](https://img.shields.io/badge/tests-335%20passing-brightgreen)](tests/test_app.py)
+[![Tests](https://img.shields.io/badge/tests-344%20passing-brightgreen)](tests/test_app.py)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 [![Accessibility](https://img.shields.io/badge/accessibility-WCAG_2.1_AA_audited-a6e3a1)](docs/accessibility.md)
@@ -31,6 +31,17 @@ DiresQ tracks the people going into it.**
 
 Built at **Katy Youth Hacks 2026** (Tech for Humanity)
 · also submitted to **STEMist Hacks IV**
+
+<br>
+
+<img src="docs/demo.gif"
+     alt="The accountability board turning red when a responder stops checking
+          in, and the report DiresQ files automatically at their last known
+          position"
+     width="720">
+
+<sub>Five responders on scene, then s.reyes goes quiet. At fifteen minutes the
+board turns red; the report on the right filed itself.</sub>
 
 </div>
 
@@ -221,6 +232,41 @@ are they breathing, how fast, is there a pulse, do they respond — and maps the
 category onto a severity band. It orders who gets reached first. It is not
 medical advice.
 
+## The classifier, and the number we nearly published
+
+DiresQ reads what you typed and suggests a priority. It is a hand-written
+multinomial naive Bayes classifier — 250 lines, no dependencies, no model
+file, no network, 0.1 ms — paired with a phrase lexicon.
+
+We checked it the obvious way first: run it over the corpus it was trained on.
+It scored **100%**, and that number is worthless. It had memorised its 55
+examples.
+
+Measured properly — hold one report out, retrain on the other 54, predict the
+one it has never seen, repeat 55 times:
+
+| | Held out |
+| --- | --- |
+| Always guess the commonest label | 36% |
+| Naive Bayes alone | **45%** |
+| Naive Bayes + severity lexicon | **75%** |
+
+Nine points above guessing, and wrong in the worst direction — *"child not
+breathing properly"* came back MEDIUM, *"gas smell, whole street evacuating"*
+came back LOW.
+
+The fix was the same one that had already rescued equipment detection: a
+lexicon of the categories a triage protocol calls immediate, written from the
+START protocol rather than from our own failures, checked by a test that it
+never contradicts a label. The measurement now runs in CI and fails the build
+if it regresses.
+
+It still gets one report in four wrong. That is survivable because it lands in
+a dropdown you control, next to the words that caused it, and stops adjusting
+the moment you touch it — and unacceptable if it were deciding anything.
+
+**[The full write-up, including why it isn't an LLM →](docs/model.md)**
+
 ## Tests
 
 ```bash
@@ -228,7 +274,7 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
-335 test functions covering every route, the permission rules, feed ordering,
+344 test functions covering every route, the permission rules, feed ordering,
 staffing resolution, ETA parsing, overdue calculation, packet signing, the
 offline queue, the auth guardrails and an adversarial pass. CI runs them on
 every push, along with a boot check against a real server.
@@ -321,7 +367,7 @@ fork, offline, or if Pages is down.
   honest table of what is and isn't built
 - [Hosting it](docs/deploy.md) — one file, one click, free, and what the cold
   start means for anyone you send the link to
-- [The classifier](docs/model.md) — naive Bayes over 65 labelled reports, the
+- [The classifier](docs/model.md) — naive Bayes over 55 labelled reports, measured held-out at 75%,, the
   measured duplicate threshold, and why it isn't a language model
 - [SECURITY.md](SECURITY.md) — disclosure policy, scope, and what we already know is wrong
 - [Security](docs/security.md) — the threat model, packet signing, and the

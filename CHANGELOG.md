@@ -169,6 +169,25 @@ All notable changes to this project are documented here. Format follows
   tells the story the moment you open it, instead of looking like an empty
   to-do list.
 
+- A severity lexicon in front of the priority classifier, covering the
+  categories a triage protocol treats as immediate: airway and breathing,
+  circulation, entrapment, hazardous material, structural collapse,
+  dependence on powered medical equipment, and moving water on a person. When
+  one matches, the matched phrase is shown as the reason. The phrases were
+  written from the START protocol rather than from the reports we measure on,
+  because a word list tuned against its own test set scores well and teaches
+  nothing.
+- The classifier is now measured by leave-one-out cross-validation in the test
+  suite, and the build fails if held-out accuracy drops below 68%. A test also
+  asserts no lexicon phrase ever fires on a report labelled something else,
+  and that the corpus size quoted in the docs matches the corpus.
+- A demo loop in the README: five responders on scene, one goes quiet, the
+  board turns red, and the report DiresQ files on their behalf appears in the
+  feed.
+- `.gitattributes`, so the repository stores LF regardless of what anyone's
+  editor does. Without it the next commit from a Windows machine touched 39
+  files and changed 10,462 lines without altering a character of content.
+
 ### Changed
 
 - Equipment is now read from the wording with a word list rather than a
@@ -233,8 +252,26 @@ All notable changes to this project are documented here. Format follows
   are now torn down in the order their foreign keys allow, and a test reads the
   schema and fails if anything is created that is never dropped.
 
+- The priority classifier was reported as accurate on the strength of a
+  measurement taken on its own training data, where it scored 100%. Held out
+  properly it scored 45%, against 36% for always guessing the commonest
+  label, and it called "child not breathing properly" a MEDIUM. The severity
+  lexicon above is the fix; held-out accuracy is now 75%. Every document
+  quoting the old figure has been corrected, along with the corpus size, which
+  was written down as 65 examples and had always been 55.
+- Responder positions failing to load left a map that looked complete with
+  every responder pin silently missing. It now says so.
+
 ### Security
 
+- Report subjects and responder names are no longer interpolated into map
+  popup markup. A report titled with an image tag and an `onerror` handler
+  would have run in the browser of every coordinator who opened that pin, and
+  coordinators hold the sessions worth stealing. Both popups are now built
+  from text nodes, which cannot be parsed as markup, and a test fails the
+  build if any user-supplied field is ever placed inside a template literal
+  containing a tag. Usernames were already restricted to safe characters at
+  signup, but a line is not secure because of a rule enforced in another file.
 - A radio packet can no longer be replayed. A signature proves who made a
   packet and says nothing about when, so anyone who recorded one off the air
   could send the same bytes later and move that pin. Packets now carry a

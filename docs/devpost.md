@@ -77,7 +77,7 @@ severity from a dropdown. They don't know. They aren't trained, they're
 frightened, and the honest answer to "how bad is this on a three-point scale"
 is *you tell me*.
 
-So we trained a **naive Bayes classifier on 65 hand-labelled reports** to
+So we trained a **naive Bayes classifier on 55 hand-labelled reports** to
 suggest severity and required equipment from free text. It returns the words
 that drove each decision, measures its own duplicate-detection threshold
 against real data — 0.157 worst false positive, 0.409 true match, threshold

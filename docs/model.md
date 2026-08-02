@@ -5,12 +5,53 @@ what equipment is needed, and whether the same incident has already been
 reported.
 
 It is a **multinomial naive Bayes classifier over a bag of words**, written by
-hand in about 250 lines of Python, trained at import from a corpus of 65
-labelled reports. No dependencies, no model file, no network, no GPU. It runs
-in about **0.1 milliseconds**.
+hand in about 250 lines of Python with no dependencies, trained at import from
+a corpus of 55 labelled reports, paired with a phrase lexicon for the
+categories a triage protocol treats as immediate. No model file, no network,
+no GPU, no API key. It runs in about **0.1 milliseconds**.
 
-It is not a language model, and this page explains why that was the right
-call rather than a compromise.
+It is not a language model. This page explains why that was the right call —
+and then shows you the accuracy numbers, including the bad one.
+
+---
+
+## The numbers first
+
+Every classifier demo you have ever seen quotes the accuracy on its own
+training data. Here is ours:
+
+| | |
+| --- | --- |
+| Trained on 55 reports, tested on those same 55 | **100%** |
+
+That number is worthless and we nearly shipped it. The model had memorised
+its corpus.
+
+Here is the same model measured properly — hold one report out, retrain on the
+other 54, predict the one it has never seen, repeat 55 times:
+
+| | Held out |
+| --- | --- |
+| Always guess the commonest label (`HIGH`) | 36% |
+| **Naive Bayes alone** | **45%** |
+| **Naive Bayes + severity lexicon** | **75%** |
+
+Naive Bayes on its own was nine points better than guessing. Worse, it failed
+in the direction that matters:
+
+| Report | Predicted | Should be |
+| --- | --- | --- |
+| *"child not breathing properly after being pulled from…"* | MEDIUM | HIGH |
+| *"gas smell very strong, whole street evacuating now"* | LOW | HIGH |
+| *"man having chest pains, ambulance cannot reach us"* | MEDIUM | HIGH |
+| *"live wire in standing water in the front yard, children…"* | MEDIUM | HIGH |
+
+A bag of words does not know that *breathing* is a different kind of word from
+*fence*. It counts them the same.
+
+The fix is described under [Priority](#priority) below, and the measurement
+runs in CI — `TestTheClassifierIsMeasuredNotAssumed` fails the build if the
+held-out number drops below 68%.
 
 ---
 
@@ -61,7 +102,7 @@ actually did.
 ### It has to be honest about being wrong
 
 Below 45% confidence it says nothing. Under three words it says nothing. It is
-a bag-of-words model trained on 65 examples and it will be wrong regularly,
+a bag-of-words model trained on 55 examples and it will be wrong regularly,
 which is fine, because it is a suggestion sitting next to a dropdown the human
 controls.
 
@@ -103,6 +144,31 @@ Confidence is a softmax over the log scores. The max is subtracted before
 exponentiating, or long descriptions underflow and every answer comes back
 100% sure.
 
+**And then a lexicon gets the first vote.** Before any of that arithmetic
+runs, the description is checked against a list of phrases that a triage
+protocol treats as immediate — airway and breathing, circulation, entrapment,
+hazardous material, structural collapse, dependence on powered medical
+equipment, moving water on a person. If one matches, the priority is HIGH and
+the matched phrase is the explanation. A short list of the opposite kind
+(*"reporting in case it gets worse"*, *"not blocking the road"*) does the same
+for LOW.
+
+That is what takes the held-out number from 45% to 75%.
+
+Two things about it are deliberate:
+
+**The phrases come from the protocol, not from our own mistakes.** It would
+have been easy to read the misses in the table above and write phrases that
+fixed exactly those reports. That produces a lexicon that scores brilliantly
+on the corpus you measured and has learned nothing. These are the standard
+immediate categories from START — the same protocol the app's triage helper
+already implements — written down before checking what they'd score.
+
+**It is checked against the labels.** A test asserts that no phrase ever fires
+on a report labelled something else. `"cannot get out"` was in the first draft
+and this test removed it: the corpus contains *"tree across the driveway,
+cannot get the car out"*, which is a blocked car, not a trapped person.
+
 ### Explanation
 
 For the chosen class, each word is scored by how much *more* likely it is
@@ -124,7 +190,7 @@ Running them over the seeded reports:
 
 The chainsaw one had a cause: a single training line reads *"large branch
 leaning on the power line to the house"*, so `power` and `line` became
-chainsaw evidence. With 65 examples split five ways, each capability's
+chainsaw evidence. With 55 examples split five ways, each capability's
 positive class is a handful of sentences, and a long description drowns the
 signal in ordinary words.
 
@@ -154,12 +220,17 @@ not send anyone"* and *"for the record"* return nothing at all.
 
 **Less sophisticated, and better.** It names the word that matched, it is
 wrong in ways you can see, and a wrong answer is a one-line fix instead of a
-retraining problem. Priority stays on naive Bayes because there the maths
-earns its place: three classes, 65 examples, and 80–99% confidence on
-phrasings it has never seen.
+retraining problem.
 
 The general lesson, which cost us an hour to learn: **measure the clever
 version before keeping it.** We would have shipped the confident, wrong one.
+
+And then we learned it a second time. We had assumed priority was fine because
+it *looked* fine — the same mistake, one layer up, hidden behind a 100%
+accuracy figure that was measured on the training data. Naive Bayes still does
+the work on every report the lexicon doesn't recognise, which is most of them,
+and that is where the maths earns its place. It just no longer decides alone
+whether somebody who cannot breathe is a MEDIUM.
 
 ### Duplicates
 
@@ -183,18 +254,32 @@ false positive.
 
 Written down rather than discovered by a judge.
 
-**Negation.** It counts words, so *"no longer trapped"* and *"trapped"* look
-similar to it. This is the fundamental limit of bag-of-words and there is no
-patching around it.
+**Negation, and the lexicon made it worse.** It counts words, so *"no longer
+trapped"* and *"trapped"* look similar to it — the fundamental limit of
+bag-of-words, with no patching around it. The severity lexicon takes that from
+a tendency to a certainty: *"no longer trapped"* contains `trapped`, so it
+comes back HIGH, full confidence. We accepted that knowingly. A false HIGH
+sends somebody to a house that is already fine; a false MEDIUM leaves somebody
+who cannot breathe below the fold. Those are not symmetrical errors and we
+would rather make the first one.
 
 **Synonyms.** *"Flooding, couple on the second floor"* and *"water rising, two
 adults upstairs"* describe the same house and share almost no vocabulary, so
 the duplicate check misses it — that's the 0.241 row above, below the
 threshold. Catching it needs embeddings, and embeddings need a model file.
 
-**Sixty-five examples is a demonstration, not a dataset.** Real deployment
+**Fifty-five examples is a demonstration, not a dataset.** Real deployment
 would need thousands of real reports, and real reports contain names and
-addresses, which is its own problem.
+addresses, which is its own problem. It is also why the held-out number moves
+around: leaving one report out of 55 changes the model noticeably, which is
+not true of a real corpus.
+
+**75% is not good.** It is roughly twice the baseline and it is measured
+honestly, which is more than the version we nearly shipped could say, but one
+report in four still gets the wrong priority suggested. The reason we are
+willing to ship it is that it lands in a dropdown the person filing the report
+controls, next to the words that caused it, and it stops adjusting the moment
+they touch it. It would not be acceptable as a decision.
 
 **The equipment lexicon is hand-written, so it only knows the words we
 thought of.** "Pirogue" and "jon boat" are what people in south Louisiana

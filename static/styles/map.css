@@ -249,3 +249,22 @@ border-left:6px solid var(--green);
     }
 
 }
+/* Shown when the responder-position request fails. Sits opposite the queue
+   pill so the two can never cover each other, and is red rather than amber
+   because this one does mean something is missing from the screen: every
+   responder pin. Right corner, fixed, for the same reason as the pill —
+   a warning you have to scroll to find is not a warning. */
+.map-warning{
+    position:fixed;
+    right:16px;
+    bottom:16px;
+    z-index:1000;
+    max-width:min(320px, calc(100vw - 32px));
+    padding:9px 14px;
+    border-radius:8px;
+    background:#313244;
+    border-left:3px solid #f38ba8;
+    color:#cdd6f4;
+    font-size:0.8rem;
+    box-shadow:0 6px 20px rgba(0,0,0,0.45);
+}

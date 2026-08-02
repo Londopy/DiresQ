@@ -29,7 +29,7 @@ const SITE = {
   offline: ["offline.md", "Offline and LoRa",
     "The radio packet, the gateway, and a blunt table of what isn't built."],
   model: ["model.md", "The classifier",
-    "Naive Bayes over 65 labelled reports. Why it is not a language model."],
+    "It scores 100% on its own training data and 75% held out. Why we publish the second number, and why it is not a language model."],
   security: ["security.md", "Security",
     "The threat model, the radio signatures, and the one we got properly wrong."],
   accessibility: ["accessibility.md", "Accessibility",

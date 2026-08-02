@@ -8,8 +8,12 @@ is this" is "you tell me".
 So this reads what they wrote and suggests. Three pieces, deliberately of
 different sophistication:
 
-  * **priority** — a multinomial naive Bayes classifier over HIGH / MEDIUM /
-    LOW, trained at import from the corpus at the bottom of this file
+  * **priority** — a phrase lexicon for the things a triage protocol calls
+    immediate, backed by a multinomial naive Bayes classifier over HIGH /
+    MEDIUM / LOW for everything else, trained at import from the corpus at
+    the bottom of this file. Held out one report at a time, that pairing
+    gets 75% of the corpus right; naive Bayes on its own got 45%, against
+    36% for always guessing HIGH. The measurement lives in the tests
   * **equipment** — a lexicon, not a model. We built it as five binary
     classifiers first and they were worse; the reasoning is above
     EQUIPMENT_WORDS and it is the most useful thing in this file
@@ -28,8 +32,9 @@ caused it, so a coordinator can see *why* and disagree. "Trust me" is not a
 thing you get to say to somebody deciding where to send a boat.
 
 It has to be honest about being wrong. This is a bag-of-words model trained on
-sixty-odd examples, and it says so. It suggests, the human decides, and the
-dropdown is never overwritten — the same rule as the triage helper.
+fifty-five examples, we have measured how often it is wrong, and the number is
+written down. It suggests, the human decides, and the dropdown is never
+overwritten — the same rule as the triage helper.
 
 It has to run. No download, no GPU, no API key, no network. Pure Python, a few
 milliseconds, deterministic, and it works in the disaster this app is for,
@@ -53,7 +58,7 @@ CAPABILITIES = ("boat", "chainsaw", "medical", "truck", "generator")
 # Equipment is matched by vocabulary, not by the classifier, and that is a
 # deliberate step *down* in sophistication.
 #
-# We built it as five binary naive Bayes models first. With 65 examples split
+# We built it as five binary naive Bayes models first. With 55 examples split
 # five ways the positive class for each capability is a handful of sentences,
 # and a long description swamps the signal: "power line down across both lanes,
 # still arcing" came back needing a chainsaw at 100% confidence, because one
@@ -61,8 +66,10 @@ CAPABILITIES = ("boat", "chainsaw", "medical", "truck", "generator")
 #
 # A lexicon cannot do that. It is transparent, it names the word that matched,
 # and when it is wrong it is wrong in a way you can see and fix in one line.
-# Priority stays on naive Bayes, where 65 examples across three classes is
-# enough and it measures 80-99% confident on held-out phrasings.
+#
+# We later measured priority the same way and found the same problem, which is
+# why LIFE_THREAT_PHRASES exists below. Naive Bayes still does the work on
+# everything the lexicon doesn't recognise.
 #
 # Tokens are stemmed the same way the text is, so "flooding" and "flooded"
 # both reach "flood".
@@ -87,6 +94,62 @@ EQUIPMENT_WORDS = {
 STAND_DOWN_WORDS = ("do not send", "dont send", "no need", "not urgent",
                     "for the record", "nobody hurt", "no damage",
                     "reporting in case", "please do not")
+
+
+# Severity, by phrase, checked before the classifier gets a vote.
+#
+# This exists because we measured the classifier properly and it was not good
+# enough to be the only thing deciding. Held out, naive Bayes alone gets 45%
+# of these 55 reports right — against 36% for always guessing HIGH — and the
+# way it fails is the way that matters: "child not breathing properly" came
+# back MEDIUM, "gas smell, whole street evacuating" came back LOW. A bag of
+# words has no idea that "breathing" is different from "fence".
+#
+# So the same fix that rescued equipment applies here. The phrases below are
+# not mined from our corpus — they are the categories any triage protocol
+# treats as immediate, which is the same START protocol the app already
+# implements: airway, breathing, circulation, entrapment, hazardous material,
+# structural collapse, and dependence on powered medical equipment.
+#
+# Writing them from the protocol rather than from our own failures matters.
+# A lexicon tuned against the reports you measure on will score well on those
+# reports and teach you nothing.
+LIFE_THREAT_PHRASES = (
+    # Airway and breathing.
+    "not breathing", "cannot breathe", "can't breathe", "struggling to breathe",
+    "stopped breathing", "choking", "unresponsive", "unconscious", "no pulse",
+    # Circulation.
+    "chest pain", "bleeding heavily", "severe bleeding", "losing blood",
+    # Entrapment. Deliberately not "cannot get out" — the corpus has "tree
+    # across the driveway, cannot get the car out", which is a blocked car
+    # and a MEDIUM. The phrase has to name a trapped person, not a trapped
+    # object.
+    "trapped", "pinned", "stuck inside", "cannot get her out",
+    "cannot get him out", "cannot get them out",
+    # Hazardous material and live electricity.
+    "gas smell", "smell of gas", "smell gas", "gas leak", "live wire",
+    "power line down", "sparking", "arcing", "carbon monoxide",
+    # Structural collapse.
+    "collapsed", "collapsing", "caved in",
+    # Powered medical dependence — a timer, not an inconvenience.
+    "oxygen concentrator", "ventilator", "dialysis", "insulin",
+    # Moving water on a person.
+    "swept away", "water up to", "water is up to", "going under",
+    # Somebody has already decided it is serious.
+    "evacuating", "evacuate now",
+)
+
+# The opposite: phrases that say plainly this is not an emergency. Somebody
+# who writes "reporting in case it gets worse" has told you the priority.
+# Deliberately not "nobody hurt": the corpus has "road washed out at the
+# bend, nobody hurt but nobody can pass", and an impassable road is still a
+# problem. Nobody being hurt is not the same as nothing being wrong.
+ROUTINE_PHRASES = (
+    "not blocking", "no damage",
+    "reporting in case", "in case it gets", "just letting", "keep an eye",
+    "not near any", "phone works fine", "deeper than usual",
+    "for the record", "no need", "not urgent",
+)
 
 # Words carrying no signal about severity. Deliberately short — aggressive
 # stopword lists throw away "no", "not" and "can't", which are exactly the
@@ -413,6 +476,28 @@ def equipment_for(text: str) -> list[tuple[str, str]]:
     return keep or [(cap, word) for _, cap, word in scored[:1]]
 
 
+def severity_for(text: str) -> tuple[str, str] | None:
+    """Priority the wording states outright, with the phrase that stated it.
+
+    Returns None when nothing matches, which is the common case — most
+    reports don't contain one of these and fall through to the classifier.
+
+    Life-threatening is checked first. A report saying both "trapped" and
+    "not blocking the road" is a trapped person next to an unblocked road.
+    """
+    lowered = " ".join((text or "").lower().split())
+
+    for phrase in LIFE_THREAT_PHRASES:
+        if phrase in lowered:
+            return "HIGH", phrase
+
+    for phrase in ROUTINE_PHRASES:
+        if phrase in lowered:
+            return "LOW", phrase
+
+    return None
+
+
 def _train():
     priority = NaiveBayes(PRIORITIES)
     similarity = Similarity()
@@ -424,7 +509,7 @@ def _train():
     return priority, similarity
 
 
-# Trained once, at import. The whole corpus is sixty-five short strings, so
+# Trained once, at import. The whole corpus is fifty-five short strings, so
 # this costs about a millisecond and there is no model file to ship, version,
 # or forget to commit.
 _PRIORITY, _SIMILARITY = _train()
@@ -440,6 +525,21 @@ def suggest(text: str) -> Suggestion:
         # Two words is not enough to be confident about anything, and being
         # confidently wrong is worse than saying nothing.
         return Suggestion("MEDIUM", 0.0, [], {}, [], confident=False)
+
+    stated = severity_for(text)
+    if stated is not None:
+        # The report says so in words. Trust that over the arithmetic, and
+        # show the phrase, so a coordinator can see exactly what tripped it
+        # and disagree in one glance.
+        label, phrase = stated
+        return Suggestion(
+            priority=label,
+            confidence=1.0,
+            capabilities=[capability for capability, _ in equipment_for(text)],
+            equipment_reasons={cap: word for cap, word in equipment_for(text)},
+            reasons=[phrase],
+            confident=True,
+        )
 
     label, confidence = _PRIORITY.predict(text)
     reasons = _PRIORITY.why(text, label)
