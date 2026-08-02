@@ -55,9 +55,20 @@ PACKET_CHECKIN = 1
 # keeps a coordinate in four bytes instead of eight.
 COORD_SCALE = 100_000
 
-# version, type, responder id, lat, lng, age in minutes
-# B B H i i H  ->  1+1+2+4+4+2 = 14 bytes
-LAYOUT = struct.Struct("!BBHiiH")
+# version, type, responder id, lat, lng, age in minutes, counter
+# B B H i i H I  ->  1+1+2+4+4+2+4 = 18 bytes
+LAYOUT = struct.Struct("!BBHiiHI")
+
+# The counter is what stops a replay. Every packet from a node carries one
+# strictly greater than the last, and the server refuses anything it has
+# already seen — so recording a valid packet off the air and sending it again
+# gets you a 409 rather than a moved pin.
+#
+# Four bytes, not two. Two would wrap at 65535, and wrap handling on a replay
+# defence is exactly the kind of subtlety that turns into the hole. At one
+# check-in a minute, 32 bits lasts about eight thousand years; when a node
+# does run out, it needs a new key, which is a rotation and not a bug.
+MAX_COUNTER = 0xFFFFFFFF
 
 # Sixteen bits of responder id, unsigned. Fine for a county, not for a state.
 MAX_RESPONDER_ID = 0xFFFF
@@ -142,15 +153,18 @@ class Checkin:
     lat: float
     lng: float
     age_minutes: int
+    counter: int = 0
 
 
 def pack_checkin(responder_id: int, lat: float, lng: float,
-                 age_minutes: int = 0) -> bytes:
+                 age_minutes: int = 0, counter: int = 1) -> bytes:
     """Encode a check-in small enough to fit on a radio."""
     if not 0 <= responder_id <= MAX_RESPONDER_ID:
         raise PacketError(f"responder id {responder_id} does not fit in 16 bits")
     if not -90 <= lat <= 90 or not -180 <= lng <= 180:
         raise PacketError("coordinates out of range")
+    if not 0 <= counter <= MAX_COUNTER:
+        raise PacketError(f"counter {counter} does not fit in 32 bits")
 
     packet = LAYOUT.pack(
         PROTOCOL_VERSION,
@@ -159,6 +173,7 @@ def pack_checkin(responder_id: int, lat: float, lng: float,
         round(lat * COORD_SCALE),
         round(lng * COORD_SCALE),
         max(0, min(int(age_minutes), MAX_AGE_MINUTES)),
+        counter,
     )
     if len(packet) > MAX_PACKET_BYTES:
         # Can't happen with the layout above, but the layout is the kind of
@@ -173,7 +188,7 @@ def unpack_checkin(packet: bytes) -> Checkin:
         raise PacketError(
             f"expected {LAYOUT.size} bytes, got {len(packet)}")
 
-    version, kind, responder_id, lat, lng, age = LAYOUT.unpack(packet)
+    version, kind, responder_id, lat, lng, age, counter = LAYOUT.unpack(packet)
 
     if version != PROTOCOL_VERSION:
         raise PacketError(f"protocol version {version}, we speak {PROTOCOL_VERSION}")
@@ -185,4 +200,5 @@ def unpack_checkin(packet: bytes) -> Checkin:
         lat=lat / COORD_SCALE,
         lng=lng / COORD_SCALE,
         age_minutes=age,
+        counter=counter,
     )

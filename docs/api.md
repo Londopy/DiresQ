@@ -110,7 +110,7 @@ green row.
 
 | Method | Route | Body |
 | --- | --- | --- |
-| `POST` | `/api/uplink` | `packet` — base64 of an 18-byte signed check-in |
+| `POST` | `/api/uplink` | `packet` — base64 of a 22-byte signed check-in |
 
 The same check-in, arriving as bytes instead of as a browser. A gateway has no
 session, so the responder is named inside the packet and the packet is signed.
@@ -129,9 +129,10 @@ The layout, from `transport.py`:
 | 4 | latitude × 100000 |
 | 4 | longitude × 100000 |
 | 2 | age in minutes |
+| 4 | counter, strictly increasing per node |
 | 4 | HMAC-SHA256 over all of the above, truncated |
 
-Eighteen bytes total, against a 53-byte budget — the smallest LoRa payload we
+Twenty-two bytes total, against a 53-byte budget — the smallest LoRa payload we
 were willing to design for. Coordinates land within about a metre. The version
 byte is signed too, so nobody can talk the server down to an older format.
 
@@ -148,7 +149,13 @@ the same message, so the endpoint can't be used to find out which responder
 ids are real.
 
 `tools/gateway.py` speaks this, from a pipe or a serial port. What it cannot
-do is replay protection — see [offline.md](offline.md).
+do is authenticate by session, which is the point — see
+[offline.md](offline.md).
+
+Every packet carries a counter, signed with the body. Anything not strictly
+greater than the last accepted from that node is a **409** with the counter it
+last saw, and nothing is written. Gaps are fine; only going backwards is
+refused.
 
 ## Export
 

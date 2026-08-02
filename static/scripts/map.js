@@ -1,3 +1,19 @@
+// Keep the tiles we load, so the map still draws where you have already been
+// when the network goes. Registered from here rather than on every page: the
+// map is the only thing that benefits, and a service worker somebody didn't
+// ask for is a surprise.
+//
+// Needs HTTPS or localhost — browsers refuse to register one otherwise — so
+// this quietly does nothing during development over a LAN address.
+if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/sw.js").catch(() => {
+            // Unsupported, blocked, or not a secure context. The map works
+            // exactly as before; it just won't remember anything.
+        });
+    });
+}
+
 // Katy, TX. Only ever seen if there are no located reports at all.
 const FALLBACK = [29.7858,-95.8244];
 

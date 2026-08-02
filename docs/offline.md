@@ -16,7 +16,7 @@ more than we did.
 
 | | State |
 | --- | --- |
-| Check-in packet format | **Built.** 18 bytes, signed, tested |
+| Check-in packet format | **Built.** 22 bytes, signed, counter-protected |
 | Uplink endpoint | **Built.** `POST /api/uplink`, verifies before writing |
 | Gateway program | **Built.** `tools/gateway.py`, tested over a pipe |
 | Backdated check-ins | **Built.** The server judges a check-in on when it was made |
@@ -25,10 +25,11 @@ more than we did.
 | Deduplication of retries | **Built.** Client ids, so resending is free |
 | Radio hardware and firmware | **Not built.** We have no radios |
 | Serial mode of the gateway | **Written, never run.** No hardware to run it against |
-| Offline map tiles | **Not built** |
+| Map tiles kept once seen | **Built.** Capped, no pre-fetching |
 
-If you read nothing else: **check-ins now survive having no signal.** Reports,
-the feed and the board still need a connection. The radio is not built.
+If you read nothing else: **check-ins survive having no signal, and the map
+keeps drawing where you have already been.** Reports, the feed and the board
+still need a connection. The radio is not built.
 
 ---
 
@@ -54,7 +55,7 @@ rather than writing firmware we could never run and calling it a feature.
 
 ### The message
 
-`transport.py`. A check-in is fourteen bytes:
+`transport.py`. A check-in body is eighteen bytes:
 
 | Bytes | Field |
 | --- | --- |
@@ -64,8 +65,9 @@ rather than writing firmware we could never run and calling it a feature.
 | 4 | latitude × 100000 |
 | 4 | longitude × 100000 |
 | 2 | age in minutes |
+| 4 | counter, strictly increasing per node |
 
-Plus four bytes of signature: **eighteen total.**
+Plus four bytes of signature: **twenty-two total.**
 
 Two details worth defending.
 
@@ -91,7 +93,7 @@ We designed against 53, the second-smallest, and there is a test that fails if
 the layout ever outgrows it. Designing against the 255-byte figure is how you
 discover at the demo that your packet doesn't fit.
 
-Eighteen bytes does not fit DR0. If it had to, the check-in would need
+Twenty-two bytes does not fit DR0. If it had to, the check-in would need
 splitting across two packets, and we'd rather say that than pretend.
 
 ### The signature
@@ -114,10 +116,20 @@ billion attempts. That is not a serious cryptographic margin, and we're
 choosing it knowingly: a full 32-byte tag would be more than twice the size of
 the message it protects, on a link where bytes are the scarce thing.
 
-**What it does not stop:** *replay*. Somebody who records a valid packet off
-the air can send it again later and move that pin. Fixing that needs a
-counter in the packet and a record of the last one accepted — another two
-bytes and a table. It is the first thing we'd add.
+**Replay is handled.** Every packet carries a 32-bit counter, signed along
+with the rest of the body, and the server refuses anything not strictly
+greater than the last it accepted from that node. Recording a packet off the
+air and sending it again returns a 409 and writes nothing.
+
+Four bytes rather than two, deliberately. Sixteen bits wraps after 65,535
+messages and wrap handling on a replay defence is exactly the kind of
+subtlety that becomes the hole. Thirty-two bits lasts about eight thousand
+years at one check-in a minute; when a node genuinely runs out it needs a new
+key, which is a rotation somebody performs rather than something the protocol
+quietly papers over.
+
+Gaps are fine — a node out of range for an hour comes back with a much higher
+counter and is accepted. Only going backwards is refused.
 
 **Key distribution is a person typing.** `flask --app app node-key alice`
 prints a key; you put it in that node. That's the whole mechanism. It works
@@ -152,7 +164,7 @@ path needs nothing and is what the tests exercise.
 ### The node
 
 Not built. It would be an ESP32 with an SX1276, a GPS module, a battery and
-one button. Press it, it reads the GPS, packs eighteen bytes, signs them with
+one button. Press it, it reads the GPS, packs twenty-two bytes, signs them with
 its key, transmits, sleeps.
 
 We don't have the parts, so we haven't written the firmware. Untested
@@ -232,17 +244,37 @@ the future. Both times are kept, and the board marks rows that arrived late,
 so a coordinator can see somebody was out of contact rather than just seeing
 a green row.
 
-### Offline map tiles
+### Map tiles
 
-Also not built. A service worker caching tiles cache-first would let the map
-work in an area you'd already looked at.
+Built, and narrower than it sounds.
 
-Note the ceiling: **a tile cache can only ever cover where you have already
-been.** It cannot pre-fetch somewhere you've never looked, which is often
-exactly where the disaster is. And bulk-downloading tiles to get around that
-is forbidden by the OpenStreetMap tile usage policy — so if you want real
-offline coverage of an area, you need your own tile server or an offline
-format like MBTiles, which is a different project.
+`static/scripts/sw.js` is a service worker that serves map tiles cache-first.
+A tile we already have is always as good as one we would fetch — a road is in
+the same place next week — so the map keeps drawing with no connection, in
+the area you have already looked at.
+
+It is registered from the map page only, and only over HTTPS or localhost,
+because browsers refuse to register a worker anywhere else. During development
+over a LAN address it quietly does nothing.
+
+**The cache is capped** at 1,200 tiles, roughly 20 MB, oldest evicted first.
+Somebody's phone is not ours to fill.
+
+**Nothing else is cached.** Not the feed, not the API, not a report. A cached
+report list is a lie about who currently needs help, and check-ins already
+have the queue. There's a test that fails if either is added to the shell
+list.
+
+Note the ceiling, which no amount of code moves: **a tile cache can only ever
+cover where you have already been.** It cannot pre-fetch somewhere you have
+never looked, which is often exactly where the disaster is. Bulk downloading
+an area to get around that is explicitly forbidden by the OpenStreetMap tile
+usage policy and gets real users blocked — there's a test that fails if
+somebody adds it. Real offline coverage needs your own tile server or an
+offline format like MBTiles, which is a different project.
+
+So the honest description is: **the map keeps working where you have already
+been.** That is worth having and it is not an offline map.
 
 ---
 
@@ -253,7 +285,8 @@ In the order we'd actually do them:
 1. **Queue reports too**, not just check-ins. Harder, because a report filed
    offline may need reconciling against one somebody else already filed for
    the same thing.
-2. **A counter in the uplink packet**, closing the replay hole.
+2. **Signing the packet with a longer tag**, once there is bandwidth budget to
+   spend on it. Four bytes is a deliberate trade, not a comfortable one.
 3. **One node**, built and carried around Katy to find out what the range
    really is, because published LoRa range figures and a suburb with trees
    and houses in it are two different things.

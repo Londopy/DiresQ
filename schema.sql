@@ -26,6 +26,10 @@ CREATE TABLE accounts (
     -- Null until they have one, and an unsigned packet is refused, so the
     -- absence of a key fails closed.
     node_key        TEXT,
+    -- Highest packet counter accepted from this node. Anything not strictly
+    -- greater is a replay: somebody recorded a valid packet off the air and
+    -- sent it again. Starts at zero, and the first real packet is 1.
+    last_uplink     INTEGER NOT NULL DEFAULT 0,
     created_at      TEXT    NOT NULL
 );
 

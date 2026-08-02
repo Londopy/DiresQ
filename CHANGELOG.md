@@ -62,7 +62,7 @@ All notable changes to this project are documented here. Format follows
   Distinct from understaffed: it counts only the ones where nobody has said
   they are coming at all.
 - Check-ins can arrive as bytes instead of as a browser. A check-in packs into
-  eighteen bytes, which fits a LoRa payload with room to spare, and `POST
+  twenty-two bytes, which fits a LoRa payload with room to spare, and `POST
   /api/uplink` accepts one from something that has no session to log in with.
   Both routes in go through the same code, so they cannot drift apart. The
   radio itself is not built.
@@ -128,6 +128,12 @@ All notable changes to this project are documented here. Format follows
   equipment, it says that instead of staying quiet.
 - A social preview card, drawn from the palette by a script rather than by
   hand, so it can be regenerated when the wording changes.
+- The map keeps the tiles it has already drawn, so it still shows where you
+  have been when the network goes. It does not download an area in advance —
+  that would only help somewhere you have never looked, which is usually where
+  the disaster is, and the OpenStreetMap usage policy forbids it. The cache is
+  capped, and nothing about the feed or the API is kept, because a stale list
+  of who needs help is worse than no list.
 - `GET /api/model` says what the classifier is, what it was trained on, and
   what it is bad at. Public and unauthenticated, because anyone should be able
   to find out what the software is doing to their report.
@@ -228,6 +234,23 @@ All notable changes to this project are documented here. Format follows
   schema and fails if anything is created that is never dropped.
 
 ### Security
+
+- A radio packet can no longer be replayed. A signature proves who made a
+  packet and says nothing about when, so anyone who recorded one off the air
+  could send the same bytes later and move that pin. Packets now carry a
+  counter, signed along with everything else, and anything not strictly
+  greater than the last accepted from that node is refused. Gaps are fine — a
+  node out of range for an hour comes back higher; only going backwards is
+  suspicious. We had this written down as an open weakness before fixing it.
+- Security headers on every response: a content policy that refuses inline
+  and evaluated script, no MIME sniffing, no framing, a referrer policy that
+  keeps report addresses out of outbound links, and permissions limited to
+  location. HTTPS strict transport is sent only when the site is actually
+  served over HTTPS, since sending it from a laptop pins that browser to a
+  local address for a year.
+- A security policy at the root of the repository, saying what is in scope,
+  what we already know is wrong, and what we fixed after finding it
+  ourselves.
 
 - Signing in could be made to bounce you to another website. The address to
   return to was taken from the link you arrived on and used without being

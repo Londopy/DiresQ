@@ -101,7 +101,8 @@ Don't, without reading this list first — none of it is done:
   data about identifiable people
 - No age gate on sign-up
 - No data retention policy; nothing is ever deleted
-- `/api/uplink` accepts signed radio packets but cannot detect a replayed one
+- `/api/uplink` is unauthenticated by session — a gateway has no cookie — so
+  it must not be exposed to the internet, signed packets or not
 - Session lockouts are held in memory and reset when the process restarts
 - Built and tested by three people, none of whom are professionals
 

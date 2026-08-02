@@ -421,6 +421,19 @@ def favicon():
     return send_from_directory(app.static_folder + "/images", "favicon.ico")
 
 
+# A service worker can only control pages at or below its own path, so this
+# has to be served from the root rather than from /static/ where the file
+# actually lives. Serving it from /static/scripts/sw.js would give it a scope
+# of /static/scripts/ and it would control nothing.
+@app.get("/sw.js")
+def service_worker():
+    response = send_from_directory(app.static_folder + "/scripts", "sw.js")
+    response.headers["Content-Type"] = "application/javascript"
+    # Don't let a browser hold on to an old worker for a year.
+    response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 @app.get("/robots.txt")
 def robots():
     # Live reports name real addresses. None of it should be searchable.
@@ -874,6 +887,65 @@ def sweep_silent_responders() -> list[int]:
 # not lovely, but it is idempotent, and the alternative is a cron job nobody
 # starts.
 SWEEP_ON = {"homepage", "board", "map_page", "api_reports", "api_responders"}
+
+
+# Content Security Policy. Everything comes from us, except Leaflet's script
+# and CSS and the OpenStreetMap tiles, which are named explicitly rather than
+# allowed by a wildcard.
+#
+# No 'unsafe-eval'. 'unsafe-inline' is here for styles only, because Leaflet
+# sets inline styles on every tile it positions and there is no way to run it
+# without that. Scripts do not get it, which is the half that stops injected
+# markup from executing.
+CONTENT_SECURITY_POLICY = "; ".join([
+    "default-src 'self'",
+    "script-src 'self' https://unpkg.com",
+    "style-src 'self' 'unsafe-inline' https://unpkg.com",
+    "img-src 'self' data: https://*.tile.openstreetmap.org",
+    "connect-src 'self'",
+    "font-src 'self'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+])
+
+
+@app.after_request
+def security_headers(response):
+    """Headers that cost nothing and close whole categories of attack.
+
+    Absence of these is the first thing an automated scanner reports, and
+    every one of them is a single line that turns a class of bug into a
+    non-issue.
+    """
+    response.headers.setdefault("Content-Security-Policy",
+                                CONTENT_SECURITY_POLICY)
+
+    # Stop the browser guessing that a .txt is really a script.
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+
+    # Nobody has any business framing this. frame-ancestors in the CSP says
+    # the same thing to modern browsers; this is for the older ones.
+    response.headers.setdefault("X-Frame-Options", "DENY")
+
+    # Reports name real addresses. Don't leak the URL of the page somebody
+    # was looking at to whatever they click through to.
+    response.headers.setdefault("Referrer-Policy",
+                                "strict-origin-when-cross-origin")
+
+    # We ask for location. Nothing else, and nothing at all from a frame.
+    response.headers.setdefault(
+        "Permissions-Policy",
+        "geolocation=(self), camera=(), microphone=(), payment=()")
+
+    # Only meaningful over HTTPS, and only set there — sending it from
+    # localhost would pin a developer's browser to https://127.0.0.1.
+    if os.environ.get("DIRESQ_HTTPS_ONLY") == "1":
+        response.headers.setdefault(
+            "Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+
+    return response
 
 
 @app.before_request
@@ -1472,8 +1544,10 @@ def api_uplink():
     except transport.PacketError as err:
         return jsonify({"error": str(err)}), 400
 
-    who = get_db().execute("SELECT id, node_key FROM accounts WHERE id = ?",
-                           (claimed,)).fetchone()
+    db = get_db()
+    who = db.execute(
+        "SELECT id, node_key, last_uplink FROM accounts WHERE id = ?",
+        (claimed,)).fetchone()
 
     # Same answer whether the account doesn't exist or has no key. Otherwise
     # this endpoint tells you which responder ids are real.
@@ -1489,6 +1563,23 @@ def api_uplink():
         # drop it.
         return jsonify({"error": str(err)}), 400
 
+    # A valid signature proves the packet was written by somebody with the
+    # key. It does not prove it was written *now* — a recording of one is
+    # byte-identical. The counter is what makes it fresh: strictly greater
+    # than anything already accepted, or it has been seen before.
+    if checkin.counter <= who["last_uplink"]:
+        return jsonify({
+            "error": "replayed or out-of-order packet",
+            "counter": checkin.counter,
+            "last_accepted": who["last_uplink"],
+        }), 409
+
+    # Recorded before the check-in is written, so a crash between the two
+    # loses a check-in rather than reopening the window.
+    db.execute("UPDATE accounts SET last_uplink = ? WHERE id = ?",
+               (checkin.counter, who["id"]))
+    db.commit()
+
     # The packet carries an age, not a timestamp — a node running off a
     # battery in a flood is the last clock you want to trust.
     happened_at = (datetime.now(timezone.utc)
@@ -1497,6 +1588,7 @@ def api_uplink():
     result = record_checkin(checkin.responder_id, checkin.lat, checkin.lng,
                             happened_at)
     result["responder_id"] = checkin.responder_id
+    result["counter"] = checkin.counter
     result["bytes"] = len(packet)
     return jsonify(result), 201
 

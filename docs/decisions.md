@@ -149,12 +149,12 @@ Our notes had LoRa on the roadmap. We still don't have radios, so we still
 haven't built one.
 
 What we did build is the thing that would have to be right first: the
-*message*. `transport.py` encodes a check-in as 14 bytes and `/api/uplink`
+*message*. `transport.py` encodes a check-in as 22 bytes and `/api/uplink`
 accepts it as base64, going through exactly the same `record_checkin` as the
 browser does. Both routes in end up at one function, so they can't drift
 apart.
 
-Fourteen bytes clears every LoRa data rate except the very slowest, and we
+Twenty-two bytes clears every LoRa data rate except the very slowest, and we
 have a test that fails if the layout ever grows past a payload we'd actually
 get. That's a claim we can defend. "We support LoRa" is not.
 

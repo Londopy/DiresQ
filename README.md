@@ -15,7 +15,7 @@ DiresQ tracks the people going into it.**
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
 [![Flask](https://img.shields.io/badge/flask-3.1-black)](https://flask.palletsprojects.com)
 [![SQLite](https://img.shields.io/badge/sqlite-3-003B57)](https://sqlite.org)
-[![Tests](https://img.shields.io/badge/tests-310%20passing-brightgreen)](tests/test_app.py)
+[![Tests](https://img.shields.io/badge/tests-335%20passing-brightgreen)](tests/test_app.py)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 [![Accessibility](https://img.shields.io/badge/accessibility-WCAG_2.1_AA_audited-a6e3a1)](docs/accessibility.md)
@@ -115,7 +115,7 @@ on its own, and now somebody knows where to start looking.
   nobody going to them at all. Not the same as understaffed.
 - **ICS-214 export** — the activity log agencies already keep, built from
   records rather than from memory.
-- **Check-ins over a radio** — a check-in packs into 18 signed bytes, small
+- **Check-ins over a radio** — a check-in packs into 22 signed bytes, small
   enough for LoRa, and `tools/gateway.py` forwards them from a pipe or a
   serial port to `/api/uplink`. Every packet is verified against that
   responder's key before anything is written.
@@ -185,7 +185,9 @@ Pages are server-rendered; everything under `/api` returns JSON.
 | `POST` | `/api/reports/<id>/staffing` | `need_more` · `adequate` · `overstaffed` · `stood_down`. On-scene only |
 | `POST` | `/api/assignments/<id>/status` | `on_scene` then `cleared`. Forward only, your own only |
 | `POST` | `/api/checkin` | `{lat, lng}` — resets your timer |
-| `POST` | `/api/uplink` | A check-in as a base64 14-byte packet. No session — see limits |
+| `POST` | `/api/uplink` | A check-in as a base64 22-byte signed packet. No session — see limits |
+| `POST` | `/api/suggest` | Description in, suggested priority, equipment and duplicates out |
+| `GET` | `/api/model` | What the classifier is and what it's bad at. No login |
 | `POST` | `/api/triage` | Four observations in, START category out |
 | `GET` | `/export/ics214` | Activity log as CSV |
 
@@ -224,7 +226,7 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
-310 test functions covering every route, the permission rules, feed ordering,
+335 test functions covering every route, the permission rules, feed ordering,
 staffing resolution, ETA parsing, overdue calculation, packet signing, the
 offline queue, the auth guardrails and an adversarial pass. CI runs them on
 every push, along with a boot check against a real server.
@@ -241,6 +243,8 @@ eta.py              free-text ETA parsing with a confidence gate
 triage.py           START triage, mapped onto report severity
 transport.py        the check-in packet, small enough for a radio
 tools/gateway.py    forwards packets from a pipe or a serial port
+tools/demo_state.py winds the clock so the board goes red on camera
+tools/make_og.py    draws the social preview card
 schema.sql          accounts · reports · assignments · checkins
 templates/          Jinja pages
 static/             CSS, JS, images
@@ -251,7 +255,10 @@ docs/               twelve pages: why, install, architecture, decisions,
                     Devpost draft, which are working notes rather than
                     published pages
 site/               Astro docs site, built from docs/
-.github/workflows/  ci · security · changelog · pages
+static/scripts/sw.js  caches map tiles you have already seen
+SECURITY.md         what's in scope, what we know is wrong
+render.yaml         one-file deployment, plus start.sh
+.github/workflows/  ci · security · changelog · pages · release
 ```
 
 ## Commands
@@ -307,6 +314,7 @@ git push --tags
   start means for anyone you send the link to
 - [The classifier](docs/model.md) — naive Bayes over 65 labelled reports, the
   measured duplicate threshold, and why it isn't a language model
+- [SECURITY.md](SECURITY.md) — disclosure policy, scope, and what we already know is wrong
 - [Security](docs/security.md) — the threat model, packet signing, and the
   open redirect we shipped by accident
 - [Accessibility](docs/accessibility.md) — the WCAG 2.1 AA audit: nine issues

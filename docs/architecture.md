@@ -13,7 +13,7 @@ something in the code, or take it apart.
 
 Flask, SQLite through the `sqlite3` module, Jinja templates rendered on the
 server, and a small amount of JavaScript that layers on top. Roughly 2,300
-lines of Python across six modules, 26 routes, five tables, 310 test
+lines of Python across six modules, 27 routes, five tables, 335 test
 functions.
 
 ```
@@ -273,7 +273,7 @@ by report and by responder, check-ins by `(responder, created_at DESC)`.
 
 ## Testing
 
-310 test functions, which parametrisation expands into over three hundred
+335 test functions, which parametrisation expands into over three hundred
 cases. Each gets a throwaway database
 via `tmp_path`, so order never matters and a failure can't poison the next
 test.
@@ -319,7 +319,7 @@ happens.
 | `schema.sql` | 123 | Five tables, five indexes, all the constraints |
 
 `app.py` is one file on purpose. Blueprints buy separation of concerns at the
-cost of indirection, and at 1,700 lines with 26 routes the concerns aren't
+cost of indirection, and at 1,700 lines with 27 routes the concerns aren't
 separable in a way that would help anyone reading it. The point at which to
 split it is when two people need to edit different parts of it at once, and
 that hasn't happened.

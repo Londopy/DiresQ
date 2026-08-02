@@ -96,7 +96,7 @@ The triage helper runs a real protocol and gives a real category. It decides
 who gets reached first. It is not medical advice, it doesn't tell you what to
 do when you get there, and it doesn't replace a clinician.
 
-## An uplink packet can be replayed
+## The radio protocol, and what is left in it
 
 `/api/uplink` takes a check-in as bytes rather than as a logged-in browser,
 because a radio gateway has no session and no cookie. The responder is named
@@ -104,10 +104,12 @@ inside the packet, and every packet carries four bytes of HMAC over its body,
 checked against that responder's key before anything is written. An unsigned
 or wrongly-signed packet is refused.
 
-What that does not stop is a *replay*: somebody who records a valid packet off
-the air can send the same bytes again later and move that pin. Closing it
-needs a counter in the packet and a record of the last one accepted — two more
-bytes and a table.
+Replay used to be the open hole here, and it is closed. Every packet carries a
+counter, signed with everything else, and the server refuses anything not
+strictly greater than the last it accepted — so recording a valid packet off
+the air and sending it again gets a 409 rather than a moved pin.
+
+What remains is the size of the signature.
 
 Four bytes of signature is 32 bits, so a blind forgery gets through about once
 in four billion tries. That's a deliberate trade against a link where a full

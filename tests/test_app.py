@@ -1285,6 +1285,90 @@ class TestSignedPackets:
         assert len({transport.new_node_key() for _ in range(50)}) == 50
 
 
+class TestReplayProtection:
+    """A signature proves who made a packet. It says nothing about when.
+
+    Anybody who records a valid packet off the air can send the same bytes
+    again an hour later, and without a counter the server would happily move
+    that pin. This is the attack we documented against ourselves and then
+    fixed.
+    """
+
+    def key_for(self, responder_id=1):
+        with diresq.app.app_context():
+            return diresq.get_db().execute(
+                "SELECT node_key FROM accounts WHERE id = ?",
+                (responder_id,)).fetchone()["node_key"]
+
+    def send(self, client, counter, responder_id=1, key=None):
+        body = transport.pack_checkin(responder_id, 29.78, -95.82, 1,
+                                      counter=counter)
+        sealed = transport.seal(body, key or self.key_for(responder_id))
+        return client.post("/api/uplink",
+                           json={"packet": base64.b64encode(sealed).decode()})
+
+    def test_a_fresh_packet_is_accepted(self, anon):
+        assert self.send(anon, 1).status_code == 201
+
+    def test_the_same_packet_twice_is_refused(self, anon):
+        self.send(anon, 1)
+        assert self.send(anon, 1).status_code == 409
+
+    def test_an_older_counter_is_refused(self, anon):
+        self.send(anon, 5)
+        assert self.send(anon, 4).status_code == 409
+        assert self.send(anon, 1).status_code == 409
+
+    def test_a_replay_writes_nothing(self, anon):
+        self.send(anon, 1)
+        before = self.checkins()
+        for _ in range(5):
+            self.send(anon, 1)
+        assert self.checkins() == before
+
+    def test_counters_carry_on_going_up(self, anon):
+        for n in range(1, 6):
+            assert self.send(anon, n).status_code == 201
+        assert self.checkins() == 5
+
+    def test_gaps_are_fine(self, anon):
+        # A node out of range for an hour comes back with a much higher
+        # counter. Only going backwards is suspicious.
+        assert self.send(anon, 1).status_code == 201
+        assert self.send(anon, 900).status_code == 201
+
+    def test_the_counter_is_per_node(self, anon):
+        # One responder's traffic must not lock another out.
+        assert self.send(anon, 10, responder_id=1).status_code == 201
+        assert self.send(anon, 1, responder_id=2).status_code == 201
+
+    def test_the_counter_cannot_be_edited_in_flight(self, anon):
+        # It's inside the signed body, so bumping it invalidates the tag.
+        body = transport.pack_checkin(1, 29.78, -95.82, 1, counter=1)
+        sealed = bytearray(transport.seal(body, self.key_for(1)))
+        sealed[-5] ^= 0x01          # last byte of the counter, before the tag
+        res = anon.post("/api/uplink", json={
+            "packet": base64.b64encode(bytes(sealed)).decode()})
+        assert res.status_code == 400
+
+    def test_the_refusal_says_what_it_last_accepted(self, anon):
+        self.send(anon, 7)
+        body = self.send(anon, 7).get_json()
+        assert body["last_accepted"] == 7
+
+    def test_it_still_fits_a_radio_payload(self):
+        sealed = transport.seal(
+            transport.pack_checkin(65535, -33.8, 151.2, 240,
+                                   counter=transport.MAX_COUNTER),
+            transport.new_node_key())
+        assert len(sealed) <= transport.MAX_PACKET_BYTES
+
+    def checkins(self):
+        with diresq.app.app_context():
+            return diresq.get_db().execute(
+                "SELECT COUNT(*) c FROM checkins").fetchone()["c"]
+
+
 class TestUplink:
     """The same check-in, arriving as bytes instead of as a browser."""
 
@@ -1956,6 +2040,22 @@ class TestTheDocsAreNotOutOfDate:
         actual = len(re.findall(r"CREATE TABLE (\w+)", sql))
         assert actual == 5, "docs say five tables in several places"
 
+    def test_the_documented_packet_size_is_the_real_one(self):
+        # The packet grew from 14 to 18 to 22 bytes as it gained a signature
+        # and then a counter, and six documents claimed the old number each
+        # time. This is cheaper than remembering.
+        actual = transport.LAYOUT.size + transport.SIGNATURE_BYTES
+        words = {14: "fourteen", 18: "eighteen", 22: "twenty-two"}
+        root = diresq.SCHEMA.parent
+        for name in ["docs/api.md", "docs/offline.md", "docs/decisions.md",
+                     "README.md"]:
+            text = (root / name).read_text(encoding="utf-8").lower()
+            for size, word in words.items():
+                if size == actual:
+                    continue
+                assert f"{size} signed bytes" not in text, f"{name}: {size}"
+                assert f"{word} bytes total" not in text, f"{name}: {word}"
+
     def test_the_licence_is_named_consistently(self):
         # The licence changed from MIT to Apache-2.0 before the hackathon and
         # two files went on saying MIT for a week.
@@ -2350,6 +2450,94 @@ class TestDemoMode:
             encoding="utf-8")
         path = re.search(r"healthCheckPath:\s*(\S+)", blueprint).group(1)
         assert anon.get(path).status_code == 200
+
+
+class TestSecurityHeaders:
+    """One line each, and each closes a category. Their absence is the first
+    thing an automated scanner reports."""
+
+    @pytest.mark.parametrize("header,expected", [
+        ("X-Content-Type-Options", "nosniff"),
+        ("X-Frame-Options", "DENY"),
+        ("Referrer-Policy", "strict-origin-when-cross-origin"),
+    ])
+    def test_the_simple_ones_are_set(self, client, header, expected):
+        assert client.get("/").headers.get(header) == expected
+
+    def test_scripts_may_not_be_inlined(self, client):
+        # 'unsafe-inline' on script-src is what makes injected markup
+        # executable. Styles need it for Leaflet; scripts never do.
+        policy = client.get("/").headers["Content-Security-Policy"]
+        script = [p for p in policy.split(";") if "script-src" in p][0]
+        assert "unsafe-inline" not in script
+        assert "unsafe-eval" not in policy
+
+    def test_the_policy_covers_what_the_map_needs(self, client):
+        policy = client.get("/map").headers["Content-Security-Policy"]
+        assert "tile.openstreetmap.org" in policy
+        assert "unpkg.com" in policy
+
+    def test_nothing_may_frame_us(self, client):
+        assert "frame-ancestors 'none'" in \
+            client.get("/").headers["Content-Security-Policy"]
+
+    def test_only_location_is_asked_for(self, client):
+        permissions = client.get("/").headers["Permissions-Policy"]
+        assert "geolocation=(self)" in permissions
+        assert "camera=()" in permissions
+
+    def test_hsts_is_absent_on_plain_http(self, client, monkeypatch):
+        # Sending it from localhost pins a developer's browser to
+        # https://127.0.0.1, which is a bad afternoon.
+        monkeypatch.delenv("DIRESQ_HTTPS_ONLY", raising=False)
+        assert "Strict-Transport-Security" not in client.get("/").headers
+
+    def test_hsts_appears_behind_https(self, client, monkeypatch):
+        monkeypatch.setenv("DIRESQ_HTTPS_ONLY", "1")
+        assert "max-age=" in client.get("/").headers["Strict-Transport-Security"]
+
+    @pytest.mark.parametrize("page", ["/", "/board", "/map", "/api/reports",
+                                      "/disclaimer", "/login"])
+    def test_every_response_carries_them(self, client, page):
+        assert client.get(page).headers.get("X-Content-Type-Options") == "nosniff"
+
+
+class TestServiceWorker:
+    """Keeps map tiles you have already seen. Not an offline map."""
+
+    def test_it_is_served_from_the_root(self, client):
+        # A worker only controls pages at or below its own path. Served from
+        # /static/scripts/ it would control nothing.
+        res = client.get("/sw.js")
+        assert res.status_code == 200
+        assert "javascript" in res.headers["Content-Type"]
+
+    def test_it_is_not_cached_for_a_year(self, client):
+        assert "no-cache" in client.get("/sw.js").headers.get("Cache-Control", "")
+
+    def test_the_map_registers_it(self, client):
+        assert "/sw.js" in client.get(
+            "/static/scripts/map.js").get_data(as_text=True)
+
+    def test_it_does_not_bulk_download_tiles(self):
+        # Pre-fetching an area is against the OSM tile usage policy and gets
+        # real users blocked. If somebody adds it, this fails.
+        source = (diresq.SCHEMA.parent / "static" / "scripts" / "sw.js"
+                  ).read_text(encoding="utf-8")
+        for banned in ["for (let z", "prefetch", "downloadArea", "seedTiles"]:
+            assert banned not in source
+
+    def test_it_caps_how_much_it_keeps(self, client):
+        source = (diresq.SCHEMA.parent / "static" / "scripts" / "sw.js"
+                  ).read_text(encoding="utf-8")
+        assert "MAX_TILES" in source, "no cap means filling somebody's phone"
+
+    def test_it_never_caches_the_feed(self, client):
+        # A cached report list is a lie about who currently needs help.
+        source = (diresq.SCHEMA.parent / "static" / "scripts" / "sw.js"
+                  ).read_text(encoding="utf-8")
+        assert '"/"' not in source.split("SHELL_FILES")[1].split("]")[0]
+        assert "/api/" not in source.split("SHELL_FILES")[1].split("]")[0]
 
 
 class TestSafetyNotices:
