@@ -189,6 +189,9 @@ gap:10px;
 
     cursor:pointer;
 
+    color: var(--text);
+    font-weight: bold;
+
     justify-content:center;
     align-items:center;
     flex-direction:column;

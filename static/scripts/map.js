@@ -99,3 +99,33 @@ map.removeLayer(marker);
 });
 
 });
+
+fetch("/api/responders")
+.then(res => res.json())
+.then(responders => {
+
+    responders.forEach(responder => {
+
+        const pos = responder.last_position;
+        if(!pos || pos.lat == null || pos.lng == null){
+            return;
+        }
+
+        L.circleMarker(
+            [pos.lat, pos.lng],
+            {
+                radius:8,
+                color:"#89b4fa",
+                fillColor:"#89b4fa",
+                fillOpacity:1
+            }
+        )
+        .addTo(map)
+        .bindPopup(`
+            <b>${responder.username}</b><br>
+            🚑 ${responder.state || "Active Responder"}
+        `);
+
+    });
+
+});
