@@ -395,13 +395,42 @@ class TestEtaParsing:
     @pytest.mark.parametrize("text,why", [
         ("", "nothing typed"),
         ("asdfgh", "not a time at all"),
-        ("back in a couple hours", "timefuzz has no rule for this phrasing"),
-        ("30 min", "shorthand timefuzz does not parse"),
+        ("soon", "no duration in it"),
+        ("in a bit", "no duration in it"),
+        ("end of day", "not a duration, and timefuzz has no rule for it"),
     ])
     def test_unparseable_input_is_refused_not_guessed(self, text, why):
         r = eta.parse_eta(text)
         assert not r.accepted, why
         assert r.message, "refused without telling anyone why"
+
+    @pytest.mark.parametrize("text,minutes", [
+        ("30 minutes", 30),
+        ("30 mins", 30),
+        ("30 min", 30),
+        ("20m", 20),
+        ("45", 45),
+        ("2 hours", 120),
+        ("2 hrs", 120),
+        ("2h", 120),
+        ("an hour", 60),
+        ("half an hour", 30),
+        ("an hour and a half", 90),
+        ("a couple hours", 120),
+        ("back in a couple hours", 120),
+        ("three hours", 180),
+    ])
+    def test_bare_durations_are_understood(self, text, minutes):
+        now = datetime(2026, 8, 1, 21, 30, tzinfo=timezone.utc)
+        r = eta.parse_eta(text, now=now)
+        assert r.accepted, f"{text!r} should parse"
+        assert r.when == now + timedelta(minutes=minutes)
+
+    def test_normalising_leaves_calendar_phrasing_alone(self):
+        for text in ["next friday", "tomorrow", "end of q3", "asdfgh"]:
+            assert eta.normalise(text) == text, (
+                f"rewrote {text!r}, which is not a duration"
+            )
 
     def test_parse_errors_never_escape(self):
         # The whole point of the wrapper: ParseError must not reach the route.

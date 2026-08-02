@@ -14,6 +14,7 @@ notices. Everything here exists to avoid setting one from a guess.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -27,6 +28,60 @@ WARN_MINUTES = 120
 MIN_MINUTES = 5
 # timefuzz reports how sure it is. Under this we ask rather than assume.
 CONFIDENCE_FLOOR = 0.8
+
+
+# Bare durations timefuzz has no rule for: "30 minutes", "2 hrs", "half an
+# hour". Rewritten to the "in N units" form it does understand. Only exact
+# matches are rewritten, so nothing ambiguous is silently reinterpreted.
+_WORD_QTY = {
+    "a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4,
+    "couple": 2, "a couple": 2, "a couple of": 2, "few": 3, "a few": 3,
+}
+_MINUTE_UNITS = {"m", "min", "mins", "minute", "minutes"}
+_HOUR_UNITS = {"h", "hr", "hrs", "hour", "hours"}
+
+_DURATION = re.compile(
+    r"^(?:back\s+)?(?:in\s+)?"
+    r"(?P<qty>\d+|a\s+couple\s+of|a\s+couple|a\s+few|an?|one|two|three|four|couple|few)"
+    r"\s*"
+    r"(?P<unit>m|mins?|minutes?|h|hrs?|hours?)"
+    r"$",
+    re.IGNORECASE,
+)
+
+
+def normalise(text: str) -> str:
+    """Rewrite a bare duration into the phrasing timefuzz parses.
+
+    Anything that is not clearly a duration is returned untouched, so real
+    calendar phrasing ("next friday") still reaches the parser intact.
+    """
+    raw = " ".join(text.lower().split())
+
+    if raw in ("half an hour", "half hour", "a half hour"):
+        return "in 30 minutes"
+    if raw in ("an hour and a half", "hour and a half", "1.5 hours"):
+        return "in 90 minutes"
+
+    # A bare number in a check-in box means minutes.
+    if raw.isdigit():
+        return f"in {int(raw)} minutes"
+
+    match = _DURATION.match(raw)
+    if not match:
+        return text
+
+    qty_text = " ".join(match.group("qty").split())
+    qty = int(qty_text) if qty_text.isdigit() else _WORD_QTY.get(qty_text)
+    if qty is None:
+        return text
+
+    unit = match.group("unit")
+    if unit in _MINUTE_UNITS:
+        return f"in {qty} minutes"
+    if unit in _HOUR_UNITS:
+        return f"in {qty} hours"
+    return text
 
 
 @dataclass
@@ -45,6 +100,8 @@ def parse_eta(text: str, now: datetime | None = None) -> EtaResult:
 
     if not text:
         return EtaResult(False, message="No ETA given.")
+
+    text = normalise(text)
 
     try:
         result = timefuzz.parse(text, now=now)
