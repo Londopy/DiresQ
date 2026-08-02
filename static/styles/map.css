@@ -7,6 +7,7 @@
 --red:#f38ba8;
 --yellow:#f9e2af;
 --green:#a6e3a1;
+--blue:#89b4fa;
 
 }
 
@@ -165,13 +166,13 @@ border-left:6px solid var(--green);
 
 .legend-marker.report{
 
-    background:var(--red);
+    background:var(--blue);
 
 }
 
 .legend-marker.responder{
 
-    background:var(--green);
+    background:var(--red);
 
 }
 

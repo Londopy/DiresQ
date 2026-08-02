@@ -116,32 +116,81 @@ map.removeLayer(marker);
 
 });
 
+function getResponderColor(state){
+
+    switch(state){
+
+        case "overdue":
+            return "#f38ba8";
+
+        case "on_scene":
+            return "#a6e3a1";
+
+        case "en_route":
+            return "#89b4fa";
+
+        case "available":
+            return "#a6adc8";
+
+        default:
+            return "#cdd6f4";
+    }
+
+}
+
+function formatState(state){
+
+    switch(state){
+
+        case "on_scene":
+            return "On Scene";
+
+        case "en_route":
+            return "En Route";
+
+        case "overdue":
+            return "Overdue";
+
+        case "available":
+            return "Available";
+
+        default:
+            return state;
+    }
+
+}
+
 fetch("/api/responders")
-.then(res => res.json())
-.then(responders => {
+    .then(res => res.json())
+    .then(responders => {
 
-    responders.forEach(responder => {
+        responders.forEach(responder => {
 
-        const pos = responder.last_position;
-        if(!pos || pos.lat == null || pos.lng == null){
-            return;
-        }
+            if (!responder.last_position) return;
 
-        L.circleMarker(
-            [pos.lat, pos.lng],
-            {
-                radius:8,
-                color:"#89b4fa",
-                fillColor:"#89b4fa",
-                fillOpacity:1
-            }
-        )
-        .addTo(map)
-        .bindPopup(`
-            <b>${responder.username}</b><br>
-            🚑 ${responder.state || "Active Responder"}
-        `);
+            const { lat, lng } = responder.last_position;
+
+            const marker = L.circleMarker([lat, lng], {
+                radius: 8,
+                color: getResponderColor(responder.state),
+                fillColor: getResponderColor(responder.state),
+                fillOpacity: 1,
+                weight: 2
+            }).addTo(map);
+
+            marker.bindPopup(`
+                <strong>${responder.username}</strong><br>
+
+                Status: ${formatState(responder.state)}<br>
+
+                ${responder.assignment
+                    ? `Assignment: ${responder.assignment.report_subject}<br>`
+                    : "Available<br>"}
+
+                Last Check-in:
+                ${new Date(responder.last_position.at).toLocaleString()}
+            `);
+
+        });
 
     });
-
-});
