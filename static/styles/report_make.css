@@ -202,3 +202,49 @@ padding:20px;
     font-size:.9rem;
 
 }
+
+.flashes{
+
+    list-style:none;
+
+    margin:15px 0 20px;
+
+    padding:0;
+
+}
+
+.flashes li{
+
+    background:rgba(243,139,168,.15);
+
+    border-left:4px solid var(--red);
+
+    color:var(--text);
+
+    padding:12px 15px;
+
+    border-radius:10px;
+
+    margin-bottom:10px;
+
+    animation:fadeIn .2s ease;
+
+}
+
+@keyframes fadeIn{
+
+    from{
+
+        opacity:0;
+        transform:translateY(-5px);
+
+    }
+
+    to{
+
+        opacity:1;
+        transform:translateY(0);
+
+    }
+
+}
