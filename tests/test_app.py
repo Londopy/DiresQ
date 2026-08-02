@@ -254,6 +254,177 @@ class TestBoard:
         assert anon.get("/api/responders").status_code == 302
 
 
+def assignment_id_for(report_id, username="londo"):
+    with diresq.app.app_context():
+        return diresq.get_db().execute("""
+            SELECT asg.id FROM assignments asg
+            JOIN accounts a ON a.id = asg.responder
+            WHERE asg.report_id = ? AND a.username = ?
+        """, (report_id, username)).fetchone()["id"]
+
+
+class TestAssignmentStatus:
+    def test_en_route_advances_to_on_scene(self, client):
+        client.post("/report/1/rescue")
+        aid = assignment_id_for(1)
+        r = client.post(f"/api/assignments/{aid}/status", json={"status": "on_scene"})
+        assert r.status_code == 200
+        assert r.get_json()["status"] == "on_scene"
+
+    def test_full_progression(self, client):
+        client.post("/report/1/rescue")
+        aid = assignment_id_for(1)
+        for step in ("on_scene", "cleared"):
+            assert client.post(f"/api/assignments/{aid}/status",
+                               json={"status": step}).status_code == 200
+
+    @pytest.mark.parametrize("target", ["cleared", "en_route", "nonsense", ""])
+    def test_illegal_transitions_from_en_route_are_400(self, client, target):
+        client.post("/report/1/rescue")
+        aid = assignment_id_for(1)
+        r = client.post(f"/api/assignments/{aid}/status", json={"status": target})
+        assert r.status_code == 400, f"allowed en_route -> {target}"
+
+    def test_cannot_reverse_out_of_on_scene(self, client):
+        client.post("/report/1/rescue")
+        aid = assignment_id_for(1)
+        client.post(f"/api/assignments/{aid}/status", json={"status": "on_scene"})
+        r = client.post(f"/api/assignments/{aid}/status", json={"status": "en_route"})
+        assert r.status_code == 400, "un-arrived at a scene"
+
+    def test_cannot_advance_someone_elses_assignment(self, client):
+        client.post("/report/1/rescue")
+        aid = assignment_id_for(1)
+        with diresq.app.app_context():
+            db = diresq.get_db()
+            other = db.execute(
+                "SELECT id FROM accounts WHERE username = 'skythe'").fetchone()["id"]
+            db.execute("UPDATE assignments SET responder = ? WHERE id = ?", (other, aid))
+            db.commit()
+        r = client.post(f"/api/assignments/{aid}/status", json={"status": "on_scene"})
+        assert r.status_code == 403
+
+    def test_missing_assignment_is_404(self, client):
+        assert client.post("/api/assignments/999/status",
+                           json={"status": "on_scene"}).status_code == 404
+
+    def test_clearing_frees_the_responder_on_the_board(self, client):
+        client.post("/report/1/rescue")
+        aid = assignment_id_for(1)
+        client.post(f"/api/assignments/{aid}/status", json={"status": "on_scene"})
+        client.post(f"/api/assignments/{aid}/status", json={"status": "cleared"})
+        row = next(r for r in client.get("/api/responders").get_json()
+                   if r["username"] == "londo")
+        assert row["state"] == "available"
+        assert row["assignment"] is None
+
+
+class TestStaffingVotes:
+    def on_scene(self, client, report_id=1):
+        client.post(f"/report/{report_id}/rescue")
+        aid = assignment_id_for(report_id)
+        client.post(f"/api/assignments/{aid}/status", json={"status": "on_scene"})
+        return aid
+
+    def test_on_scene_responder_can_vote(self, client):
+        self.on_scene(client)
+        r = client.post("/api/reports/1/staffing", json={"staffing": "need_more"})
+        assert r.status_code == 200
+        assert r.get_json()["staffing"] == "need_more"
+
+    def test_en_route_responder_cannot_vote(self, client):
+        client.post("/report/1/rescue")
+        r = client.post("/api/reports/1/staffing", json={"staffing": "adequate"})
+        assert r.status_code == 403, "voted without being on scene"
+
+    def test_uninvolved_responder_cannot_vote(self, client):
+        r = client.post("/api/reports/1/staffing", json={"staffing": "adequate"})
+        assert r.status_code == 403
+
+    def test_unknown_signal_is_400(self, client):
+        self.on_scene(client)
+        assert client.post("/api/reports/1/staffing",
+                           json={"staffing": "vibes"}).status_code == 400
+
+    def test_vote_shows_up_on_the_report_feed(self, client):
+        self.on_scene(client)
+        client.post("/api/reports/1/staffing", json={"staffing": "overstaffed"})
+        report = next(r for r in client.get("/api/reports").get_json()
+                      if r["id"] == 1)
+        assert report["staffing"] == "overstaffed"
+
+    def test_most_cautious_vote_wins_across_two_responders(self, client):
+        self.on_scene(client)
+        client.post("/api/reports/1/staffing", json={"staffing": "overstaffed"})
+
+        # Second responder on scene, asking for help.
+        with diresq.app.app_context():
+            db = diresq.get_db()
+            other = db.execute(
+                "SELECT id FROM accounts WHERE username = 'skythe'").fetchone()["id"]
+            db.execute("""
+                INSERT INTO assignments
+                    (report_id, responder, status, staffing_vote, joined_at)
+                VALUES (1, ?, 'on_scene', 'need_more', ?)
+            """, (other, diresq.now_iso()))
+            db.commit()
+
+        report = next(r for r in client.get("/api/reports").get_json()
+                      if r["id"] == 1)
+        assert report["staffing"] == "need_more", (
+            "an optimistic vote suppressed a call for help"
+        )
+
+    def test_clearing_retracts_your_vote(self, client):
+        aid = self.on_scene(client)
+        client.post("/api/reports/1/staffing", json={"staffing": "need_more"})
+        client.post(f"/api/assignments/{aid}/status", json={"status": "cleared"})
+        report = next(r for r in client.get("/api/reports").get_json()
+                      if r["id"] == 1)
+        assert report["staffing"] == "unstaffed"
+
+
+class TestFeedReordersOnStaffing:
+    def on_scene_and_vote(self, client, report_id, vote):
+        client.post(f"/report/{report_id}/rescue")
+        aid = assignment_id_for(report_id)
+        client.post(f"/api/assignments/{aid}/status", json={"status": "on_scene"})
+        client.post(f"/api/reports/{report_id}/staffing", json={"staffing": vote})
+
+    def feed(self, client):
+        return [(r["id"], r["priority"], r["staffing"])
+                for r in client.get("/api/reports").get_json()]
+
+    def test_overstaffed_report_sinks_below_its_peers(self, client):
+        # Reports 1 and 4 are both HIGH; 1 leads on recency.
+        assert self.feed(client)[0][0] == 1
+        self.on_scene_and_vote(client, 1, "overstaffed")
+        order = [r[0] for r in self.feed(client)]
+        assert order.index(4) < order.index(1), (
+            "an overstaffed report kept its place ahead of an untouched peer"
+        )
+
+    def test_need_more_stays_at_the_top_of_its_band(self, client):
+        self.on_scene_and_vote(client, 1, "need_more")
+        assert self.feed(client)[0][0] == 1
+
+    def test_staffing_never_outranks_priority(self, client):
+        # Report 5 is LOW. Even begging for help it must not pass a HIGH.
+        self.on_scene_and_vote(client, 5, "need_more")
+        order = [r for r in self.feed(client)]
+        first_low = next(i for i, r in enumerate(order) if r[1] == "LOW")
+        last_high = max(i for i, r in enumerate(order) if r[1] == "HIGH")
+        assert last_high < first_low, (
+            "a LOW need_more jumped a HIGH report"
+        )
+
+    def test_empty_report_outranks_a_covered_one(self, client):
+        # The whole thesis: nobody on it beats comfortably covered.
+        self.on_scene_and_vote(client, 1, "adequate")
+        order = [r[0] for r in self.feed(client)]
+        assert order.index(4) < order.index(1)
+
+
 class TestStaffingResolution:
     @pytest.mark.parametrize("votes,expected", [
         ([], "unstaffed"),

@@ -39,6 +39,12 @@ All notable changes to this project are documented here. Format follows
 - `POST /api/checkin` records a responder's position and resets their timer.
 - `.env` support via python-dotenv, with a documented `.env.example`. Real
   environment variables take precedence over the file.
+- `POST /api/assignments/<id>/status` advances a responder through en route,
+  on scene and cleared. Forward only, and only for your own assignment.
+  Clearing retracts your staffing vote.
+- `POST /api/reports/<id>/staffing` records a staffing signal. Restricted to
+  responders currently on scene, since they are the only people who can see
+  how busy it is.
 
 ### Changed
 - Priority is stored as `HIGH`, `MEDIUM` or `LOW` rather than an integer
@@ -47,6 +53,10 @@ All notable changes to this project are documented here. Format follows
   rather than stored on the report. Where votes disagree the most cautious
   one wins, so an optimistic signal can never suppress a request for help.
 - Report location fields renamed to `lat` and `lng` across the frontend.
+- Staffing now reorders the feed. Within a priority band, a report asking for
+  help sorts first, one with nobody on it next, then covered, then
+  overstaffed. Staffing never crosses a priority band, so a low-priority
+  report cannot bury a high-priority one no matter how many people ask.
 - Database setup and seeding are plain functions the CLI commands wrap, so
   tests can call them directly. The schema path resolves against the
   application file rather than the working directory.

@@ -166,6 +166,11 @@ def fetch_reports(include_resolved: bool = False) -> list[dict]:
         item["latitude"] = row["lat"]
         item["longitude"] = row["lng"]
         reports.append(item)
+
+    # SQL ordered by priority; staffing is computed above, so the tie-break
+    # has to happen here. Sort is stable, so equal keys keep the SQL order.
+    reports.sort(key=lambda r: (-r["priority_rank"],
+                                -FEED_RANK.get(r["staffing"], 1)))
     return reports
 
 
@@ -355,6 +360,25 @@ def report_rescue(report_id: int):
 # Worst first. This is the order the board renders in.
 BOARD_ORDER = ("overdue", "on_scene", "en_route", "available")
 
+# How staffing moves a report in the feed, high sorts first. Applied as a
+# tie-break inside a priority band, never across one: six people shouting for
+# help at a blocked driveway must not bury a trapped family nobody has seen.
+# Nobody-on-it outranks covered, because that gap is the entire thesis.
+FEED_RANK = {
+    "need_more": 3,
+    "unstaffed": 2,
+    "adequate": 1,
+    "overstaffed": 0,
+    "stood_down": 0,
+}
+
+# One direction only. You cannot un-arrive at a scene.
+ALLOWED_TRANSITIONS = {
+    "en_route": {"on_scene"},
+    "on_scene": {"cleared"},
+    "cleared": set(),
+}
+
 
 def fetch_responders() -> list[dict]:
     """The accountability board: who is out, where, and who is late.
@@ -436,6 +460,74 @@ def fetch_responders() -> list[dict]:
     board.sort(key=lambda r: (BOARD_ORDER.index(r["state"]),
                              -(r["minutes_since_contact"] or 0)))
     return board
+
+
+def form_or_json(field: str) -> str:
+    if request.is_json:
+        return str((request.get_json(silent=True) or {}).get(field, "")).strip()
+    return (request.form.get(field) or "").strip()
+
+
+@app.post("/api/assignments/<int:assignment_id>/status")
+@login_required
+def api_assignment_status(assignment_id: int):
+    """Advance your own assignment: en_route -> on_scene -> cleared."""
+    wanted = form_or_json("status").lower()
+    db = get_db()
+
+    row = db.execute(
+        "SELECT responder, status FROM assignments WHERE id = ?", (assignment_id,)
+    ).fetchone()
+    if row is None:
+        return jsonify({"error": "no such assignment"}), 404
+    if row["responder"] != current_user()["id"]:
+        return jsonify({"error": "not your assignment"}), 403
+    if wanted not in ALLOWED_TRANSITIONS[row["status"]]:
+        return jsonify({
+            "error": f"cannot go from {row['status']} to {wanted or 'nothing'}",
+            "allowed": sorted(ALLOWED_TRANSITIONS[row["status"]]),
+        }), 400
+
+    if wanted == "cleared":
+        # Leaving retracts your staffing vote: you can no longer see the scene.
+        db.execute(
+            "UPDATE assignments SET status = ?, staffing_vote = NULL WHERE id = ?",
+            (wanted, assignment_id))
+    else:
+        db.execute("UPDATE assignments SET status = ? WHERE id = ?",
+                   (wanted, assignment_id))
+    db.commit()
+    return jsonify({"id": assignment_id, "status": wanted})
+
+
+@app.post("/api/reports/<int:report_id>/staffing")
+@login_required
+def api_report_staffing(report_id: int):
+    """Vote on how staffed a scene is. On-scene responders only, because
+    they are the only ones who can see it."""
+    vote = form_or_json("staffing").lower()
+    if vote not in STAFFING_ORDER:
+        return jsonify({"error": "unknown staffing signal",
+                        "allowed": list(STAFFING_ORDER)}), 400
+
+    db = get_db()
+    row = db.execute("""
+        SELECT id, status FROM assignments
+        WHERE report_id = ? AND responder = ?
+    """, (report_id, current_user()["id"])).fetchone()
+
+    if row is None:
+        return jsonify({"error": "you have not joined this report"}), 403
+    if row["status"] != "on_scene":
+        return jsonify({"error": "only on-scene responders can set staffing",
+                        "your_status": row["status"]}), 403
+
+    db.execute("UPDATE assignments SET staffing_vote = ? WHERE id = ?",
+               (vote, row["id"]))
+    db.commit()
+    return jsonify({"report_id": report_id,
+                    "your_vote": vote,
+                    "staffing": staffing_for(report_id)})
 
 
 @app.get("/api/reports")
