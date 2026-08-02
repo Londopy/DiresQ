@@ -32,22 +32,24 @@
 
             {% for report in reports %}
 
-            <article
-                class="report-card"
-                data-title="{{ report.subject|lower }}"
-                data-priority="{{ report.priority }}">
+            <a href="/report/{{ report.id }}" class="report-link">
+                <article
+                    class="report-card"
+                    data-title="{{ report.subject|lower }}"
+                    data-priority="{{ report.priority }}">
 
-                <h2>{{ report.subject }}</h2>
+                    <h2>{{ report.subject }}</h2>
 
-                <span class="priority {{ report.priority|lower }}">
-                    {{ report.priority }}
-                </span>
+                    <span class="priority {{ report.priority|lower }}">
+                        {{ report.priority }}
+                    </span>
 
-                <p>
-                    {{ report.description[:120] }}...
-                </p>
+                    <p>
+                        {{ report.description[:120] }}...
+                    </p>
 
-            </article>
+                </article>
+            </a>
 
             {% endfor %}
 
