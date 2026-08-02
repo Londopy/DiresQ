@@ -9,6 +9,11 @@
 --green:#a6e3a1;
 --blue:#89b4fa;
 
+/* Used by the coverage pins and the gaps toggle. */
+--mantle:#181825;
+--overlay:#45475a;
+--peach:#fab387;
+
 }
 
 *{
@@ -267,4 +272,81 @@ border-left:6px solid var(--green);
     color:#cdd6f4;
     font-size:0.8rem;
     box-shadow:0 6px 20px rgba(0,0,0,0.45);
+}
+
+/* ---- Coverage ----------------------------------------------------------
+   A report pin is coloured by whether anybody is going to it. Same judgement
+   the feed makes when it sorts, drawn spatially: a red pin two streets from
+   a green one is the argument of this whole project in one glance.
+
+   Reports stay teardrops and responders stay circles. One shape for an
+   incident, another for a person. */
+
+.pin{
+    display:block;
+    width:22px;
+    height:22px;
+    border-radius:50% 50% 50% 0;
+    transform:rotate(-45deg);
+    border:2px solid var(--mantle, #181825);
+    box-shadow:0 2px 6px rgba(0,0,0,.5);
+}
+
+/* Nobody has said they are coming. Not understaffed — unattended. */
+.pin-nobody{
+    background:var(--red, #f38ba8);
+    animation:pin-pulse 2s ease-out infinite;
+}
+
+.pin-coming{ background:var(--blue, #89b4fa); }
+.pin-there { background:var(--green, #a6e3a1); }
+
+/* Only the uncovered ones move. If everything pulsed, nothing would read as
+   urgent — which is the same reason the feed doesn't colour every card. */
+@keyframes pin-pulse{
+    0%   { box-shadow:0 2px 6px rgba(0,0,0,.5), 0 0 0 0 rgba(243,139,168,.55); }
+    70%  { box-shadow:0 2px 6px rgba(0,0,0,.5), 0 0 0 12px rgba(243,139,168,0); }
+    100% { box-shadow:0 2px 6px rgba(0,0,0,.5), 0 0 0 0 rgba(243,139,168,0); }
+}
+
+.legend-marker.nobody   { background:var(--red, #f38ba8); }
+.legend-marker.coming   { background:var(--blue, #89b4fa); }
+.legend-marker.there    { background:var(--green, #a6e3a1); }
+
+.gaps-toggle{
+    /* 48px tall: this gets pressed on a phone, in the rain. */
+    min-height:48px;
+    padding:12px 18px;
+    border:1px solid var(--overlay, #45475a);
+    border-radius:12px;
+    background:var(--surface, #313244);
+    color:var(--text, #cdd6f4);
+    font:inherit;
+    font-size:.9rem;
+    cursor:pointer;
+}
+
+.gaps-toggle:hover:not(:disabled){ border-color:var(--red, #f38ba8); }
+
+.gaps-toggle.on{
+    background:var(--red, #f38ba8);
+    border-color:var(--red, #f38ba8);
+    color:var(--mantle, #181825);
+    font-weight:600;
+}
+
+.gaps-toggle:disabled{
+    opacity:.55;
+    cursor:default;
+}
+
+.gaps-toggle:focus-visible{
+    outline:3px solid var(--peach, #fab387);
+    outline-offset:2px;
+}
+
+/* Somebody who has asked for less motion should not be shown a map of
+   throbbing dots. The colour still carries the whole meaning. */
+@media (prefers-reduced-motion: reduce){
+    .pin-nobody{ animation:none; }
 }

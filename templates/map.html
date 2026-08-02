@@ -57,8 +57,18 @@
         <div class="legend">
 
         <div class="legend-item">
-            <span class="legend-marker report"></span>
-            Report
+            <span class="legend-marker nobody"></span>
+            Nobody going
+        </div>
+
+        <div class="legend-item">
+            <span class="legend-marker coming"></span>
+            En route
+        </div>
+
+        <div class="legend-item">
+            <span class="legend-marker there"></span>
+            On scene
         </div>
 
         <div class="legend-item">
@@ -67,6 +77,15 @@
         </div>
 
         </div>
+
+        <!-- The whole argument of the project, as one button. Reports are
+             already sorted worst-first in the feed; this is the same claim
+             made spatially — a street nobody has gone to, next to one with
+             six people on it. -->
+        <button id="gaps-only" class="gaps-toggle" type="button"
+                aria-pressed="false">
+            Only what nobody is going to
+        </button>
 
     </header>
 

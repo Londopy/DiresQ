@@ -201,6 +201,14 @@ All notable changes to this project are documented here. Format follows
   is exactly `["/api/me"]`, and another fails if any other responder's name
   appears in it. The reasoning is written up in `docs/offline.md`.
 - `GET /api/me` — your own state, for the above.
+- Coverage on the map. A report pin is red where nobody has said they are
+  coming, blue where somebody is en route, green where somebody has arrived,
+  and only the red ones pulse — if everything moved, nothing would read as
+  urgent. One button hides every report that already has help, so what is
+  left on the screen is the streets nobody is going to. The feed has always
+  sorted by this; the map now says it spatially, which is the same argument
+  in a form you can take in at a glance. Motion is dropped entirely under
+  `prefers-reduced-motion`; the colour carries the whole meaning without it.
 
 ### Changed
 

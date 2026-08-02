@@ -2737,6 +2737,61 @@ class TestMapPopupsDoNotRunUserText:
             "responder positions can fail silently")
 
 
+class TestTheMapShowsCoverage:
+    """The feed sorts by who needs help most. The map says the same thing
+    spatially — a red pin two streets from a green one — which is the
+    argument of this whole project in one glance."""
+
+    @staticmethod
+    def script():
+        return (diresq.SCHEMA.parent / "static" / "scripts" / "map.js"
+                ).read_text(encoding="utf-8")
+
+    def test_the_legend_names_all_three_states(self, client):
+        html = client.get("/map").get_data(as_text=True)
+        for label in ["Nobody going", "En route", "On scene"]:
+            assert label in html, f"the legend never mentions {label}"
+
+    def test_there_is_a_gaps_only_toggle(self, client):
+        html = client.get("/map").get_data(as_text=True)
+        assert 'id="gaps-only"' in html
+        # A toggle that doesn't say it's a toggle is a button to a screen
+        # reader, and its state is invisible.
+        assert 'aria-pressed' in html
+
+    def test_coverage_is_derived_the_same_way_the_server_derives_it(self):
+        # If these ever disagree, the banner and the map contradict each
+        # other on the same screen.
+        source = self.script()
+        assert "on_scene_count" in source and "en_route_count" in source
+
+    def test_only_the_unattended_pins_move(self):
+        css = (diresq.SCHEMA.parent / "static" / "styles" / "map.css"
+               ).read_text(encoding="utf-8")
+        assert "pin-nobody" in css
+        # If everything pulsed, nothing would read as urgent.
+        assert "animation:pin-pulse" in css.replace(" ", "")
+        for calm in ["pin-coming", "pin-there"]:
+            block = css.split("." + calm)[1].split("}")[0]
+            assert "animation" not in block, f"{calm} moves, and shouldn't"
+
+    def test_motion_can_be_turned_off(self):
+        css = (diresq.SCHEMA.parent / "static" / "styles" / "map.css"
+               ).read_text(encoding="utf-8")
+        assert "prefers-reduced-motion" in css
+        after = css.split("prefers-reduced-motion")[1]
+        assert "animation:none" in after.replace(" ", "")
+
+    def test_the_two_filters_do_not_fight(self):
+        # They were independent once: typing in the search box put back every
+        # pin the coverage toggle had just hidden, each undoing the other.
+        source = self.script()
+        assert source.count("function applyFilters") == 1
+        assert source.count("applyFilters()") >= 2, (
+            "search and the coverage toggle are not going through the same "
+            "filter, so one will silently undo the other")
+
+
 class TestInstallable:
     """DiresQ has to survive being installed on a phone and taken somewhere
     with no signal, because that is the situation it was written for."""

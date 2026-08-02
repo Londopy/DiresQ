@@ -50,21 +50,82 @@ function reportPopup(report){
     return box;
 }
 
+// How covered a report is, from the counts the server already computes.
+//
+// This is the same judgement the feed makes when it sorts, drawn on a map
+// instead. "Nobody going" is not "understaffed" — it means not one person has
+// said they are coming, which is the failure the whole project exists to make
+// visible. Seeing it as a red pin two streets from a green one is the entire
+// argument in a single glance.
+function coverage(report){
+    if(report.on_scene_count > 0) return "there";
+    if(report.en_route_count > 0) return "coming";
+    return "nobody";
+}
+
+// A div rather than Leaflet's default image pin, so the state is a CSS class
+// and the uncovered ones can pulse. Reports stay teardrops and responders
+// stay circles — one shape for an incident, another for a person.
+function reportPin(state){
+    return L.divIcon({
+        className: "",                       // Leaflet adds its own otherwise
+        html: `<span class="pin pin-${state}"></span>`,
+        iconSize: [22, 22],
+        iconAnchor: [11, 22],
+        popupAnchor: [0, -20],
+    });
+}
+
+let uncovered = 0;
+
 reports.forEach(report=>{
 
     if(report.priority==="HIGH") high++;
     if(report.priority==="MEDIUM") medium++;
     if(report.priority==="LOW") low++;
 
-    const marker=L.marker([report.latitude,report.longitude])
+    const state = coverage(report);
+    if(state === "nobody") uncovered++;
+
+    const marker=L.marker([report.latitude,report.longitude],
+                          {icon: reportPin(state)})
     .addTo(map)
     .bindPopup(reportPopup(report));
 
     marker.subject=report.subject.toLowerCase();
+    marker.coverage=state;
 
     markers.push(marker);
 
 });
+
+// Show only the reports nobody has committed to.
+//
+// Hiding the covered ones is not a filter for tidiness — it is the question
+// a coordinator actually has. Everything left on the screen is somewhere no
+// help is on the way to.
+const gapsOnly = document.getElementById("gaps-only");
+
+if(gapsOnly){
+
+    gapsOnly.textContent = uncovered === 1
+        ? "Only the 1 nobody is going to"
+        : `Only the ${uncovered} nobody is going to`;
+
+    if(!uncovered){
+        // Every report has somebody. Say so rather than offering a button
+        // that would empty the map.
+        gapsOnly.textContent = "Everything has somebody going";
+        gapsOnly.disabled = true;
+    }
+
+    gapsOnly.addEventListener("click", ()=>{
+        const on = gapsOnly.getAttribute("aria-pressed") !== "true";
+        gapsOnly.setAttribute("aria-pressed", on ? "true" : "false");
+        gapsOnly.classList.toggle("on", on);
+        applyFilters();
+    });
+}
 
 // The newest report is the one you opened the map to look at, so it goes in
 // the middle. Then push the edges out far enough that everything else still
@@ -103,25 +164,33 @@ document.getElementById("high").textContent=high;
 document.getElementById("medium").textContent=medium;
 document.getElementById("low").textContent=low;
 
-document.getElementById("search")
-.addEventListener("input",e=>{
+// Both filters run through here.
+//
+// They used to be independent, and typing in the search box put back every
+// pin the coverage toggle had just hidden — each one undoing the other,
+// silently, so the map showed something neither filter had been asked for.
+let search = "";
 
-const text=e.target.value.toLowerCase();
+function applyFilters(){
 
-markers.forEach(marker=>{
+    const gapsOn = gapsOnly
+        && gapsOnly.getAttribute("aria-pressed") === "true";
 
-if(marker.subject.includes(text)){
+    markers.forEach(marker=>{
 
-marker.addTo(map);
+        const matches = marker.subject.includes(search);
+        const covered = gapsOn && marker.coverage !== "nobody";
 
-}else{
+        if(matches && !covered) marker.addTo(map);
+        else map.removeLayer(marker);
 
-map.removeLayer(marker);
-
+    });
 }
 
-});
-
+document.getElementById("search")
+.addEventListener("input",e=>{
+    search = e.target.value.toLowerCase();
+    applyFilters();
 });
 
 function getResponderColor(state){
