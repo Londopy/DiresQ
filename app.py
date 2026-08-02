@@ -530,6 +530,47 @@ def api_report_staffing(report_id: int):
                     "staffing": staffing_for(report_id)})
 
 
+@app.post("/report/<int:report_id>/resolve")
+@login_required
+def report_resolve(report_id: int):
+    """Close a report.
+
+    Allowed for whoever filed it, and for anyone currently on scene. The
+    reporter knows when their own problem is handled; the people standing
+    there can see that it is. Nobody else has grounds.
+    """
+    db = get_db()
+    user = current_user()
+
+    report = db.execute(
+        "SELECT sender, status FROM reports WHERE id = ?", (report_id,)
+    ).fetchone()
+    if report is None:
+        return render_template("report.html", report=None), 404
+
+    on_scene = db.execute("""
+        SELECT 1 FROM assignments
+        WHERE report_id = ? AND responder = ? AND status = 'on_scene'
+    """, (report_id, user["id"])).fetchone()
+
+    if report["sender"] != user["id"] and on_scene is None:
+        flash("Only the reporter or someone on scene can resolve this")
+        return redirect(url_for("report_detail", report_id=report_id))
+
+    if report["status"] == "resolved":
+        flash("Already resolved")
+        return redirect(url_for("report_detail", report_id=report_id))
+
+    db.execute("UPDATE reports SET status = 'resolved' WHERE id = ?", (report_id,))
+    # Everyone still attached is done here.
+    db.execute("""
+        UPDATE assignments SET status = 'cleared', staffing_vote = NULL
+        WHERE report_id = ? AND status != 'cleared'
+    """, (report_id,))
+    db.commit()
+    return redirect(url_for("homepage"))
+
+
 @app.get("/api/reports")
 def api_reports():
     return jsonify(fetch_reports())

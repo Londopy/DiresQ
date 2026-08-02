@@ -384,6 +384,86 @@ class TestStaffingVotes:
         assert report["staffing"] == "unstaffed"
 
 
+class TestResolve:
+    def test_reporter_can_resolve_their_own(self, anon):
+        anon.post("/login", data={"username": "kiyan", "password": "diresq"})
+        assert anon.post("/report/1/resolve").status_code == 302
+        with diresq.app.app_context():
+            status = diresq.get_db().execute(
+                "SELECT status FROM reports WHERE id = 1").fetchone()["status"]
+        assert status == "resolved"
+
+    def test_on_scene_responder_can_resolve(self, client):
+        client.post("/report/1/rescue")
+        aid = assignment_id_for(1)
+        client.post(f"/api/assignments/{aid}/status", json={"status": "on_scene"})
+        client.post("/report/1/resolve")
+        with diresq.app.app_context():
+            status = diresq.get_db().execute(
+                "SELECT status FROM reports WHERE id = 1").fetchone()["status"]
+        assert status == "resolved"
+
+    def test_uninvolved_user_cannot_resolve(self, client):
+        client.post("/report/1/resolve")
+        with diresq.app.app_context():
+            status = diresq.get_db().execute(
+                "SELECT status FROM reports WHERE id = 1").fetchone()["status"]
+        assert status == "unassigned", "a bystander closed someone else's report"
+
+    def test_en_route_is_not_close_enough(self, client):
+        client.post("/report/1/rescue")
+        client.post("/report/1/resolve")
+        with diresq.app.app_context():
+            status = diresq.get_db().execute(
+                "SELECT status FROM reports WHERE id = 1").fetchone()["status"]
+        assert status == "active"
+
+    def test_resolving_drops_it_from_the_feed(self, anon):
+        anon.post("/login", data={"username": "kiyan", "password": "diresq"})
+        before = len(anon.get("/api/reports").get_json())
+        anon.post("/report/1/resolve")
+        assert len(anon.get("/api/reports").get_json()) == before - 1
+
+    def test_resolving_clears_everyone_still_attached(self, client):
+        client.post("/report/1/rescue")
+        aid = assignment_id_for(1)
+        client.post(f"/api/assignments/{aid}/status", json={"status": "on_scene"})
+        client.post("/report/1/resolve")
+        row = next(r for r in client.get("/api/responders").get_json()
+                   if r["username"] == "londo")
+        assert row["state"] == "available"
+
+    def test_resolving_a_missing_report_is_404(self, client):
+        assert client.post("/report/999/resolve").status_code == 404
+
+
+class TestCardShowsResponders:
+    def test_untouched_report_reads_zero_responding(self, client):
+        assert b"0 responding" in client.get("/").data
+
+    def test_card_shows_en_route_count(self, client):
+        client.post("/report/1/rescue")
+        assert b"1 en route" in client.get("/").data
+
+    def test_card_shows_on_scene_count(self, client):
+        client.post("/report/1/rescue")
+        aid = assignment_id_for(1)
+        client.post(f"/api/assignments/{aid}/status", json={"status": "on_scene"})
+        assert b"1 on scene" in client.get("/").data
+
+    def test_staffing_badge_appears_once_voted(self, client):
+        client.post("/report/1/rescue")
+        aid = assignment_id_for(1)
+        client.post(f"/api/assignments/{aid}/status", json={"status": "on_scene"})
+        assert b"NEED MORE" not in client.get("/").data
+        client.post("/api/reports/1/staffing", json={"staffing": "need_more"})
+        assert b"NEED MORE" in client.get("/").data
+
+    def test_unstaffed_reports_get_no_badge(self, client):
+        body = client.get("/").data
+        assert b"UNSTAFFED" not in body
+
+
 class TestFeedReordersOnStaffing:
     def on_scene_and_vote(self, client, report_id, vote):
         client.post(f"/report/{report_id}/rescue")

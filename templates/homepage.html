@@ -48,6 +48,28 @@
                         {{ report.description[:120] }}...
                     </p>
 
+                    <div class="responders">
+                        {% set responding = report.en_route_count + report.on_scene_count %}
+                        <span class="count{% if responding == 0 %} nobody{% endif %}">
+                            {% if responding == 0 %}
+                                0 responding
+                            {% elif report.on_scene_count %}
+                                {{ report.on_scene_count }} on scene
+                                {%- if report.en_route_count %},
+                                    {{ report.en_route_count }} en route
+                                {%- endif %}
+                            {% else %}
+                                {{ report.en_route_count }} en route
+                            {% endif %}
+                        </span>
+
+                        {% if report.staffing != 'unstaffed' %}
+                        <span class="staffing {{ report.staffing }}">
+                            {{ report.staffing.replace('_', ' ')|upper }}
+                        </span>
+                        {% endif %}
+                    </div>
+
                 </article>
             </a>
 

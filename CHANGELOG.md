@@ -31,6 +31,12 @@ All notable changes to this project are documented here. Format follows
   were last seen, and how long since anyone heard from them. Anyone overdue
   sorts to the top.
 - Check in to reset your timer and update your position.
+- Report cards say how many people are on their way and how many have arrived,
+  and carry the staffing signal when someone on scene has set one. A report
+  nobody has gone to reads "0 responding".
+- Resolve a report when it is handled. Open to whoever filed it and to anyone
+  on scene, since those are the only people in a position to know. Resolving
+  clears everyone still attached and drops it out of the feed.
 - A map of every located report.
 - Sign up and sign in, with passwords stored hashed.
 - Seeded demo data covering the Katy area, so the board is never empty in a
