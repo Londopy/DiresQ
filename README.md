@@ -15,7 +15,7 @@ DiresQ tracks the people going into it.**
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
 [![Flask](https://img.shields.io/badge/flask-3.1-black)](https://flask.palletsprojects.com)
 [![SQLite](https://img.shields.io/badge/sqlite-3-003B57)](https://sqlite.org)
-[![Tests](https://img.shields.io/badge/tests-344%20passing-brightgreen)](tests/test_app.py)
+[![Tests](https://img.shields.io/badge/tests-349%20passing-brightgreen)](tests/test_app.py)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 [![Accessibility](https://img.shields.io/badge/accessibility-WCAG_2.1_AA_audited-a6e3a1)](docs/accessibility.md)
@@ -281,7 +281,7 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
-344 test functions covering every route, the permission rules, feed ordering,
+349 test functions covering every route, the permission rules, feed ordering,
 staffing resolution, ETA parsing, overdue calculation, packet signing, the
 offline queue, the auth guardrails and an adversarial pass. CI runs them on
 every push, along with a boot check against a real server.

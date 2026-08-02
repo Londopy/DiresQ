@@ -2286,6 +2286,70 @@ class TestEquipmentLexicon:
         assert result.equipment_reasons.get("chainsaw")
 
 
+class TestTheExplanationIsReadable:
+    """The model counts stems. The person reads words.
+
+    This shipped showing the stems: "Suggested from: ris, upstair, fast",
+    which reads like three typos. The whole point of showing the reasons is
+    that somebody can look at them and disagree, and nobody disagrees with
+    something they think is a bug.
+    """
+
+    def test_every_reason_is_a_word_the_person_typed(self):
+        for text, _priority, _needed in classify.CORPUS:
+            for reason in classify.suggest(text).reasons:
+                assert reason in text.lower(), (
+                    f"{reason!r} is not in {text!r} — the explanation has "
+                    f"stopped matching what was written")
+
+    def test_stems_are_mapped_back(self):
+        # "rising" stems to "ris", which is not a word.
+        reasons = classify.suggest(
+            "Water rising fast, grandmother upstairs, she cannot walk down"
+        ).reasons
+        assert "ris" not in reasons
+        assert "rising" in reasons
+
+    def test_the_stemmer_still_stems(self):
+        # The refactor that fixed the display must not have broken matching:
+        # every inflection still has to land on one token.
+        assert classify.tokenise("flooding floods flooded") == [
+            "flood", "flood", "flood"]
+
+    def test_tokenise_and_surface_forms_agree(self):
+        # If these drift, the explanation stops describing the decision.
+        for text, _p, _n in classify.CORPUS:
+            forms = classify.surface_forms(text)
+            for stem in classify.tokenise(text):
+                assert stem in forms, f"{stem!r} has no surface form"
+
+    def test_the_example_in_the_docs_is_what_the_code_returns(self):
+        """docs/model.md prints a worked example. Run it.
+
+        It was wrong for a while — a confidence and a set of reasons that
+        belonged to a different sentence than the one quoted above them. It
+        reached the demo video that way, because prose does not get executed
+        and nobody checks a code block that looks like an illustration.
+        """
+        page = (diresq.SCHEMA.parent / "docs" / "model.md"
+                ).read_text(encoding="utf-8")
+
+        quoted = re.search(r'^> \*"(.+?)"\*', page, re.M | re.S)
+        assert quoted, "the worked example is gone from model.md"
+        sentence = " ".join(quoted.group(1).split())
+
+        block = re.search(
+            r"```\n(HIGH|MEDIUM|LOW) . (\d+)% sure . (\w+)\n"
+            r"Suggested from: ([^.]+)\.", page)
+        assert block, "the worked example no longer has a result block"
+
+        result = classify.suggest(sentence)
+        assert result.priority == block.group(1)
+        assert round(result.confidence * 100) == int(block.group(2))
+        assert block.group(3) in result.capabilities
+        assert [r.strip() for r in block.group(4).split(",")] == result.reasons
+
+
 class TestTheClassifierIsMeasuredNotAssumed:
     """Hold out one report, retrain on the rest, predict the held-out one.
 

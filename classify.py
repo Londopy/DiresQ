@@ -180,25 +180,50 @@ MIN_CONFIDENCE = 0.45
 DUPLICATE_THRESHOLD = 0.30
 
 
+def _stem(word: str) -> str:
+    """Crude suffix stripping. Split out so tokenise and surface_forms cannot
+    drift apart — if they ever disagree, the explanation stops matching the
+    decision, which is the one thing this file is not allowed to do."""
+    for suffix in ("ing", "ed", "es", "s"):
+        if len(word) > len(suffix) + 2 and word.endswith(suffix):
+            return word[: -len(suffix)]
+    return word
+
+
+def _words(text: str):
+    """The words the classifier will actually look at, before stemming."""
+    for raw in re.findall(r"[a-z']+", (text or "").lower()):
+        word = raw.replace("'", "")
+        if len(word) < 2 or word in STOPWORDS:
+            continue
+        yield word
+
+
 def tokenise(text: str) -> list[str]:
     """Words, lowercased, lightly stemmed.
 
     The stemming is crude on purpose — "flooding", "flooded" and "floods" all
-    have to land on the same token or a sixty-example corpus never sees the
+    have to land on the same token or a fifty-example corpus never sees the
     same word twice.
     """
-    words = re.findall(r"[a-z']+", (text or "").lower())
-    out = []
-    for word in words:
-        word = word.replace("'", "")
-        if len(word) < 2 or word in STOPWORDS:
-            continue
-        for suffix in ("ing", "ed", "es", "s"):
-            if len(word) > len(suffix) + 2 and word.endswith(suffix):
-                word = word[: -len(suffix)]
-                break
-        out.append(word)
-    return out
+    return [_stem(word) for word in _words(text)]
+
+
+def surface_forms(text: str) -> dict[str, str]:
+    """Each stem, mapped back to the first word in the text that produced it.
+
+    The model counts stems, which is right. Showing somebody a stem is not.
+    "Suggested from: ris, upstair, fast" reads like three typos and quietly
+    undermines the one thing the suggestion is for — a coordinator being able
+    to see why, and disagree. "rising, upstairs, fast" reads like a reason.
+
+    First occurrence wins, so the word shown is the one they typed rather than
+    a later inflection of it.
+    """
+    forms: dict[str, str] = {}
+    for word in _words(text):
+        forms.setdefault(_stem(word), word)
+    return forms
 
 
 @dataclass
@@ -542,7 +567,12 @@ def suggest(text: str) -> Suggestion:
         )
 
     label, confidence = _PRIORITY.predict(text)
-    reasons = _PRIORITY.why(text, label)
+
+    # The model reasons in stems; the person reads words. Map back before
+    # this reaches a screen.
+    forms = surface_forms(text)
+    reasons = [forms.get(stem, stem) for stem in _PRIORITY.why(text, label)]
+
     equipment = equipment_for(text)
 
     return Suggestion(

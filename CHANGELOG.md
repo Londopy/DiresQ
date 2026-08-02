@@ -261,6 +261,18 @@ All notable changes to this project are documented here. Format follows
   was written down as 65 examples and had always been 55.
 - Responder positions failing to load left a map that looked complete with
   every responder pin silently missing. It now says so.
+- The suggestion panel showed the classifier's internal stems rather than the
+  words somebody typed: "Suggested from: ris, upstair, fast" instead of
+  "rising, upstairs, fast". The point of showing the reasoning is that a
+  person can look at it and disagree, and nobody argues with something they
+  have read as three typos. Stems are now mapped back to the first word in
+  the report that produced them, and a test asserts every reason shown
+  appears in the text it came from.
+- The worked example in the classifier documentation described a different
+  sentence than the one printed above it — a confidence and a set of reasons
+  that belonged to some earlier phrasing. It had been copied into the demo
+  video from there. A test now runs the documented example through the code
+  and fails if the page and the software disagree.
 
 ### Security
 
