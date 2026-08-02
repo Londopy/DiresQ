@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="../static/styles/report.css">
     <title>Report: {{ report.subject }}</title>
+    <link rel="stylesheet" href="../static/styles/nav.css">
 </head>
 <body>
 
@@ -22,6 +23,13 @@
 {% endwith %}
     <a href="/" class="back-btn">
         ← Back
+    </a>
+
+    <a href="/board" class="board-btn{% if overdue_count() %} alert{% endif %}">
+        Board
+        {% if overdue_count() %}
+        <span class="badge">{{ overdue_count() }}</span>
+        {% endif %}
     </a>
 
     <div class="report-card">

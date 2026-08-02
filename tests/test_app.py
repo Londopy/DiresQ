@@ -659,6 +659,31 @@ class TestOverdueCountInNav:
     def test_zero_for_anonymous_visitors(self, anon):
         assert self.count() == 0
 
+    @pytest.mark.parametrize("page", ["/", "/map", "/report/1"])
+    def test_every_page_links_to_the_board(self, client, page):
+        body = client.get(page).get_data(as_text=True)
+        assert 'href="/board"' in body, f"{page} has no way to reach the board"
+
+    @pytest.mark.parametrize("page", ["/", "/map", "/report/1"])
+    def test_the_link_is_quiet_when_nobody_is_late(self, client, page):
+        body = client.get(page).get_data(as_text=True)
+        assert "board-btn alert" not in body
+        assert 'class="badge"' not in body
+
+    @pytest.mark.parametrize("page", ["/", "/map", "/report/1"])
+    def test_the_link_raises_the_alarm_from_any_page(self, client, page):
+        client.post("/report/1/rescue")
+        stale = (datetime.now(timezone.utc) - timedelta(minutes=90)).isoformat(
+            timespec="seconds")
+        with diresq.app.app_context():
+            db = diresq.get_db()
+            db.execute("UPDATE assignments SET joined_at = ?", (stale,))
+            db.commit()
+
+        body = client.get(page).get_data(as_text=True)
+        assert "board-btn alert" in body, f"{page} did not show the alarm"
+        assert '<span class="badge">' in body
+
 
 class TestFeedReordersOnStaffing:
     def on_scene_and_vote(self, client, report_id, vote):
