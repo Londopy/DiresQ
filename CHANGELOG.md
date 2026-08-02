@@ -92,7 +92,9 @@ All notable changes to this project are documented here. Format follows
   Every assignment, arrival, check-in and automatic alert, in time order.
 - A documentation site under `site/`, built from the same `docs/` files that
   live in the repo, so the two can never disagree.
-- Written decisions, build log, known limits and API reference under `docs/`.
+- Written decisions, build log, architecture notes, known limits and API
+  reference under `docs/`. The architecture notes name the point at which each
+  design stops working, rather than only what it does.
 - An icon, and a `robots.txt` that keeps the whole site out of search results.
   Live reports name real addresses; none of it should be findable.
 - A Board link on the feed, the map and every report page. It turns red and

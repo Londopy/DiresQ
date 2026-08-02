@@ -16,6 +16,8 @@ const pages = join(here, "..", "src", "pages");
 
 // slug -> [source file, title, one-line description]
 const SITE = {
+  architecture: ["architecture.md", "Architecture",
+    "The data model, what runs on a request, and where each design gives out."],
   decisions: ["decisions.md", "Decisions",
     "What we chose, and what we gave up to choose it."],
   process: ["process.md", "Process",

@@ -265,6 +265,8 @@ git push --tags
 
 ## Read more
 
+- [Architecture](docs/architecture.md) — the data model, what runs on a
+  request, and the point at which each design stops working
 - [Decisions](docs/decisions.md) — what we argued about and what we picked
 - [Process](docs/process.md) — the build log, including what broke
 - [Offline and LoRa](docs/offline.md) — the radio packet, the gateway, and an
