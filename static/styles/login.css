@@ -1,0 +1,217 @@
+:root{
+
+    --base:#1e1e2e;
+    --mantle:#181825;
+    --surface:#313244;
+
+    --text:#cdd6f4;
+    --subtext:#bac2de;
+
+    --blue:#89b4fa;
+    --green:#a6e3a1;
+
+    --shadow:0 15px 40px rgba(0,0,0,.35);
+
+    --radius:18px;
+
+}
+
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    font-family:Inter,Arial,sans-serif;
+}
+
+body{
+
+    background:var(--base);
+    color:var(--text);
+
+    min-height:100vh;
+
+}
+
+.container{
+
+    display:flex;
+    min-height:100vh;
+
+}
+
+.left-panel{
+
+    flex:1;
+
+    display:flex;
+    justify-content:center;
+    align-items:center;
+
+    padding:60px;
+
+    background:linear-gradient(
+        135deg,
+        var(--mantle),
+        var(--surface)
+    );
+
+}
+
+.hero{
+
+    text-align:center;
+    max-width:400px;
+
+}
+
+.logo-placeholder{
+
+    width:180px;
+    height:180px;
+
+    margin:auto;
+    margin-bottom:30px;
+
+}
+
+.hero h1{
+
+    font-size:3rem;
+    margin-bottom:15px;
+
+}
+
+.hero p{
+
+    color:var(--subtext);
+    line-height:1.6;
+
+}
+
+.right-panel{
+
+    flex:1;
+
+    display:flex;
+    justify-content:center;
+    align-items:center;
+
+    padding:40px;
+
+}
+
+.login-card{
+
+    width:100%;
+    max-width:380px;
+
+    background:var(--surface);
+
+    border-radius:var(--radius);
+
+    padding:40px;
+
+    box-shadow:var(--shadow);
+
+}
+
+.login-card h2{
+
+    margin-bottom:30px;
+    text-align:center;
+
+}
+
+.login-card input{
+
+    width:100%;
+
+    padding:14px;
+
+    margin-bottom:18px;
+
+    border:none;
+
+    border-radius:10px;
+
+    background:#45475a;
+
+    color:var(--text);
+
+    font-size:1rem;
+
+}
+
+.login-card input:focus{
+
+    outline:2px solid var(--blue);
+
+}
+
+.login-card button{
+
+    width:100%;
+
+    padding:14px;
+
+    border:none;
+
+    border-radius:10px;
+
+    cursor:pointer;
+
+    background:var(--blue);
+
+    color:var(--base);
+
+    font-size:1rem;
+
+    font-weight:bold;
+
+    transition:.2s;
+
+}
+
+.login-card button:hover{
+
+    transform:translateY(-2px);
+
+    filter:brightness(1.05);
+
+}
+
+@media(max-width:768px){
+
+    .container{
+
+        flex-direction:column;
+
+    }
+
+    .left-panel{
+
+        flex:none;
+        padding:40px 20px;
+
+    }
+
+    .logo-placeholder{
+
+        width:120px;
+        height:120px;
+
+    }
+
+    .hero h1{
+
+        font-size:2rem;
+
+    }
+
+    .right-panel{
+
+        padding:20px;
+
+    }
+
+}
