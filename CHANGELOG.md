@@ -39,6 +39,13 @@ All notable changes to this project are documented here. Format follows
   touching the screen. It renders server-side first, so it still works with
   JavaScript switched off.
 - Check in to reset your timer and update your position.
+- The feed refreshes itself, so a card reorders when someone two streets away
+  changes their staffing signal.
+- Flag a report as fake. One flag each; at three it drops out of the feed but
+  stays visible to whoever filed it and anyone already on their way.
+- Marking yourself on scene when your last check-in was over 500 m from the
+  report raises a position mismatch on the board. It catches honest errors and
+  lazy faking, not someone determined to lie.
 - A triage helper for when you cannot judge how bad something is. Four
   questions anyone can answer without training or equipment, run through
   START, the protocol used at real multiple-casualty scenes. It returns a

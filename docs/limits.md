@@ -24,10 +24,13 @@ it looks like verification without being it.
 Check-ins record whatever coordinates the browser hands us. Someone can sit at
 home and file a check-in claiming to be on scene.
 
-We detect *inconsistency*, not intent: if your last check-in is a long way
-from the report you say you're standing at, that's visible. Someone
-determined can still lie about where they are, and no amount of client-side
-code fixes that.
+We detect *inconsistency*, not intent. Marking yourself on scene when your
+last check-in was more than 500 metres from the report raises a mismatch flag
+on the board. The radius is generous because phone GPS is poor in bad weather
+and a false accusation is worse than a missed one.
+
+Someone determined can still lie about where they are. No amount of
+client-side code fixes that.
 
 ## One cautious responder can hold a report open
 
@@ -57,10 +60,16 @@ tiles for areas already viewed. Neither is built. Tiles can only ever cover
 where you've already been — a cache can't pre-fetch somewhere you've never
 looked.
 
-## Spam control doesn't exist
+## Spam control is flagging, not verification
 
-There's nothing stopping someone filing fake reports. Community flagging with
-a threshold is designed and not built.
+Anyone can flag a report as fake, once each. At three flags it drops out of
+the feed — but stays visible to whoever filed it and to anyone already on
+their way, because being outvoted by three strangers shouldn't strand someone
+who is already driving there.
+
+That's community moderation, not verification. Three coordinated accounts can
+bury a real report, and one determined person with three accounts is not a
+hard problem to have.
 
 ## START triage orders attention, not treatment
 

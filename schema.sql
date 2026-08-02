@@ -35,8 +35,19 @@ CREATE TABLE reports (
                         CHECK (status IN ('unassigned', 'active',
                                           'resolved', 'hidden')),
     needed      INTEGER,
+    -- Community flags. At FLAG_THRESHOLD the report drops out of the feed,
+    -- but stays visible to whoever filed it and anyone already on it.
+    flags       INTEGER NOT NULL DEFAULT 0,
     sender      INTEGER NOT NULL REFERENCES accounts(id),
     created_at  TEXT    NOT NULL
+);
+
+-- One flag per person per report.
+CREATE TABLE report_flags (
+    report_id  INTEGER NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
+    account_id INTEGER NOT NULL REFERENCES accounts(id),
+    created_at TEXT    NOT NULL,
+    PRIMARY KEY (report_id, account_id)
 );
 
 CREATE INDEX idx_reports_status ON reports(status);
@@ -57,6 +68,10 @@ CREATE TABLE assignments (
 
     eta            TEXT,   -- ISO8601
     eta_confidence REAL,   -- 0..1
+
+    -- Set when someone marks themselves on scene but their last check-in is
+    -- a long way from the report. Detection, not prevention.
+    position_mismatch INTEGER NOT NULL DEFAULT 0,
     joined_at      TEXT    NOT NULL,
 
     -- This constraint is what makes a double-join a 409.

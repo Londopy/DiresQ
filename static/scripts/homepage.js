@@ -1,49 +1,118 @@
-const search=document.getElementById("search");
+const search = document.getElementById("search");
+const checks = document.querySelectorAll("input[type=checkbox]");
+const list = document.querySelector(".reports");
 
-const reports=document.querySelectorAll(".report-card");
+// Re-queried every time, because the cards get replaced on each poll.
+function filter() {
 
-const checks=document.querySelectorAll("input[type=checkbox]");
+    const text = search.value.toLowerCase();
 
-function filter(){
+    const enabled = [...checks]
+        .filter(c => c.checked)
+        .map(c => c.value);
 
-const text=search.value.toLowerCase();
+    document.querySelectorAll(".report-card").forEach(card => {
 
-const enabled=[...checks]
-.filter(c=>c.checked)
-.map(c=>c.value);
+        const title = card.dataset.title;
+        const priority = card.dataset.priority;
 
-reports.forEach(card=>{
+        const matchTitle = title.includes(text);
+        const matchPriority = enabled.includes(priority);
 
-const title=card.dataset.title;
+        // The card is wrapped in an <a>, so hide that or the link stays.
+        const wrapper = card.closest(".report-link") || card;
+        wrapper.style.display = (matchTitle && matchPriority) ? "" : "none";
 
-const priority=card.dataset.priority;
-
-const matchTitle=
-title.includes(text);
-
-const matchPriority=
-enabled.includes(priority);
-
-card.style.display=
-(matchTitle&&matchPriority)
-?
-"block"
-:
-"none";
-
-});
+    });
 
 }
 
-search.addEventListener("input",filter);
+search.addEventListener("input", filter);
+checks.forEach(c => c.addEventListener("change", filter));
 
-checks.forEach(c=>
-c.addEventListener("change",filter)
-);
+// --- live feed -----------------------------------------------------------
+// Someone marking a scene overstaffed two streets away should move the cards
+// here without anyone pressing anything.
 
-const btn=document.getElementById("filterBtn");
+const POLL_MS = 4000;
 
-const sidebar=document.getElementById("sidebar");
+function esc(value) {
+    return String(value ?? "").replace(/[&<>"']/g, c => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+    }[c]));
+}
+
+function countText(r) {
+    const responding = r.en_route_count + r.on_scene_count;
+    if (!responding) return "0 responding";
+    if (r.on_scene_count && r.en_route_count) {
+        return `${r.on_scene_count} on scene, ${r.en_route_count} en route`;
+    }
+    if (r.on_scene_count) return `${r.on_scene_count} on scene`;
+    return `${r.en_route_count} en route`;
+}
+
+function cardHtml(r) {
+    const responding = r.en_route_count + r.on_scene_count;
+    const staffing = r.staffing === "unstaffed" ? "" :
+        `<span class="staffing ${r.staffing}">
+            ${esc(r.staffing.replace(/_/g, " ").toUpperCase())}
+        </span>`;
+
+    return `
+    <a href="/report/${r.id}" class="report-link">
+        <article class="report-card"
+                 data-title="${esc(r.subject.toLowerCase())}"
+                 data-priority="${esc(r.priority)}">
+            <h2>${esc(r.subject)}</h2>
+            <span class="priority ${esc(r.priority.toLowerCase())}">
+                ${esc(r.priority)}
+            </span>
+            <p>${esc(r.description.slice(0, 120))}...</p>
+            <div class="responders">
+                <span class="count${responding === 0 ? " nobody" : ""}">
+                    ${countText(r)}
+                </span>
+                ${staffing}
+            </div>
+        </article>
+    </a>`;
+}
+
+// Only redraw when something actually changed, otherwise typing in the search
+// box fights the poll.
+let lastSeen = "";
+
+async function poll() {
+    try {
+        const res = await fetch("/api/reports", {
+            headers: { Accept: "application/json" },
+        });
+        if (!res.ok) return;
+
+        const reports = await res.json();
+        const fingerprint = reports
+            .map(r => `${r.id}:${r.staffing}:${r.en_route_count}:${r.on_scene_count}`)
+            .join("|");
+
+        if (fingerprint === lastSeen) return;
+        lastSeen = fingerprint;
+
+        list.innerHTML = reports.map(cardHtml).join("");
+        filter();
+    } catch (err) {
+        // Offline or server down. Leave the cards that are already there.
+    }
+}
+
+if (list) {
+    setInterval(poll, POLL_MS);
+}
+
+// --- filter drawer on mobile --------------------------------------------
+
+const btn = document.getElementById("filterBtn");
+const sidebar = document.getElementById("sidebar");
 
 function setMenuState(isOpen) {
 

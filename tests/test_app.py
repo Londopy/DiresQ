@@ -781,6 +781,97 @@ class TestReportPageActions:
         assert "evil.example" not in r.headers["Location"]
 
 
+class TestFlagging:
+    def flags(self, report_id=1):
+        with diresq.app.app_context():
+            return diresq.get_db().execute(
+                "SELECT flags, status FROM reports WHERE id = ?", (report_id,)
+            ).fetchone()
+
+    def test_flagging_counts(self, client):
+        assert client.post("/report/1/flag").status_code == 302
+        assert self.flags()["flags"] == 1
+
+    def test_one_flag_per_person(self, client):
+        client.post("/report/1/flag")
+        r = client.post("/report/1/flag")
+        assert r.status_code == 302, "second flag broke instead of being refused"
+        assert self.flags()["flags"] == 1
+
+    def test_it_takes_three_to_hide(self, client):
+        with diresq.app.app_context():
+            db = diresq.get_db()
+            for i in (2, 3):
+                db.execute("""
+                    INSERT INTO report_flags (report_id, account_id, created_at)
+                    VALUES (1, ?, ?)
+                """, (i, diresq.now_iso()))
+            db.execute("UPDATE reports SET flags = 2 WHERE id = 1")
+            db.commit()
+
+        assert self.flags()["status"] != "hidden"
+        client.post("/report/1/flag")
+        assert self.flags()["status"] == "hidden"
+
+    def test_a_hidden_report_leaves_the_feed(self, client):
+        with diresq.app.app_context():
+            db = diresq.get_db()
+            db.execute("UPDATE reports SET status = 'hidden' WHERE id = 1")
+            db.commit()
+        assert not any(r["id"] == 1 for r in client.get("/api/reports").get_json())
+
+    def test_flagging_a_missing_report_is_404(self, client):
+        assert client.post("/report/999/flag").status_code == 404
+
+
+class TestPositionMismatch:
+    def check_in_at(self, client, lat, lng):
+        client.post("/api/checkin", json={"lat": lat, "lng": lng})
+
+    def mismatch(self):
+        with diresq.app.app_context():
+            return bool(diresq.get_db().execute(
+                "SELECT position_mismatch FROM assignments WHERE id = 1"
+            ).fetchone()["position_mismatch"])
+
+    def test_checking_in_near_the_report_is_fine(self, client):
+        client.post("/report/1/rescue")
+        # Report 1 is at 29.7858, -95.8244. This is a couple of streets away.
+        self.check_in_at(client, 29.7861, -95.8249)
+        client.post("/api/assignments/1/status", json={"status": "on_scene"})
+        assert self.mismatch() is False
+
+    def test_being_miles_away_is_flagged(self, client):
+        client.post("/report/1/rescue")
+        self.check_in_at(client, 29.9000, -95.5000)
+        client.post("/api/assignments/1/status", json={"status": "on_scene"})
+        assert self.mismatch() is True
+
+    def test_no_checkin_means_no_accusation(self, client):
+        client.post("/report/1/rescue")
+        client.post("/api/assignments/1/status", json={"status": "on_scene"})
+        assert self.mismatch() is False
+
+    def test_the_board_shows_it(self, client):
+        client.post("/report/1/rescue")
+        self.check_in_at(client, 29.9000, -95.5000)
+        client.post("/api/assignments/1/status", json={"status": "on_scene"})
+        row = next(r for r in client.get("/api/responders").get_json()
+                   if r["username"] == "londo")
+        assert row["assignment"]["position_mismatch"] is True
+
+    @pytest.mark.parametrize("lat,lng,metres", [
+        (29.7858, -95.8244, 0),
+        (29.7858, -95.8144, 966),
+    ])
+    def test_distance_maths(self, lat, lng, metres):
+        got = diresq.metres_between(29.7858, -95.8244, lat, lng)
+        assert abs(got - metres) < 30
+
+    def test_distance_with_missing_coordinates(self):
+        assert diresq.metres_between(None, -95.8, 29.7, -95.8) is None
+
+
 class TestTriage:
     def test_page_renders(self, client):
         assert client.get("/triage").status_code == 200

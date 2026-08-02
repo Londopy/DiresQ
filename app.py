@@ -16,6 +16,7 @@ import secrets
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from functools import wraps
+from math import atan2, cos, radians, sin, sqrt
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -209,6 +210,7 @@ def fetch_report(report_id: int) -> dict | None:
     item["staffing"] = staffing_for(report_id)
     item["responders"] = [dict(x) for x in get_db().execute("""
         SELECT asg.id, asg.status, asg.eta, asg.staffing_vote, asg.joined_at,
+               asg.position_mismatch,
                acc.username, acc.capabilities, acc.id AS account_id
         FROM assignments asg
         JOIN accounts acc ON acc.id = asg.responder
@@ -433,6 +435,27 @@ FEED_RANK = {
     "stood_down": 0,
 }
 
+# How far from a report you can be while claiming to be on scene, in metres.
+# Generous on purpose: phone GPS is bad in bad weather, and a false accusation
+# is worse than a missed one.
+ON_SCENE_RADIUS_M = 500
+
+# Flags needed before a report drops out of the feed.
+FLAG_THRESHOLD = 3
+
+
+def metres_between(lat1, lng1, lat2, lng2) -> float | None:
+    """Great-circle distance. Haversine, so no dependency for one sum."""
+    if None in (lat1, lng1, lat2, lng2):
+        return None
+    r = 6371000
+    p1, p2 = radians(lat1), radians(lat2)
+    dp = radians(lat2 - lat1)
+    dl = radians(lng2 - lng1)
+    a = sin(dp / 2) ** 2 + cos(p1) * cos(p2) * sin(dl / 2) ** 2
+    return 2 * r * atan2(sqrt(a), sqrt(1 - a))
+
+
 # One direction only. You cannot un-arrive at a scene.
 ALLOWED_TRANSITIONS = {
     "en_route": {"on_scene"},
@@ -453,6 +476,7 @@ def fetch_responders() -> list[dict]:
                asg.report_id,
                asg.status   AS assignment_status,
                asg.eta, asg.joined_at, asg.staffing_vote,
+               asg.position_mismatch,
                r.subject    AS report_subject,
                chk.created_at AS last_checkin,
                chk.lat      AS last_lat,
@@ -510,6 +534,7 @@ def fetch_responders() -> list[dict]:
                 "staffing_vote": row["staffing_vote"],
                 "eta": row["eta"],
                 "joined_at": row["joined_at"],
+                "position_mismatch": bool(row["position_mismatch"]),
             },
             "last_position": None if row["last_checkin"] is None else {
                 "lat": row["last_lat"],
@@ -521,6 +546,28 @@ def fetch_responders() -> list[dict]:
     board.sort(key=lambda r: (BOARD_ORDER.index(r["state"]),
                              -(r["minutes_since_contact"] or 0)))
     return board
+
+
+def position_looks_wrong(report_id: int, account_id: int) -> bool:
+    """Is this person's last check-in nowhere near the report they claim to be at?
+
+    Catches honest mistakes and lazy faking. Anyone determined can still lie
+    about where they are, and no amount of code fixes that.
+    """
+    db = get_db()
+    report = db.execute("SELECT lat, lng FROM reports WHERE id = ?",
+                        (report_id,)).fetchone()
+    checkin = db.execute("""
+        SELECT lat, lng FROM checkins
+        WHERE responder = ? ORDER BY created_at DESC LIMIT 1
+    """, (account_id,)).fetchone()
+
+    if report is None or checkin is None:
+        return False  # No claim to check against yet.
+
+    away = metres_between(report["lat"], report["lng"],
+                          checkin["lat"], checkin["lng"])
+    return away is not None and away > ON_SCENE_RADIUS_M
 
 
 def form_or_json(field: str) -> str:
@@ -578,6 +625,12 @@ def api_assignment_status(assignment_id: int):
     else:
         db.execute("UPDATE assignments SET status = ? WHERE id = ?",
                    (wanted, assignment_id))
+
+    if wanted == "on_scene":
+        db.execute("UPDATE assignments SET position_mismatch = ? WHERE id = ?",
+                   (int(position_looks_wrong(row["report_id"],
+                                             current_user()["id"])),
+                    assignment_id))
     db.commit()
     return answer({"id": assignment_id, "status": wanted}, 200,
                   f"You are now {wanted.replace('_', ' ')}", row["report_id"])
@@ -656,6 +709,45 @@ def report_resolve(report_id: int):
     """, (report_id,))
     db.commit()
     return redirect(url_for("homepage"))
+
+
+@app.post("/report/<int:report_id>/flag")
+@login_required
+def report_flag(report_id: int):
+    """Flag a report as fake. One per person, hidden at FLAG_THRESHOLD.
+
+    Hidden is not deleted: whoever filed it and anyone already on it still
+    see it, because being outvoted by three strangers shouldn't strand
+    someone who is already on their way.
+    """
+    db = get_db()
+    user = current_user()
+
+    if db.execute("SELECT 1 FROM reports WHERE id = ?", (report_id,)).fetchone() is None:
+        if request.is_json:
+            return jsonify({"error": "no such report"}), 404
+        return render_template("notfound.html"), 404
+
+    try:
+        db.execute("""
+            INSERT INTO report_flags (report_id, account_id, created_at)
+            VALUES (?, ?, ?)
+        """, (report_id, user["id"], now_iso()))
+    except sqlite3.IntegrityError:
+        return answer({"error": "already flagged"}, 409,
+                      "You already flagged this", report_id)
+
+    db.execute("UPDATE reports SET flags = flags + 1 WHERE id = ?", (report_id,))
+    row = db.execute("SELECT flags, status FROM reports WHERE id = ?",
+                     (report_id,)).fetchone()
+
+    if row["flags"] >= FLAG_THRESHOLD and row["status"] not in ("resolved", "hidden"):
+        db.execute("UPDATE reports SET status = 'hidden' WHERE id = ?", (report_id,))
+    db.commit()
+
+    return answer({"report_id": report_id, "flags": row["flags"],
+                   "hidden": row["flags"] >= FLAG_THRESHOLD},
+                  200, "Flagged. Thanks.", report_id)
 
 
 @app.get("/triage")
