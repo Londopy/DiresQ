@@ -85,7 +85,9 @@ on its own, and now somebody knows where to start looking.
 - **Triage it properly** — if you can't judge how bad something is, four
   questions run START, the protocol used at real multiple-casualty scenes,
   and pick the severity for you.
-- **Check in** — resets your timer and updates your last known position.
+- **Check in** — resets your timer and updates your last known position. Works
+  with no signal: it's kept on your phone, sent when there's a connection, and
+  judged on when you pressed the button rather than when it arrived.
 - **The accountability board** — everyone who is out, what they're doing, and
   how long since anyone heard from them. Overdue sorts to the top.
 - **The dead man's switch** — stay silent fifteen minutes past your deadline

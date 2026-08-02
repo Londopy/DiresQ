@@ -38,7 +38,7 @@ derived from votes, never stored.
 | --- | --- | --- | --- |
 | `GET` | `/api/responders` | | The board |
 | `POST` | `/api/assignments/<id>/status` | `status` | Your own assignment only |
-| `POST` | `/api/checkin` | `lat`, `lng`, `happened_at` *(optional)* | Resets your timer |
+| `POST` | `/api/checkin` | `lat`, `lng`, `happened_at`, `client_id` *(all optional)* | Resets your timer |
 
 `status` moves forward only: `en_route` → `on_scene` → `cleared`. Anything
 else is a 400. Clearing retracts your staffing vote.
@@ -82,6 +82,20 @@ reached the server:
 Without it the timer would run from the sync time, so a responder who was
 silent through their whole window would come back green the moment their
 phone reconnected. The overdue calculation uses `happened_at`.
+
+Send a `client_id` with it and resending is free:
+
+```json
+{ "lat": 29.7858, "lng": -95.8244, "client_id": "b2c1...", "happened_at": "..." }
+```
+
+The first one is a `201`. The same id again is a `200` with
+`"duplicate": true` and the times from the row already written — the original
+timestamp is not touched, so a retry can't make an old check-in look recent.
+The same id from a different account is a `409`.
+
+Ids are trimmed to 64 characters. A check-in without one is never treated as
+a duplicate, so plain form posts with JavaScript off behave as before.
 
 It's a client claim, so it's bounded: more than two minutes in the future is
 rejected, more than 12 hours old is rejected, and anything slightly ahead is

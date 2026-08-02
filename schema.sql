@@ -104,6 +104,12 @@ CREATE TABLE checkins (
     lat         REAL,
     lng         REAL,
 
+    -- Made by the browser before the check-in is sent, so a retry carries the
+    -- same one. "Did that send?" is the question a flaky connection exists to
+    -- make unanswerable; this is how the answer stops mattering.
+    -- Null for anything that never went through the queue.
+    client_id   TEXT    UNIQUE,
+
     -- When the responder says they were there. For a check-in queued offline
     -- this is the time it was made, not the time it reached us. The overdue
     -- timer runs off this, so a late sync can't silently clear a red row.

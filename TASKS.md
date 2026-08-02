@@ -92,8 +92,9 @@ like.
 ## Worth doing if there's time
 
 - [ ] Role picker on signup. Everyone is a responder right now.
-- [ ] **Browser offline queue.** The one real gap left. Server has been ready
-      for it since the `happened_at` work — see `docs/offline.md`.
+- [ ] **Queue reports offline too**, not just check-ins. Harder — a report
+      filed offline may need reconciling against one somebody else already
+      filed for the same thing.
 - [ ] A counter in the uplink packet, closing the replay hole. Two more bytes
       and a table of the last packet accepted per node.
 

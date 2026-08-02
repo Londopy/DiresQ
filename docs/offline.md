@@ -21,14 +21,14 @@ more than we did.
 | Gateway program | **Built.** `tools/gateway.py`, tested over a pipe |
 | Backdated check-ins | **Built.** The server judges a check-in on when it was made |
 | Node key issue and rotation | **Built.** `flask --app app node-key <user>` |
+| Browser offline queue | **Built.** Check-ins survive having no signal |
+| Deduplication of retries | **Built.** Client ids, so resending is free |
 | Radio hardware and firmware | **Not built.** We have no radios |
 | Serial mode of the gateway | **Written, never run.** No hardware to run it against |
-| Browser offline queue | **Not built.** This is the big one |
 | Offline map tiles | **Not built** |
 
-If you read nothing else: **the offline queue does not exist.** The server is
-ready for one. Nothing in the browser queues anything today. Close the tab
-with no signal and the check-in is gone.
+If you read nothing else: **check-ins now survive having no signal.** Reports,
+the feed and the board still need a connection. The radio is not built.
 
 ---
 
@@ -162,8 +162,53 @@ firmware in the repo would look like a feature and be a liability.
 
 ## The offline queue
 
-**Not built.** The half that is built is the half that's easy to get wrong,
-so it's worth being precise about which half.
+Built, for check-ins only. Press the button with no signal and it goes into
+`localStorage`, then onto the wire when there is one.
+
+Three things make that safe rather than merely optimistic.
+
+**It carries the time it was made.** Not the time it sent. Without this the
+overdue timer would restart from the sync, so somebody silent through their
+whole window comes back green the moment their phone finds a bar — the alarm
+that correctly fired gets cancelled by the network recovering. See below.
+
+**It carries an id made before it is sent.** *"Did that send?"* is the exact
+question a flaky connection exists to make unanswerable, and the honest answer
+is to stop caring: retrying is free because the server recognises an id it
+already has and tells you about the row it wrote the first time, rather than
+writing a second. It does not touch the original timestamp either, so
+resending an old check-in cannot make it look recent.
+
+**It is visible.** A pill in the corner says how many are waiting. A queue you
+cannot see is a queue you do not trust, and this one has to be trusted in the
+dark, in the rain, by somebody who is not thinking about software.
+
+### What gets dropped, and when
+
+- Anything older than twelve hours, because the server refuses those anyway.
+  Better to drop it locally than send it to be rejected.
+- Anything the server answers 4xx to — it looked at it and said no, and it
+  will say no again forever.
+- Nothing on a 5xx or a network failure. Those stop the flush where it is
+  rather than hammering, and everything still queued stays queued.
+
+### The bug that isn't obvious
+
+`new Date().toISOString()` produces `2026-08-02T07:00:00.000Z`. Python only
+learned to parse that trailing `Z` in 3.11. On a machine with 3.13 — which is
+what this was written on — every queued check-in works. On 3.10 every single
+one is rejected as an unreadable timestamp.
+
+That is the worst shape a bug can have: correct on the developer's laptop,
+broken in deployment, and silent in between. Found by posting the exact string
+a browser sends rather than the one a Python test would naturally write.
+
+### Still missing
+
+The queue covers check-ins. Filing a *report* offline does not work — that
+needs the same treatment and a way to reconcile a report that may already
+exist. Check-ins came first because they are the message that says you are
+alive.
 
 ### What the server already does
 
@@ -187,25 +232,6 @@ the future. Both times are kept, and the board marks rows that arrived late,
 so a coordinator can see somebody was out of contact rather than just seeing
 a green row.
 
-### What is missing
-
-Everything in the browser:
-
-- Catch a failed `fetch` and put the check-in in `localStorage` with the time
-  it was made.
-- Retry on `online`, and on a timer.
-- Show the person how many are queued — a queue you can't see is a queue you
-  don't trust.
-- Drop anything older than the twelve-hour bound instead of sending it to be
-  rejected.
-- Handle the same check-in arriving twice, because "did that send?" is the
-  question a flaky connection is built to make unanswerable.
-
-That last one is the trap. The obvious implementation double-writes on a
-retry, and the fix is a client-generated id on each check-in that the server
-treats as unique. We haven't built it, so it isn't in the schema, and adding
-it later is a migration.
-
 ### Offline map tiles
 
 Also not built. A service worker caching tiles cache-first would let the map
@@ -224,11 +250,11 @@ format like MBTiles, which is a different project.
 
 In the order we'd actually do them:
 
-1. **The browser queue.** The biggest gap, and the server is already waiting
-   for it.
-2. **A counter in the packet**, closing the replay hole.
-3. **Deduplication ids on check-ins**, which the queue needs anyway.
-4. **One node**, built and carried around Katy to find out what the range
+1. **Queue reports too**, not just check-ins. Harder, because a report filed
+   offline may need reconciling against one somebody else already filed for
+   the same thing.
+2. **A counter in the uplink packet**, closing the replay hole.
+3. **One node**, built and carried around Katy to find out what the range
    really is, because published LoRa range figures and a suburb with trees
    and houses in it are two different things.
-5. **Tiles**, last, because tiles without the queue is backwards.
+4. **Tiles**, last. Tiles before the queue would have been backwards.

@@ -197,7 +197,9 @@
 
 </div>
 
-<script src="../static/scripts/report.js"></script>
+<!-- type=module because report.js imports the offline queue. Without JS at
+     all, the check-in form posts normally and the server handles it. -->
+<script type="module" src="../static/scripts/report.js"></script>
 
 </body>
 </html>

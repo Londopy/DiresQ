@@ -162,3 +162,22 @@
     .join-row{flex-direction:column;}
     .responder .caps{margin-left:0;width:100%;}
 }
+
+/* Queued check-ins waiting for signal. Fixed to the corner because it has to
+   be true wherever you have scrolled to — a queue you can't see is a queue
+   you don't trust. Amber, not red: nothing is wrong, it just hasn't gone. */
+.queue-pill{
+    position:fixed;
+    left:16px;
+    bottom:16px;
+    z-index:1000;
+    padding:9px 14px;
+    border-radius:99px;
+    background:#313244;
+    border-left:3px solid #fab387;
+    color:#cdd6f4;
+    font-size:0.8rem;
+    box-shadow:0 6px 20px rgba(0,0,0,0.45);
+}
+
+.queue-pill[hidden]{display:none;}

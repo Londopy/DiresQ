@@ -140,8 +140,17 @@ def now_iso() -> str:
 
 
 def parse_iso(value: str | None) -> datetime | None:
+    """Read an ISO timestamp, including the shape browsers actually send.
+
+    `new Date().toISOString()` gives "2026-08-02T07:00:00.000Z". Python only
+    learned to read that trailing Z in 3.11, so on anything older every
+    check-in the offline queue sent would be rejected as unreadable — on the
+    developer's machine it would work fine and in deployment it would not.
+    """
     if not value:
         return None
+    if value.endswith(("Z", "z")):
+        value = value[:-1] + "+00:00"
     try:
         return datetime.fromisoformat(value)
     except ValueError:
@@ -1255,25 +1264,56 @@ def api_responders():
     return jsonify(fetch_responders())
 
 
-def record_checkin(responder_id: int, lat, lng, happened_at: datetime) -> dict:
+def record_checkin(responder_id: int, lat, lng, happened_at: datetime,
+                   client_id: str | None = None) -> dict:
     """Write a check-in and say what we made of it.
 
     Every route in ends up here — the phone, and the radio. If they ever
     disagree about what a check-in means, it will be because someone added a
     second copy of this function.
+
+    `client_id` makes it safe to send the same check-in twice. A queued one
+    gets retried whenever the connection flickers, and without this a bad
+    signal would fill the log with duplicates of one person standing still.
+    Sending it again is not an error and doesn't write a second row — it just
+    tells you about the one already there.
     """
-    received = datetime.now(timezone.utc)
     db = get_db()
-    db.execute("""
-        INSERT INTO checkins (responder, lat, lng, created_at, received_at)
-        VALUES (?, ?, ?, ?, ?)
-    """, (responder_id, lat, lng,
-          happened_at.isoformat(timespec="seconds"),
-          received.isoformat(timespec="seconds")))
+
+    if client_id:
+        seen = db.execute("""
+            SELECT created_at, received_at FROM checkins
+            WHERE client_id = ? AND responder = ?
+        """, (client_id, responder_id)).fetchone()
+        if seen is not None:
+            return {
+                "ok": True,
+                "duplicate": True,
+                "at": seen["created_at"],
+                "received_at": seen["received_at"],
+                "synced_late": late_sync(seen["created_at"],
+                                         seen["received_at"]),
+            }
+
+    received = datetime.now(timezone.utc)
+    try:
+        db.execute("""
+            INSERT INTO checkins
+                (responder, lat, lng, client_id, created_at, received_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (responder_id, lat, lng, client_id or None,
+              happened_at.isoformat(timespec="seconds"),
+              received.isoformat(timespec="seconds")))
+    except sqlite3.IntegrityError:
+        # Two retries landing at the same moment. The id is UNIQUE across the
+        # table, so somebody else's is a 409 rather than a silent overwrite.
+        db.rollback()
+        return {"ok": False, "error": "that check-in id belongs to someone else"}
     db.commit()
 
     return {
         "ok": True,
+        "duplicate": False,
         "at": happened_at.isoformat(timespec="seconds"),
         "received_at": received.isoformat(timespec="seconds"),
         "synced_late":
@@ -1298,10 +1338,19 @@ def api_checkin():
     if error:
         return answer({"error": error}, 400, error)
 
-    result = record_checkin(current_user()["id"], lat, lng, happened_at)
-    return answer(result, 201,
-                  "Queued check-in synced." if result["synced_late"]
-                  else "Checked in. Timer reset.")
+    client_id = form_or_json("client_id")[:64] or None
+    result = record_checkin(current_user()["id"], lat, lng, happened_at,
+                            client_id)
+    if not result["ok"]:
+        return answer(result, 409, result["error"])
+
+    if result["duplicate"]:
+        message = "Already had that one."
+    elif result["synced_late"]:
+        message = "Queued check-in synced."
+    else:
+        message = "Checked in. Timer reset."
+    return answer(result, 200 if result["duplicate"] else 201, message)
 
 
 @app.post("/api/uplink")

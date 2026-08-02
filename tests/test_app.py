@@ -1807,6 +1807,105 @@ class TestTryingToBreakIt:
             assert client.get(page).status_code == 200, page
 
 
+class TestQueuedCheckinIds:
+    """A queued check-in gets retried whenever the signal flickers. Sending
+    the same one twice has to be free, or a bad connection fills the log with
+    duplicates of somebody standing still."""
+
+    def count(self):
+        with diresq.app.app_context():
+            return diresq.get_db().execute(
+                "SELECT COUNT(*) c FROM checkins").fetchone()["c"]
+
+    def test_the_same_check_in_twice_writes_one_row(self, client):
+        payload = {"lat": 29.78, "lng": -95.82, "client_id": "abc-123"}
+        first = client.post("/api/checkin", json=payload)
+        second = client.post("/api/checkin", json=payload)
+        assert first.status_code == 201
+        assert second.status_code == 200
+        assert self.count() == 1
+
+    def test_a_retry_is_told_it_is_a_retry(self, client):
+        payload = {"lat": 29.78, "lng": -95.82, "client_id": "abc-123"}
+        client.post("/api/checkin", json=payload)
+        body = client.post("/api/checkin", json=payload).get_json()
+        assert body["duplicate"] is True
+        assert body["ok"] is True
+
+    def test_a_retry_keeps_the_original_time(self, client):
+        # Otherwise a resend would quietly reset the overdue timer to now,
+        # which is the exact bug backdating exists to prevent.
+        payload = {"lat": 29.78, "lng": -95.82, "client_id": "abc-123",
+                   "happened_at": ago(minutes=40)}
+        first = client.post("/api/checkin", json=payload).get_json()
+        second = client.post("/api/checkin", json=payload).get_json()
+        assert first["at"] == second["at"]
+
+    def test_different_ids_are_different_check_ins(self, client):
+        for n in range(3):
+            client.post("/api/checkin", json={"lat": 29.78, "lng": -95.82,
+                                              "client_id": f"id-{n}"})
+        assert self.count() == 3
+
+    def test_a_check_in_with_no_id_still_works(self, client):
+        # Nothing that came through the queue, e.g. a plain form post with
+        # JavaScript switched off.
+        assert client.post("/api/checkin",
+                           json={"lat": 29.78, "lng": -95.82}).status_code == 201
+
+    def test_check_ins_without_ids_are_never_treated_as_duplicates(self, client):
+        for _ in range(3):
+            client.post("/api/checkin", json={"lat": 29.78, "lng": -95.82})
+        assert self.count() == 3
+
+    def test_you_cannot_reuse_somebody_elses_id(self, client):
+        client.post("/api/checkin", json={"lat": 29.78, "lng": -95.82,
+                                          "client_id": "taken"})
+        with diresq.app.app_context():
+            db = diresq.get_db()
+            db.execute("UPDATE checkins SET responder = 2 WHERE client_id = 'taken'")
+            db.commit()
+
+        res = client.post("/api/checkin", json={"lat": 29.1, "lng": -95.1,
+                                                "client_id": "taken"})
+        assert res.status_code == 409
+        assert self.count() == 1
+
+    def test_it_reads_the_timestamp_a_browser_actually_sends(self, client):
+        # new Date().toISOString() ends in Z, and Python only learned to read
+        # that in 3.11. Without handling it here, every queued check-in would
+        # work on a new laptop and be rejected in deployment.
+        res = client.post("/api/checkin", json={
+            "lat": 29.78, "lng": -95.82, "client_id": "js-1",
+            "happened_at": "2026-08-02T07:00:00.000Z".replace(
+                "2026-08-02T07:00:00", ago(minutes=20).replace("+00:00", ""))})
+        assert res.status_code == 201
+
+    def test_a_plain_z_timestamp_is_read_too(self):
+        assert diresq.parse_iso("2026-08-02T07:00:00Z") is not None
+        assert diresq.parse_iso("2026-08-02T07:00:00.000Z") is not None
+        assert diresq.parse_iso("2026-08-02T07:00:00+00:00") is not None
+        assert diresq.parse_iso("half past four") is None
+
+    def test_a_silly_long_id_is_trimmed_not_rejected(self, client):
+        res = client.post("/api/checkin", json={"lat": 29.78, "lng": -95.82,
+                                                "client_id": "x" * 5000})
+        assert res.status_code == 201
+
+    def test_a_retry_does_not_un_expire_a_stale_check_in(self, client):
+        # The queue keeps the time it was made, so resending an old one must
+        # not make it look recent.
+        client.post("/report/1/rescue")
+        payload = {"lat": 29.78, "lng": -95.82, "client_id": "old",
+                   "happened_at": ago(minutes=90)}
+        client.post("/api/checkin", json=payload)
+        client.post("/api/checkin", json=payload)
+
+        board = client.get("/api/responders").get_json()
+        mine = next(r for r in board if r["username"] == "londo")
+        assert mine["overdue"] is True
+
+
 class TestSweepCommand:
     """The dead man's switch without anyone having a tab open."""
 

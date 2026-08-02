@@ -78,8 +78,15 @@ All notable changes to this project are documented here. Format follows
   can be put on a schedule instead of depending on somebody having a tab open.
 - `flask --app app node-key <username>` shows or rotates a responder's radio
   key.
+- Check in with no signal. The check-in is kept on your phone and sent when
+  there is a connection again, judged on the moment you pressed the button
+  rather than the moment it arrived. A pill in the corner says how many are
+  waiting, because a queue you cannot see is a queue you do not trust.
+- Sending the same check-in twice is free. Each one carries an id made before
+  it is sent, so a retry after a dropped connection is recognised rather than
+  logged again, and resending an old one cannot make it look recent.
 - A written account of what works without a network and what does not, with a
-  table saying plainly which parts are built. The offline queue is not.
+  table saying plainly which parts are built.
 - Export an ICS-214 Activity Log — the form agencies already keep at a
   multi-agency scene — built from logged records rather than from memory.
   Every assignment, arrival, check-in and automatic alert, in time order.
@@ -139,6 +146,10 @@ All notable changes to this project are documented here. Format follows
   map submitted silently and the report never appeared on the map.
 - Error messages were written but never displayed. A rejected sign-in or an
   incomplete report form appeared to do nothing at all.
+- Timestamps sent by a browser were unreadable on Python 3.10. The format
+  every browser produces ends in `Z`, which Python only learned to parse in
+  3.11 — so every queued check-in would have worked on the machine this was
+  written on and been rejected anywhere older.
 - Pressing resolve twice said "only the reporter or someone on scene can
   resolve this" — because resolving clears you off the report, and so takes
   away the right you had just used. It now says it is already resolved, which
