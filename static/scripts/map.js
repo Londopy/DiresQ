@@ -1,18 +1,8 @@
-// Keep the tiles we load, so the map still draws where you have already been
-// when the network goes. Registered from here rather than on every page: the
-// map is the only thing that benefits, and a service worker somebody didn't
-// ask for is a surprise.
-//
-// Needs HTTPS or localhost — browsers refuse to register one otherwise — so
-// this quietly does nothing during development over a LAN address.
-if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-        navigator.serviceWorker.register("/sw.js").catch(() => {
-            // Unsupported, blocked, or not a secure context. The map works
-            // exactly as before; it just won't remember anything.
-        });
-    });
-}
+// The service worker used to be registered from this file, back when tiles
+// were the only thing it kept. It now runs the whole offline story, so it
+// lives in pwa.js and loads on every page — registering it only here meant
+// somebody who installed the app from the board had no offline support until
+// they happened to open the map.
 
 // Katy, TX. Only ever seen if there are no located reports at all.
 const FALLBACK = [29.7858,-95.8244];

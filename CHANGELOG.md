@@ -187,6 +187,20 @@ All notable changes to this project are documented here. Format follows
 - `.gitattributes`, so the repository stores LF regardless of what anyone's
   editor does. Without it the next commit from a Windows machine touched 39
   files and changed 10,462 lines without altering a character of content.
+- DiresQ installs to a phone. A web app manifest, maskable icons for Android,
+  an iOS touch icon, and a translucent status bar — added to your home screen
+  it opens without browser chrome and behaves like an app, which matters for
+  something meant to be held in one hand in bad weather.
+- An offline page that shows your own commitments and nothing else: the report
+  you took, when you are due to check in, and where you last were. It renders
+  from `/api/me`, the one response the service worker is allowed to keep.
+  The feed and the accountability board are deliberately never cached — they
+  are claims about other people that stop being true the moment they are
+  written, and a stale copy of "who needs help" sends somebody to an address
+  that was cleared twenty minutes ago. A test asserts the list of cached URLs
+  is exactly `["/api/me"]`, and another fails if any other responder's name
+  appears in it. The reasoning is written up in `docs/offline.md`.
+- `GET /api/me` — your own state, for the above.
 
 ### Changed
 
@@ -261,6 +275,9 @@ All notable changes to this project are documented here. Format follows
   was written down as 65 examples and had always been 55.
 - Responder positions failing to load left a map that looked complete with
   every responder pin silently missing. It now says so.
+- The service worker was registered from `map.js`, so anyone who installed
+  DiresQ from the accountability board had no offline support at all until
+  they happened to open the map. It now registers on every page.
 - The suggestion panel showed the classifier's internal stems rather than the
   words somebody typed: "Suggested from: ris, upstair, fast" instead of
   "rising, upstairs, fast". The point of showing the reasoning is that a

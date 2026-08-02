@@ -2,14 +2,21 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <link rel="manifest" href="/static/manifest.webmanifest">
+    <meta name="theme-color" content="#1e1e2e">
+    <link rel="apple-touch-icon" href="/static/images/apple-touch-icon.png">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="DiresQ">
     <link rel="stylesheet" href="../static/styles/triage.css">
     <link rel="stylesheet" href="../static/styles/nav.css">
     <link rel="stylesheet" href="../static/styles/disclaimer.css">
     <title>Triage</title>
     <link rel="stylesheet" href="../static/styles/a11y.css">
 </head>
-<body>
+<body data-signed-in="{{ 'yes' if current_user else 'no' }}">
 
 {% if demo_mode %}
 <p class="demo-banner">
@@ -99,5 +106,6 @@
 </div>
 
 <script src="../static/scripts/triage.js"></script>
+<script src="/static/scripts/pwa.js"></script>
 </body>
 </html>

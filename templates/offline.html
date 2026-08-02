@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <link rel="manifest" href="/static/manifest.webmanifest">
+    <meta name="theme-color" content="#1e1e2e">
+    <link rel="apple-touch-icon" href="/static/images/apple-touch-icon.png">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="DiresQ">
+    <title>Offline — DiresQ</title>
+    <link rel="stylesheet" href="/static/styles/offline.css">
+    <link rel="stylesheet" href="/static/styles/a11y.css">
+</head>
+<body>
+
+<main class="offline" role="main">
+
+    <p class="flag" role="status">No connection</p>
+
+    <h1>You are offline.</h1>
+
+    <p class="lead">
+        Check-ins you make now are kept on this phone and sent the moment
+        there is signal. They are timestamped when you press the button, not
+        when they arrive &mdash; so going quiet here does not look like going
+        quiet out there.
+    </p>
+
+    <!-- Filled from the cached /api/me. Everything inside is about you, and
+         stays true with no network. The feed and the board deliberately are
+         not cached: a saved list of who needs help stops being true the
+         moment it is written. -->
+    <section id="mine" hidden>
+        <h2>What you committed to</h2>
+        <div class="card">
+            <p class="subject" id="subject"></p>
+            <p class="meta">
+                <span id="status"></span>
+                <span id="due"></span>
+            </p>
+        </div>
+        <p class="position" id="position"></p>
+        <p class="asof" id="asof"></p>
+    </section>
+
+    <section id="nothing" hidden>
+        <h2>Nothing assigned</h2>
+        <p>You are not currently on a report. Nothing is waiting on you.</p>
+    </section>
+
+    <p class="notcached">
+        The report feed and the accountability board are not saved to this
+        phone. They are about other people, and a copy of them would be out of
+        date the moment it was made.
+    </p>
+
+    <button id="retry" class="retry" type="button">Try again</button>
+
+    <p class="foot">
+        DiresQ does not contact emergency services.
+        <a href="/disclaimer">What this is and isn&rsquo;t</a>
+    </p>
+
+</main>
+
+<script src="/static/scripts/offline.js"></script>
+</body>
+</html>

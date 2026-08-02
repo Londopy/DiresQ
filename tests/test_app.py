@@ -8,6 +8,7 @@ failing test can't poison the next one.
 """
 
 import base64
+import json
 import re
 import sys
 from collections import Counter
@@ -2656,9 +2657,12 @@ class TestServiceWorker:
     def test_it_is_not_cached_for_a_year(self, client):
         assert "no-cache" in client.get("/sw.js").headers.get("Cache-Control", "")
 
-    def test_the_map_registers_it(self, client):
+    def test_every_page_registers_it(self, client):
+        # It used to be registered from map.js, which meant somebody who
+        # installed the app from the board had no offline support until they
+        # happened to open the map.
         assert "/sw.js" in client.get(
-            "/static/scripts/map.js").get_data(as_text=True)
+            "/static/scripts/pwa.js").get_data(as_text=True)
 
     def test_it_does_not_bulk_download_tiles(self):
         # Pre-fetching an area is against the OSM tile usage policy and gets
@@ -2731,6 +2735,129 @@ class TestMapPopupsDoNotRunUserText:
         source = self.source()
         assert ".catch(" in source.split('fetch("/api/responders")')[1], (
             "responder positions can fail silently")
+
+
+class TestInstallable:
+    """DiresQ has to survive being installed on a phone and taken somewhere
+    with no signal, because that is the situation it was written for."""
+
+    @staticmethod
+    def manifest():
+        return json.loads((diresq.SCHEMA.parent / "static"
+                           / "manifest.webmanifest").read_text(encoding="utf-8"))
+
+    def test_the_manifest_is_served_as_a_manifest(self, client):
+        res = client.get("/static/manifest.webmanifest")
+        assert res.status_code == 200
+        assert "manifest" in res.headers["Content-Type"]
+
+    def test_it_installs_standalone(self):
+        m = self.manifest()
+        # Without display:standalone it opens in a browser tab and is not,
+        # in any sense a user would recognise, an app.
+        assert m["display"] == "standalone"
+        assert m["start_url"].startswith("/")
+        assert m["name"] and m["short_name"]
+
+    def test_every_icon_it_promises_exists(self):
+        root = diresq.SCHEMA.parent
+        for icon in self.manifest()["icons"]:
+            path = root / icon["src"].lstrip("/")
+            assert path.exists(), f"manifest names {icon['src']}, which is absent"
+
+    def test_there_is_a_maskable_icon(self):
+        # Android crops non-maskable icons to a circle and takes the corners
+        # of the artwork with it.
+        purposes = {i.get("purpose") for i in self.manifest()["icons"]}
+        assert "maskable" in purposes
+
+    @pytest.mark.parametrize("page", [
+        "board.html", "homepage.html", "login.html", "map.html", "report.html",
+        "report_make.html", "signup.html", "triage.html", "disclaimer.html",
+        "credits.html", "notfound.html", "offline.html",
+    ])
+    def test_every_page_is_installable(self, page):
+        html = (diresq.SCHEMA.parent / "templates" / page
+                ).read_text(encoding="utf-8")
+        # Install prompts come from whichever page they happen to be on.
+        assert "manifest.webmanifest" in html, f"{page} cannot be installed from"
+        assert "theme-color" in html, f"{page} has no theme colour"
+        assert "apple-touch-icon" in html, f"{page} has no iOS icon"
+
+
+class TestWhatIsKeptOnTheDevice:
+    """The service worker's one rule: keep what stays true, refuse what
+    doesn't. These tests are the rule, written down where it can fail."""
+
+    @staticmethod
+    def worker():
+        return (diresq.SCHEMA.parent / "static" / "scripts" / "sw.js"
+                ).read_text(encoding="utf-8")
+
+    def test_the_feed_is_never_cached(self):
+        # A saved list of who needs help is a lie that gets more convincing
+        # the longer it sits there.
+        source = self.worker()
+        for never in ['cache.put("/api/reports', 'cache.put("/api/responders',
+                      'addAll(["/"', '"/board"', '"/api/reports"']:
+            assert never not in source, f"the worker caches {never}"
+
+    def test_only_your_own_state_is_cached(self):
+        source = self.worker()
+        cached = re.findall(r'cache\.put\(\s*"(/[^"]*)"', source)
+        assert cached == ["/api/me"], f"caching more than your own state: {cached}"
+
+    def test_the_offline_page_is_saved_ahead_of_time(self):
+        # A page you can only reach when offline is a page the browser has
+        # never had the chance to store.
+        assert '"/offline"' in self.worker()
+
+    def test_every_shell_file_exists(self):
+        # addAll rejects atomically if one URL 404s, and the install handler
+        # swallows that — so a typo here silently costs the whole offline
+        # story, with nothing in the console to say so.
+        source = self.worker()
+        block = source.split("SHELL_FILES = [")[1].split("]")[0]
+        root = diresq.SCHEMA.parent
+        for path in re.findall(r'"(/[^"]+)"', block):
+            if path == "/offline":
+                continue                       # a route, not a file
+            assert (root / path.lstrip("/")).exists(), f"{path} does not exist"
+
+    def test_it_still_does_not_bulk_download_tiles(self):
+        source = self.worker()
+        for banned in ["for (let z", "prefetch", "downloadArea", "seedTiles"]:
+            assert banned not in source
+
+    def test_it_caps_how_much_it_keeps(self):
+        assert "MAX_TILES" in self.worker()
+
+
+class TestYourOwnStateOnly:
+    """`/api/me` is the one thing kept on the device, so it must never grow
+    into a copy of the board."""
+
+    def test_it_needs_a_session(self, anon):
+        assert anon.get("/api/me").status_code in (302, 401)
+
+    def test_it_describes_you(self, client):
+        me = client.get("/api/me").get_json()
+        assert me["username"] == "londo"
+        assert "as_of" in me, "a cached copy with no timestamp cannot be aged"
+
+    def test_it_names_nobody_else(self, client):
+        # Every other responder in the seed. If any appears, this endpoint has
+        # become a board and the caching rule quietly stops holding.
+        board = client.get("/api/responders").get_json()
+        others = [r["username"] for r in board if r["username"] != "londo"]
+        body = client.get("/api/me").get_data(as_text=True)
+        assert others, "seed has nobody to compare against"
+        for name in others:
+            assert name not in body, f"/api/me leaks {name}"
+
+    def test_the_offline_page_needs_no_session(self, anon):
+        # It has to be fetchable at install time, before anyone logs in.
+        assert anon.get("/offline").status_code == 200
 
 
 class TestSafetyNotices:

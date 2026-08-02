@@ -1427,6 +1427,77 @@ def api_responders():
     return jsonify(fetch_responders())
 
 
+@app.get("/api/me")
+@login_required
+def api_me():
+    """Your own commitments, and nothing else.
+
+    This exists so the app has something honest to show with no network.
+
+    The service worker is not allowed to cache the feed — a saved list of who
+    needs help is a claim about the world that stops being true the moment it
+    is written, and showing somebody a stale one in a disaster is worse than
+    showing them nothing. The board has the same problem.
+
+    Your own state does not have that problem. Which report you committed to,
+    when you said you would check in, and where you last were are facts about
+    you, and they stay true whether or not you can reach a server. So this is
+    the one thing worth keeping on the device.
+    """
+    me = current_user()
+    row = get_db().execute("""
+        SELECT asg.id, asg.status, asg.joined_at, asg.eta,
+               r.id AS report_id, r.subject, r.priority, r.lat, r.lng
+          FROM assignments asg
+          JOIN reports r ON r.id = asg.report_id
+         WHERE asg.responder = ? AND asg.status != 'cleared'
+           AND r.status NOT IN ('resolved', 'hidden')
+         ORDER BY asg.joined_at DESC LIMIT 1
+    """, (me["id"],)).fetchone()
+
+    seen = get_db().execute(
+        "SELECT lat, lng, created_at FROM checkins "
+        "WHERE responder = ? ORDER BY created_at DESC LIMIT 1",
+        (me["id"],)).fetchone()
+
+    assignment = None
+    if row is not None:
+        due = deadline_for(row["joined_at"], row["eta"],
+                           seen["created_at"] if seen else None)
+        assignment = {
+            "id": row["id"],
+            "status": row["status"],
+            "report_id": row["report_id"],
+            "subject": row["subject"],
+            "priority": row["priority"],
+            "joined_at": row["joined_at"],
+            "check_in_by": due.isoformat(timespec="seconds") if due else None,
+        }
+
+    return jsonify({
+        "username": me["username"],
+        "capabilities": [c for c in (me["capabilities"] or "").split(",") if c],
+        "assignment": assignment,
+        "last_position": None if seen is None else {
+            "lat": seen["lat"], "lng": seen["lng"], "at": seen["created_at"],
+        },
+        # When the server answered. The offline page shows this so nobody
+        # mistakes a cached copy for a live one.
+        "as_of": now_iso(),
+    })
+
+
+@app.get("/offline")
+def offline_page():
+    """Shown when a navigation fails because there is no network.
+
+    Served normally too, so it can be cached ahead of time — a page you can
+    only reach when offline is a page the browser has never been able to
+    store.
+    """
+    return render_template("offline.html")
+
+
 def record_checkin(responder_id: int, lat, lng, happened_at: datetime,
                    client_id: str | None = None) -> dict:
     """Write a check-in and say what we made of it.

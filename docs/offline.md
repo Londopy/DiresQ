@@ -278,6 +278,58 @@ been.** That is worth having and it is not an offline map.
 
 ---
 
+## What we keep on the phone, and what we refuse to
+
+DiresQ installs. Add it to your home screen and it opens without browser
+chrome, with its own icon, and it keeps working with the radio off. That
+raised a question we had to answer properly rather than by default:
+
+**when there is no network, what should the app show you?**
+
+The tempting answer is *everything it had a minute ago*. Cache the feed, cache
+the board, and the app looks like it still works. We didn't, and the reason is
+the whole argument of this project.
+
+A cached feed is a **claim about other people, frozen at a moment that has
+passed.** Somebody reading one in a flood drives to an address that was
+cleared twenty minutes ago, while the street that filed thirty seconds later
+is invisible to them — and nothing on screen tells them which is which. The
+board has the same problem in a worse form: a saved row saying a responder is
+fine is exactly the reassurance the dead man's switch exists to withhold.
+
+So the rule the service worker follows is:
+
+> **Keep what stays true with no network. Refuse to keep what stops being true
+> the moment it is written.**
+
+Sorted by that rule:
+
+| | Kept? | Why |
+| --- | --- | --- |
+| Map tiles you've loaded | Yes | The road is where it was last week |
+| Stylesheets, scripts, icons | Yes | They are the app, not a claim about the world |
+| **Your own assignment** | **Yes** | You committed to it. No server can un-commit you while you're out of contact |
+| Your check-in deadline | Yes | Derived from when you joined and when you last checked in — both already past |
+| Your last known position | Yes | It is a record of where you were, not where you are |
+| Queued check-ins | Yes | Yours, unsent, and timestamped when you pressed the button |
+| The report feed | **No** | A list of who needs help, and it is wrong within a minute |
+| The accountability board | **No** | Other people's safety, and a stale copy is reassuring in exactly the wrong way |
+
+That is what `/api/me` is for. It returns your own state and nobody else's,
+and it is the only response the worker is allowed to store — there's a test
+asserting the list of cached URLs is exactly `["/api/me"]`, and another that
+fails if any other responder's name appears in the payload.
+
+Offline, you get the job you took, when you're due to check in, where you last
+were, and a line saying when that was saved. Where the live feed would be,
+there is a sentence explaining that it is not saved to this device and why.
+
+**An honest empty space beats a convincing stale one.** That is the same
+reason the classifier says nothing below 45% confidence, and the same reason
+the ETA parser refuses a guess rather than inventing a deadline.
+
+---
+
 ## If we carried on
 
 In the order we'd actually do them:

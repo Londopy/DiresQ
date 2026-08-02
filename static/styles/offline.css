@@ -1,0 +1,159 @@
+/* The offline page.
+   Built mobile-first, because the only way to see it is to be holding a
+   phone somewhere with no signal. Separate file so nothing here collides
+   with Skythe's stylesheets. */
+
+:root {
+    --base: #1e1e2e;
+    --surface: #313244;
+    --text: #cdd6f4;
+    --subtext: #a6adc8;
+    --overlay: #45475a;
+    --red: #f38ba8;
+    --peach: #fab387;
+    --blue: #89b4fa;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    background: var(--base);
+    color: var(--text);
+    font-family: system-ui, sans-serif;
+    line-height: 1.5;
+    /* Draw under the notch, since the status bar is translucent. */
+    padding: env(safe-area-inset-top) env(safe-area-inset-right)
+             env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+.offline {
+    max-width: 34rem;
+    margin: 0 auto;
+    padding: 28px 20px 48px;
+}
+
+/* Amber, not red. Being offline is not an emergency — it is the condition
+   this whole app was designed to keep working in. Red is reserved for a
+   person nobody has heard from. */
+.flag {
+    display: inline-block;
+    margin: 0 0 18px;
+    padding: 6px 12px;
+    border-radius: 99px;
+    background: var(--surface);
+    border-left: 3px solid var(--peach);
+    color: var(--peach);
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+h1 {
+    margin: 0 0 14px;
+    font-size: 1.7rem;
+    line-height: 1.2;
+}
+
+h2 {
+    margin: 28px 0 10px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--subtext);
+}
+
+.lead {
+    margin: 0;
+    color: var(--subtext);
+    font-size: 0.95rem;
+}
+
+.card {
+    padding: 16px;
+    border-radius: 10px;
+    background: var(--surface);
+    border-left: 3px solid var(--blue);
+}
+
+.subject {
+    margin: 0 0 8px;
+    font-size: 1.05rem;
+    font-weight: 600;
+}
+
+.meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--subtext);
+}
+
+/* The one line on this page somebody has to act on. */
+.due.late {
+    color: var(--red);
+    font-weight: 600;
+}
+
+.position,
+.asof {
+    margin: 10px 0 0;
+    font-size: 0.8rem;
+    color: var(--subtext);
+}
+
+.asof {
+    font-variant-numeric: tabular-nums;
+    color: var(--overlay);
+}
+
+.notcached {
+    margin: 28px 0 0;
+    padding-top: 18px;
+    border-top: 1px solid var(--surface);
+    font-size: 0.82rem;
+    color: var(--subtext);
+}
+
+.retry {
+    /* 48px minimum, because this gets pressed with wet hands. */
+    width: 100%;
+    min-height: 48px;
+    margin: 24px 0 0;
+    padding: 12px 20px;
+    border: 0;
+    border-radius: 10px;
+    background: var(--blue);
+    color: var(--base);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.retry:hover { filter: brightness(1.08); }
+
+.retry:focus-visible {
+    outline: 3px solid var(--peach);
+    outline-offset: 2px;
+}
+
+.foot {
+    margin: 32px 0 0;
+    font-size: 0.75rem;
+    color: var(--overlay);
+}
+
+.foot a { color: var(--subtext); }
+
+@media (min-width: 40rem) {
+    .offline { padding-top: 56px; }
+    h1 { font-size: 2rem; }
+    .retry { width: auto; min-width: 12rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+}
