@@ -16,24 +16,41 @@ jobs:
       - name: No committed database
         run: |
           if git ls-files | grep -Ei '\.(db|sqlite3?)$'; then
-            echo "::error::a database file is tracked in git — add it to .gitignore and git rm --cached it"
+            echo "::error::a database file is tracked in git"
             exit 1
           fi
+          echo "no tracked database"
 
-      - name: No hardcoded SECRET_KEY
+      # Python rather than grep: the patterns need both quote characters,
+      # which is unescapable inside a YAML block scalar.
+      - name: No hardcoded secrets or weak randomness
         run: |
-          if grep -rnE 'SECRET_KEY["'\'']?\s*[=:]\s*["'\'][^"'\'']+' --include='*.py' .; then
-            echo "::error::SECRET_KEY is assigned a literal — read it from the environment"
-            exit 1
-          fi
+          python3 - <<'EOF'
+          import pathlib, re, sys
 
-      - name: No random module for anything token-shaped
-        run: |
-          if grep -rnE '\brandom\.(random|randint|choice|choices|getrandbits)' \
-               --include='*.py' . | grep -viE 'seed|sample|test'; then
-            echo "::error::use the secrets module for tokens, not random"
-            exit 1
-          fi
+          CHECKS = [
+              (re.compile(r"""SECRET_KEY["']?\s*[=:]\s*["'][^"']+"""),
+               "SECRET_KEY is assigned a literal; read it from the environment"),
+              (re.compile(r"""\brandom\.(random|randint|choice|choices|getrandbits)\b"""),
+               "use the secrets module for anything token-shaped, not random"),
+          ]
+          SKIP = {".venv", "venv", ".git", "tests"}
+
+          failed = False
+          for path in sorted(pathlib.Path(".").rglob("*.py")):
+              if SKIP & set(path.parts):
+                  continue
+              lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+              for n, line in enumerate(lines, 1):
+                  for pattern, message in CHECKS:
+                      if pattern.search(line):
+                          print(f"::error file={path},line={n}::{message}")
+                          failed = True
+
+          if failed:
+              sys.exit(1)
+          print("no hardcoded secrets, no weak randomness")
+          EOF
 
   # Reported to the job summary, never blocking.
   advisory:
