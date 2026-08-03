@@ -68,11 +68,17 @@ function coverage(report){
 // stay circles — one shape for an incident, another for a person.
 function reportPin(state){
     return L.divIcon({
-        className: "",                       // Leaflet adds its own otherwise
+        // Empty rather than absent: Leaflet's default is leaflet-div-icon,
+        // which draws a white box behind everything.
+        className: "",
         html: `<span class="pin pin-${state}"></span>`,
         iconSize: [22, 22],
-        iconAnchor: [11, 22],
-        popupAnchor: [0, -20],
+        // 27, not 22. The pin is a 22px square rotated 45 degrees, so its
+        // visible tip is half a diagonal below the centre — 11 + 15.6 — and
+        // anchoring to the box bottom left every pin sitting about five
+        // pixels north of the thing it points at.
+        iconAnchor: [11, 27],
+        popupAnchor: [0, -25],
     });
 }
 

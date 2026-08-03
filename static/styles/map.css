@@ -143,6 +143,11 @@ border-left:6px solid var(--green);
     align-items:center;
     gap:18px;
 
+    /* Four states, not the two this started with. Without wrapping, the
+       fourth pushes the legend past the edge of a phone and takes the
+       horizontal scrollbar with it. */
+    flex-wrap:wrap;
+
     padding:10px 16px;
 
     border-radius:12px;
@@ -241,7 +246,8 @@ border-left:6px solid var(--green);
     }
 
     #search,
-    .board-btn{
+    .board-btn,
+    .gaps-toggle{
 
         width:100%;
 
@@ -250,6 +256,26 @@ border-left:6px solid var(--green);
     .legend{
 
         justify-content:center;
+
+        /* Tighter, because four items at 18px wrap to three lines on a
+           narrow phone and push the map off the bottom of the screen. */
+        gap:10px 14px;
+
+    }
+
+    .legend-item{
+
+        font-size:.82rem;
+
+    }
+
+    /* The header is taller than it was — four legend states and a toggle —
+       so the map has to give some height back or the two together no longer
+       fit above the fold, which is the whole point of a map. */
+    #map{
+
+        height:52vh;
+        min-height:260px;
 
     }
 
