@@ -2737,6 +2737,81 @@ class TestMapPopupsDoNotRunUserText:
             "responder positions can fail silently")
 
 
+class TestTouchTargets:
+    """WCAG 2.5.5 asks for 44x44. The rule is in a11y.css and has been since
+    the audit — but nothing was testing it, so anybody restyling could have
+    deleted it and no build would have complained.
+
+    It matters more here than the guideline implies. These are the controls
+    somebody presses on a phone in bad weather, and two of them are "I'm on
+    scene" and "Check in" — the ones that stop a board row going red.
+    """
+
+    @staticmethod
+    def rule():
+        css = (diresq.SCHEMA.parent / "static" / "styles" / "a11y.css"
+               ).read_text(encoding="utf-8")
+        match = re.search(r"([^}]*)\{\s*min-height:\s*44px", css)
+        assert match, "the 44px touch-target rule is gone from a11y.css"
+        return match.group(1)
+
+    @pytest.mark.parametrize("control", [
+        ".board-btn", ".map-btn", ".feed-btn", ".export-btn", ".back-btn",
+        ".check-in", ".gaps-toggle", 'button[type="submit"]',
+    ])
+    def test_every_tappable_control_is_44px(self, control):
+        assert control in self.rule(), f"{control} is not held at 44px"
+
+    @staticmethod
+    def sized_anywhere(selector_class):
+        """Does any stylesheet give this class at least 44px of height?
+
+        Deliberately not "is it in the a11y rule" — Skythe sizes some
+        controls in their own file and those are just as tappable. The
+        requirement is 44 pixels, not which file they came from.
+        """
+        styles = (diresq.SCHEMA.parent / "static" / "styles")
+        for sheet in styles.glob("*.css"):
+            css = sheet.read_text(encoding="utf-8")
+            for block in re.findall(
+                    r"\.%s\b[^{]*\{([^}]*)\}" % re.escape(selector_class),
+                    css):
+                for px in re.findall(r"(?:min-)?height:\s*(\d+)px", block):
+                    if int(px) >= 44:
+                        return True
+        return False
+
+    def test_no_button_escapes_a_measured_size(self):
+        """A button that is neither a submit, nor named in the shared rule,
+        nor sized in its own stylesheet, is a target nobody has measured.
+        This is what catches the next one somebody adds."""
+        covered = self.rule()
+        root = diresq.SCHEMA.parent / "templates"
+
+        loose = []
+        for page in sorted(root.glob("*.html")):
+            html = page.read_text(encoding="utf-8")
+            for tag in re.findall(r"<button[^>]*>", html, re.S):
+                if 'type="submit"' in tag:
+                    continue
+                classes = re.search(r'class="([^"]*)"', tag)
+                names = classes.group(1).split() if classes else []
+                if any(f".{c}" in covered or self.sized_anywhere(c)
+                       for c in names):
+                    continue
+                loose.append(f"{page.name}: {' '.join(tag.split())[:58]}")
+
+        assert not loose, ("buttons with no measured touch size:\n  "
+                           + "\n  ".join(loose))
+
+    def test_it_is_loaded_everywhere(self):
+        # The rule only helps on pages that link the stylesheet.
+        root = diresq.SCHEMA.parent / "templates"
+        for page in root.glob("*.html"):
+            assert "a11y.css" in page.read_text(encoding="utf-8"), (
+                f"{page.name} does not load the accessibility stylesheet")
+
+
 class TestTheMapShowsCoverage:
     """The feed sorts by who needs help most. The map says the same thing
     spatially — a red pin two streets from a green one — which is the

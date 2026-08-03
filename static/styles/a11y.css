@@ -65,13 +65,20 @@ summary:focus-visible {
 }
 
 /* 44x44 is the WCAG 2.5.5 target. These are the controls somebody taps with
-   wet hands, one-handed, in the rain. */
+   wet hands, one-handed, in the rain.
+
+   Every form button in the app is a submit, so the last selector covers the
+   report actions — "I'm on scene", "Check in", the staffing votes — without
+   naming them one by one. Anything new that isn't a submit needs adding
+   here, and a test in TestTouchTargets fails until it is. */
 .board-btn,
 .map-btn,
 .feed-btn,
 .export-btn,
 .back-btn,
 .check-in,
+.gaps-toggle,
+.location-btn,
 button[type="submit"] {
     min-height: 44px;
 }
@@ -123,3 +130,4 @@ button[type="submit"] {
     color:#a6e3a1;
     font-size:0.95em;
 }
+

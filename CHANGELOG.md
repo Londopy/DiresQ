@@ -283,6 +283,14 @@ All notable changes to this project are documented here. Format follows
   was written down as 65 examples and had always been 55.
 - Responder positions failing to load left a map that looked complete with
   every responder pin silently missing. It now says so.
+- `.location-btn` — "Use My Location" — was about 43px tall, just under the
+  44×44 touch target the accessibility audit had set everywhere else. It is
+  pressed outdoors, on a phone, by somebody standing in the thing they are
+  reporting. Found by a new test that walks every button in every template
+  and fails on any that is neither a submit, nor named in the shared rule,
+  nor sized in its own stylesheet. The 44px rule itself had no test behind it
+  either, so it could have been deleted by anyone restyling without a single
+  build going red. It has two now.
 - The service worker was registered from `map.js`, so anyone who installed
   DiresQ from the accountability board had no offline support at all until
   they happened to open the map. It now registers on every page.

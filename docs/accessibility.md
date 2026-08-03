@@ -97,6 +97,15 @@ invisible until it has focus.
 
 - Touch targets under 44×44 on the nav and action buttons — these get tapped
   one-handed, in the rain, by someone who is not calm *(2.5.5)*
+
+  Fixed at the time, and then almost undone twice. The rule sat in `a11y.css`
+  with no test behind it, so anybody restyling could have deleted it silently.
+  There is now one that reads the rule and fails if a named control drops out
+  of it — plus a second that walks every `<button>` in every template and
+  fails on any that is neither a submit, nor named in the shared rule, nor
+  given 44px in its own stylesheet. That second test found `.location-btn`
+  sitting at about 43px: "Use My Location", which is pressed outdoors, on a
+  phone, by someone standing in the thing they are reporting.
 - No `prefers-reduced-motion` handling *(2.3.3)*
 
 ## What was already right
