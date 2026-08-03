@@ -12,10 +12,10 @@ DiresQ tracks the people going into it.**
 [![Tests](https://img.shields.io/badge/tests-537%20passing-brightgreen)](tests/test_app.py)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
+[![Limitations](https://img.shields.io/badge/limitations-written_down-f38ba8)](docs/limits.md)
 [![Accessibility](https://img.shields.io/badge/accessibility-WCAG_2.1_AA_audited-a6e3a1)](docs/accessibility.md)
 [![Works offline](https://img.shields.io/badge/reports_&_check--ins-work_offline-fab387)](docs/offline.md)
 [![No JS required](https://img.shields.io/badge/works_without-JavaScript-89b4fa)](docs/architecture.md)
-[![Limitations](https://img.shields.io/badge/limitations-written_down-f38ba8)](docs/limits.md)
 
 [![parsed by timefuzz](https://img.shields.io/badge/parsed%20by-timefuzz-007ec6)](https://github.com/Londopy/timefuzz)
 [![changelog checked by patchnotes](https://img.shields.io/badge/changelog%20checked%20by-patchnotes-007ec6)](https://github.com/Londopy/patchnotes)
@@ -171,10 +171,10 @@ floating-point noise, because CPython and V8 round `log` differently in the
 last bit. That was wrong in the Python on every machine, and unfindable while
 there was only one implementation. [How →](docs/offline.md)
 
-**We wrote down what's broken before anyone asked.** `/api/uplink` is
-unauthenticated. Location is self-reported. The radio firmware does not exist,
-because we have no hardware. A system with no stated limitations isn't a system
-without limitations — it's one nobody checked.
+**We wrote down what's broken before anyone asked.** Location is self-reported.
+One cautious responder can hold a report open. The Windows launcher has never
+been run on Windows. A system with no stated limitations isn't a system without
+limitations — it's one nobody checked.
 [All of them →](docs/limits.md)
 
 ## What it does
@@ -535,9 +535,11 @@ fork, offline, or if Pages is down.
 - **Staffing is resolved by taking the most cautious signal**, which means one
   pessimistic responder can hold a report at "needs more". We chose that over
   the alternative deliberately.
-- **`/api/uplink` is unauthenticated.** A radio gateway has no session, so the
-  responder is named inside the packet. It proves the shape is right; it is
-  not something to expose.
+- **`/api/uplink` has no session auth.** A radio gateway has no cookie, so the
+  responder is named inside the packet, and every packet carries a four-byte
+  HMAC and a replay counter checked before anything is written. Thirty-two bits
+  of tag is a deliberate trade against message size; it is not something to
+  expose to the internet.
 - **The dead man's switch runs on page loads, not a timer.** If nobody has
   DiresQ open, nothing is swept. One tab on the board is enough, but that's a
   dependency, not a guarantee.
