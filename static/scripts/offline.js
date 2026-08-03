@@ -35,6 +35,22 @@ function show(id) { document.getElementById(id).hidden = false; }
 function render(me) {
     if (!me) return;   // never cached; the static copy above still reads fine
 
+    // First, because it is the only thing here that changes what somebody
+    // does in the next minute: they are driving to an address nobody needs
+    // them at. Shown even with no signal, and honestly — a resolved report
+    // stays resolved, so this is one of the few claims that survives being
+    // cached.
+    if (me.stand_down) {
+        document.getElementById("sd-subject").textContent =
+            `“${me.stand_down.subject}” was resolved.`;
+        const mins = me.stand_down.minutes_ago;
+        document.getElementById("sd-when").textContent =
+            typeof mins === "number"
+                ? `Closed ${mins} minute${mins === 1 ? "" : "s"} before this page was saved.`
+                : "Closed before this page was saved.";
+        show("standdown");
+    }
+
     if (!me.assignment) {
         show("nothing");
     } else {

@@ -250,6 +250,17 @@ All notable changes to this project are documented here. Format follows
 - `flask --app app export-model` regenerates the browser's copy of the
   classifier. A test fails if the committed file has drifted from what the
   code would produce today, so forgetting the step is loud rather than silent.
+- Nobody is left driving to an address that has been cleared. Resolving a
+  report takes everyone still attached off it, and until now told none of
+  them — somebody who joined twenty minutes ago and is in a car found out by
+  refreshing a page they were not looking at. The whole argument of this
+  project is that people should not be sent where they are not needed, and the
+  app was doing it to its own responders. They now get a notice at the top of
+  the feed and the report page, and on the offline page too: a resolved report
+  stays resolved, so unlike the feed that claim is still true from a cache. It
+  does not dismiss itself on a timer, because the person it is for is driving
+  with the phone in a pocket. Whoever pressed the button is not told to stand
+  down — they were standing there, and they decided.
 - Reports that describe one incident are counted as one in the feed. Two
   reports of a single flood with three responders on each used to render as
   two comfortably staffed rows — three plus three looks fine, and six people

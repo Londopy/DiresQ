@@ -29,6 +29,23 @@
         quiet out there.
     </p>
 
+    <!-- The one thing on this page that can tell somebody to turn the car
+         around. A report that was resolved stays resolved, so unlike the feed
+         this does not rot in a cache — it was true when it was saved and it
+         is still true now. -->
+    <section id="standdown" hidden>
+        <h2>Stand down</h2>
+        <div class="card alarm">
+            <p class="subject" id="sd-subject"></p>
+            <p class="meta" id="sd-when"></p>
+            <p class="meta">
+                Nobody needs you at that address. You are off it.
+                This was true when the page was last saved &mdash; a resolved
+                report does not un-resolve.
+            </p>
+        </div>
+    </section>
+
     <!-- Filled from the cached /api/me. Everything inside is about you, and
          stays true with no network. The feed and the board deliberately are
          not cached: a saved list of who needs help stops being true the

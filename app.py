@@ -1461,8 +1461,10 @@ def api_assignment_status(assignment_id: int):
 
     if wanted == "cleared":
         # Leaving retracts your staffing vote: you can no longer see the scene.
+        # 'self', because you decided. Nothing to announce.
         db.execute("UPDATE assignments SET status = ?, staffing_vote = NULL, "
-                   "status_changed_at = ? WHERE id = ?",
+                   "status_changed_at = ?, cleared_reason = 'self' "
+                   "WHERE id = ?",
                    (wanted, now_iso(), assignment_id))
     else:
         db.execute("UPDATE assignments SET status = ?, status_changed_at = ? "
@@ -1548,12 +1550,24 @@ def report_resolve(report_id: int):
         return redirect(url_for("report_detail", report_id=report_id))
 
     db.execute("UPDATE reports SET status = 'resolved' WHERE id = ?", (report_id,))
-    # Everyone still attached is done here.
+
+    # Everyone still attached is done here — and, unlike somebody clearing
+    # themselves, they did not decide that. Mark why, so the app can tell
+    # them. Before this, a person driving to an address that had just been
+    # cleared was cleared off it silently and found out by refreshing a page
+    # they were not looking at. Sending people where they are not needed is
+    # the failure this project exists to prevent; it was doing it to its own
+    # responders.
+    #
+    # The person pressing the button is excluded: they are standing there,
+    # they made the decision, and telling them to stand down would be absurd.
     db.execute("""
         UPDATE assignments SET status = 'cleared', staffing_vote = NULL,
-                               status_changed_at = ?
+                               status_changed_at = ?,
+                               cleared_reason = CASE WHEN responder = ?
+                                                     THEN 'self' ELSE 'resolved' END
         WHERE report_id = ? AND status != 'cleared'
-    """, (now_iso(), report_id))
+    """, (now_iso(), user["id"], report_id))
     db.commit()
     return redirect(url_for("homepage"))
 
@@ -1921,6 +1935,15 @@ def api_me():
         "username": me["username"],
         "capabilities": [c for c in (me["capabilities"] or "").split(",") if c],
         "assignment": assignment,
+        # A job you were on your way to that somebody has since closed.
+        #
+        # This belongs here, in the one response the service worker is allowed
+        # to keep, precisely because of what it is: a fact about *you* and a
+        # commitment that has ended. Unlike the feed it does not rot — a
+        # report that was resolved stays resolved — so a cached copy is still
+        # true with no signal. It is the only thing on the offline page that
+        # can tell somebody to turn the car around.
+        "stand_down": stand_down_for(me["id"]),
         "last_position": None if seen is None else {
             "lat": seen["lat"], "lng": seen["lng"], "at": seen["created_at"],
         },
@@ -1928,6 +1951,69 @@ def api_me():
         # mistakes a cached copy for a live one.
         "as_of": now_iso(),
     })
+
+
+def stand_down_for(account_id: int) -> dict | None:
+    """A report this person was going to that somebody else has closed.
+
+    Returns None once they have acknowledged it, and None if they cleared
+    themselves — that was their own decision and needs no announcement.
+
+    Deliberately not time-limited. A notice that expires on its own is a
+    notice missed by exactly the person it was written for: somebody driving,
+    with the phone in their pocket, who will look at it in twenty minutes.
+    """
+    row = get_db().execute("""
+        SELECT asg.id, asg.status_changed_at,
+               r.id AS report_id, r.subject, r.lat, r.lng
+          FROM assignments asg
+          JOIN reports r ON r.id = asg.report_id
+         WHERE asg.responder = ?
+           AND asg.cleared_reason = 'resolved'
+           AND asg.stand_down_seen_at IS NULL
+         ORDER BY asg.status_changed_at DESC LIMIT 1
+    """, (account_id,)).fetchone()
+    if row is None:
+        return None
+
+    closed = parse_iso(row["status_changed_at"])
+    return {
+        "assignment_id": row["id"],
+        "report_id": row["report_id"],
+        "subject": row["subject"],
+        "at": row["status_changed_at"],
+        "minutes_ago": None if closed is None else max(
+            0, int((datetime.now(timezone.utc) - closed).total_seconds() // 60)),
+    }
+
+
+@app.context_processor
+def inject_stand_down():
+    # A callable, so pages that never render the banner don't pay for the
+    # query. Same shape as overdue_count().
+    def stand_down():
+        user = current_user()
+        return None if user is None else stand_down_for(user["id"])
+    return {"stand_down": stand_down}
+
+
+@app.post("/api/standdown/<int:assignment_id>/ack")
+@login_required
+def api_stand_down_ack(assignment_id: int):
+    """"I've seen it." Stops the notice, and only for the person it is about."""
+    db = get_db()
+    row = db.execute("SELECT responder FROM assignments WHERE id = ?",
+                     (assignment_id,)).fetchone()
+    if row is None:
+        return answer({"error": "no such assignment"}, 404, "No such assignment")
+    if row["responder"] != current_user()["id"]:
+        return answer({"error": "not your assignment"}, 403,
+                      "That is not yours to dismiss")
+
+    db.execute("UPDATE assignments SET stand_down_seen_at = ? WHERE id = ?",
+               (now_iso(), assignment_id))
+    db.commit()
+    return answer({"ok": True, "id": assignment_id}, 200, "")
 
 
 @app.get("/offline")

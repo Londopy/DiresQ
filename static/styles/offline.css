@@ -157,3 +157,15 @@ h2 {
 @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; animation: none !important; }
 }
+
+/* The report you were driving to has been closed. Red, first on the page,
+   and it does not dismiss itself — the person this is for is in a car with
+   the phone in their pocket and will read it in twenty minutes. */
+#standdown .card.alarm{
+    border-left:3px solid #f38ba8;
+}
+
+#standdown .card.alarm .subject{
+    color:#f38ba8;
+    font-weight:700;
+}

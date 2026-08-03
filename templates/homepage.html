@@ -35,6 +35,32 @@
 
 <a class="skip-link" href="#main">Skip to content</a>
 
+{% set standing_down = stand_down() %}
+{% if standing_down %}
+<!-- Somebody closed a report this person was still driving to. The whole
+     project is about not sending people where they are not needed; this is
+     that rule pointed at our own responders. It does not dismiss itself. -->
+<div class="stand-down" role="alert">
+    <div class="what">
+        <strong>Stand down.</strong>
+        The report you were going to &mdash;
+        <a href="/report/{{ standing_down.report_id }}">&ldquo;{{ standing_down.subject }}&rdquo;</a>
+        &mdash; was resolved
+        {%- if standing_down.minutes_ago is none %}
+        {%- elif standing_down.minutes_ago == 0 %} just now
+        {%- else %}
+        {{ standing_down.minutes_ago }} minute{{ 's' if standing_down.minutes_ago != 1 }} ago
+        {%- endif %}. Nobody needs you at that address.
+        You are off it and free for the next one.
+    </div>
+    <form action="/api/standdown/{{ standing_down.assignment_id }}/ack" method="POST">
+        <input type="hidden" name="next" value="{{ request.path }}">
+        <button type="submit" class="stand-down-ack">Got it</button>
+    </form>
+</div>
+{% endif %}
+
+
 <div class="container">
 
     <main id="main">

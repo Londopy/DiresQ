@@ -132,6 +132,7 @@ Reports in the feed and on `/api/reports` carry `created_at`, `received_at`,
 | `GET` | `/api/me` | | Your own commitments, and nobody else's |
 | `POST` | `/api/assignments/<id>/status` | `status` | Your own assignment only |
 | `POST` | `/api/checkin` | `lat`, `lng`, `happened_at`, `client_id` *(all optional)* | Resets your timer |
+| `POST` | `/api/standdown/<assignment_id>/ack` | | "I've seen it." Yours only |
 
 `status` moves forward only: `en_route` → `on_scene` → `cleared`. Anything
 else is a 400. Clearing retracts your staffing vote.
@@ -171,6 +172,23 @@ response the worker stores, and the offline page renders from it.
   "as_of": "2026-08-02T22:39:23+00:00"
 }
 ```
+
+`stand_down` is a report you were on your way to that somebody has since
+closed:
+
+```json
+{ "assignment_id": 5, "report_id": 12, "subject": "...",
+  "at": "2026-08-03T04:55:00+00:00", "minutes_ago": 6 }
+```
+
+`null` when there is nothing to say. It belongs in this payload — the one
+response the worker may cache — precisely because a resolved report does not
+un-resolve, so unlike the feed it is still true from a cache. It is the only
+thing on the offline page that can tell somebody to turn the car around.
+
+It does not expire; `POST /api/standdown/<assignment_id>/ack` is what stops
+it, and only for the person it is about. Clearing yourself never produces one
+— that was your decision.
 
 `as_of` is when the server answered. The offline page prints it, so a cached
 copy can never pass itself off as a live one. `assignment` is `null` if you

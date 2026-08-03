@@ -44,3 +44,47 @@
 @media (prefers-reduced-motion:reduce){
     .board-btn.alert{animation:none;}
 }
+
+/* ------------------------------------------------------------------
+   Stand down: a report you were on your way to has been resolved.
+
+   Top of the page, above everything, red, and it stays until pressed. The
+   argument of this whole project is that nobody should be sent where they
+   are not needed — this is that rule turned on our own responders, who used
+   to be cleared off a job silently and left to work it out from a page they
+   were not looking at.
+   ------------------------------------------------------------------ */
+.stand-down{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:16px;
+    flex-wrap:wrap;
+    max-width:1200px;
+    margin:0 auto 18px;
+    padding:14px 18px;
+    border-radius:10px;
+    background:#181825;
+    border-left:4px solid #f38ba8;
+    color:#cdd6f4;
+    font-size:0.9rem;
+    line-height:1.55;
+}
+
+.stand-down .what{flex:1 1 320px;}
+.stand-down strong{color:#f38ba8;}
+.stand-down a{color:#89b4fa;}
+
+.stand-down-ack{
+    min-height:44px;
+    padding:11px 22px;
+    border:none;
+    border-radius:8px;
+    background:#45475a;
+    color:#cdd6f4;
+    font-size:0.88rem;
+    font-weight:600;
+    cursor:pointer;
+}
+
+.stand-down-ack:hover{background:#585b70;}

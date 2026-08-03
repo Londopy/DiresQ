@@ -128,6 +128,22 @@ CREATE TABLE assignments (
     -- can say when someone arrived but not replay every step they took.
     status_changed_at TEXT,
 
+    -- Why this assignment ended. 'self' when they cleared themselves, which
+    -- needs no announcement — they were there and they decided.
+    --
+    -- 'resolved' is the one that matters: somebody closed the report while
+    -- this person was still driving to it. Until this column existed, that
+    -- happened silently. The whole project is about not sending people to an
+    -- address nobody needs them at, and the app was doing it to its own
+    -- responders — clearing them off a job and leaving them to find out by
+    -- refreshing a page they were not looking at.
+    cleared_reason TEXT CHECK (cleared_reason IN ('self', 'resolved')),
+
+    -- When they acknowledged being stood down. Null means they have not seen
+    -- it, so it keeps showing. A notice that dismisses itself on a timer is a
+    -- notice somebody in a car misses.
+    stand_down_seen_at TEXT,
+
     -- This constraint is what makes a double-join a 409.
     UNIQUE (report_id, responder)
 );

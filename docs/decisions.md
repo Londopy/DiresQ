@@ -380,6 +380,32 @@ later — treat it as that old, not as new.*
 The alternative was to show one time and pick which. Every version of that we
 tried was a lie in one direction or the other.
 
+## Resolving a report has to tell the people driving to it
+
+Resolving clears everyone still attached. It told none of them.
+
+Which means the app was quietly doing the exact thing it exists to prevent —
+sending people to an address nobody needs them at — to its own responders. A
+person who joined twenty minutes ago is in a car with the phone in a pocket.
+They find out by refreshing a page they are not looking at.
+
+Three decisions inside it:
+
+**It does not expire.** A notice that clears itself after an hour is a notice
+missed by precisely the person it was written for. It stays until they press
+*Got it*.
+
+**Whoever pressed Resolve is not told to stand down.** They were standing
+there, they made the call, and the obvious implementation tells them anyway —
+because resolving clears the resolver too. `cleared_reason` distinguishes *you
+decided* from *this was decided for you*.
+
+**It goes in `/api/me`, which means it survives being offline.** That endpoint
+is the one thing the service worker may keep, and the bar for that is high: a
+saved claim has to still be true later. A resolved report does not un-resolve.
+So it qualifies, and it is the only thing on the offline page that can tell
+somebody to turn the car around.
+
 ## Things we chose not to build
 
 - **The radio itself.** We built the packet and the endpoint that accepts it;

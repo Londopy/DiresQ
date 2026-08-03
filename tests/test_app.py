@@ -3403,6 +3403,15 @@ class TestBothClassifiersAgree:
     """
 
     AWKWARD = [
+        # The case that made the model refuse text it cannot read. Both
+        # implementations have to agree about refusing, not just about
+        # labelling — an offline suggestion that guesses where the online one
+        # abstains is the worst possible disagreement.
+        "mi madre no puede respirar necesitamos ayuda ahora",
+        "el agua esta subiendo dos adultos atrapados arriba",
+        "nuoc dang len nhanh hai nguoi tren gac",
+        "Barker Cypress underpass impassable, two Silverados abandoned",
+        "Kingsland Blvd at Peek Rd totally submerged, Toyota Tundra stalled",
         "",
         "help",
         "water rising",
@@ -4358,3 +4367,123 @@ class TestTheStaleLineDescribesTheLateReport:
         incident = client.get("/api/incidents").get_json()[0]
         assert incident["synced_late"] is False
         assert incident["stale_minutes"] is None
+
+
+class TestNobodyIsLeftDrivingToAClearedAddress:
+    """Resolving a report clears everyone still attached to it — and, until
+    this existed, told none of them.
+
+    Somebody who joined twenty minutes ago and is in a car finds out by
+    refreshing a page they are not looking at. The argument of this entire
+    project is that people should not be sent where they are not needed, and
+    the app was doing exactly that to its own responders.
+    """
+
+    @staticmethod
+    def as_user(username):
+        """A client signed in as somebody other than the fixture user."""
+        import os
+        os.environ["DIRESQ_DEV_USER"] = username
+        return diresq.app.test_client()
+
+    def en_route_then_resolved(self, client):
+        """londo joins report 1; the person who filed it closes it."""
+        client.post("/report/1/rescue")
+        with diresq.app.app_context():
+            filer = diresq.get_db().execute(
+                "SELECT acc.username FROM reports r "
+                "JOIN accounts acc ON acc.id = r.sender WHERE r.id = 1"
+            ).fetchone()["username"]
+        self.as_user(filer).post("/report/1/resolve")
+        return self.as_user("londo")
+
+    def test_the_responder_is_told(self, client):
+        me = self.en_route_then_resolved(client).get("/api/me").get_json()
+        assert me["stand_down"] is not None
+        assert me["stand_down"]["report_id"] == 1
+
+    def test_the_banner_is_on_the_page_they_will_open(self, client):
+        mine = self.en_route_then_resolved(client)
+        for page in ("/", "/report/1"):
+            body = " ".join(mine.get(page).get_data(as_text=True).split())
+            assert "Stand down." in body, f"no notice on {page}"
+            assert "Nobody needs you at that address" in body
+
+    def test_whoever_pressed_the_button_is_not_told_to_stand_down(self, client):
+        """They are standing there. They decided. Telling them would be absurd
+        — and it is the bug the obvious implementation ships with, because
+        resolving clears the resolver too."""
+        client.post("/report/1/rescue")
+        aid = assignment_id_for(1)
+        client.post(f"/api/assignments/{aid}/status", json={"status": "on_scene"})
+        client.post("/report/1/resolve")
+        assert client.get("/api/me").get_json()["stand_down"] is None
+
+    def test_clearing_yourself_is_not_a_stand_down_either(self, client):
+        client.post("/report/1/rescue")
+        aid = assignment_id_for(1)
+        for step in ("on_scene", "cleared"):
+            client.post(f"/api/assignments/{aid}/status", json={"status": step})
+        assert client.get("/api/me").get_json()["stand_down"] is None
+        with diresq.app.app_context():
+            reason = diresq.get_db().execute(
+                "SELECT cleared_reason FROM assignments WHERE id = ?",
+                (aid,)).fetchone()["cleared_reason"]
+        assert reason == "self"
+
+    def test_it_does_not_time_out_on_its_own(self, client):
+        """The person this is for is driving, with the phone in a pocket, and
+        will look in twenty minutes. A notice that expires is a notice they
+        never see."""
+        mine = self.en_route_then_resolved(client)
+        with diresq.app.app_context():
+            diresq.get_db().execute(
+                "UPDATE assignments SET status_changed_at = ? WHERE report_id = 1",
+                ((datetime.now(timezone.utc)
+                  - timedelta(hours=6)).isoformat(timespec="seconds"),))
+            diresq.get_db().commit()
+        assert mine.get("/api/me").get_json()["stand_down"] is not None
+
+    def test_pressing_got_it_stops_it(self, client):
+        mine = self.en_route_then_resolved(client)
+        aid = mine.get("/api/me").get_json()["stand_down"]["assignment_id"]
+        assert mine.post(f"/api/standdown/{aid}/ack", json={}).status_code == 200
+        assert mine.get("/api/me").get_json()["stand_down"] is None
+        assert "Stand down." not in mine.get("/").get_data(as_text=True)
+
+    def test_you_cannot_dismiss_somebody_elses(self, client):
+        mine = self.en_route_then_resolved(client)
+        aid = mine.get("/api/me").get_json()["stand_down"]["assignment_id"]
+        other = self.as_user("skythe")
+        assert other.post(f"/api/standdown/{aid}/ack", json={}).status_code == 403
+        # And it is still waiting for the person it belongs to.
+        assert self.as_user("londo").get("/api/me").get_json()["stand_down"]
+
+    def test_dismissing_one_that_does_not_exist(self, client):
+        assert client.post("/api/standdown/9999/ack", json={}).status_code == 404
+
+    def test_it_survives_having_no_signal(self, client):
+        """The one claim on the offline page that is still true when cached.
+
+        A resolved report does not un-resolve, so unlike the feed this does
+        not rot — which is exactly why it is allowed in `/api/me` at all.
+        """
+        mine = self.en_route_then_resolved(client)
+        assert mine.get("/api/me").get_json()["stand_down"] is not None
+
+        page = (diresq.SCHEMA.parent / "templates" / "offline.html"
+                ).read_text(encoding="utf-8")
+        assert 'id="standdown"' in page
+        script = (diresq.SCHEMA.parent / "static" / "scripts" / "offline.js"
+                  ).read_text(encoding="utf-8")
+        assert "me.stand_down" in script
+        assert 'show("standdown")' in script
+
+    def test_the_notice_still_names_nobody_else(self, client):
+        # /api/me gaining a field must not turn it into a board. The caching
+        # rule depends on this payload being about one person.
+        mine = self.en_route_then_resolved(client)
+        body = mine.get("/api/me").get_data(as_text=True)
+        board = client.get("/api/responders").get_json()
+        for name in [r["username"] for r in board if r["username"] != "londo"]:
+            assert name not in body, f"/api/me leaks {name}"

@@ -192,6 +192,14 @@ without limitations — it's one nobody checked.
   counts once in the coverage-gap banner. Nothing is merged: both reports stay
   open, linkable and joinable. The map still shows both pins, because two
   people reporting from opposite ends of a street pinned two real places.
+- **Stand down** — resolving a report clears everyone still attached, and used
+  to tell none of them. Somebody who joined twenty minutes ago and is in a car
+  found out by refreshing a page they weren't looking at. This project's whole
+  argument is that people shouldn't be sent where they're not needed, and the
+  app was doing it to its own responders. They now get a notice on the feed,
+  the report page, and offline too — a resolved report stays resolved, so that
+  claim survives being cached. It doesn't dismiss itself, because the person
+  it's for is driving.
 - **Triage it properly** — if you can't judge how bad something is, four
   questions run START, the protocol used at real multiple-casualty scenes, and
   pick the severity for you.
