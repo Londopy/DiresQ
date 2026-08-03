@@ -139,6 +139,11 @@ github-actions, ruff, wcag, start-triage, ics-214
 - Live demo — *(Render URL; free tier sleeps, first load takes about a minute)*
 - Code — https://github.com/Skythe7/DiresQ
 - Docs — https://skythe7.github.io/DiresQ
+- Run it yourself — one file from the
+  [releases page](https://github.com/Skythe7/DiresQ/releases), for macOS and
+  Linux or for Windows, published with checksums. It fetches the source for
+  that version, sets everything up in a folder beside itself and opens the
+  browser.
 
 ## Development tools
 

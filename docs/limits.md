@@ -227,6 +227,26 @@ they catch is the easy third. The map in particular is a Leaflet canvas with
 no non-visual equivalent — the board carries the same information as text,
 but nobody has confirmed that is enough.
 
+## The Windows launcher has never been run on Windows
+
+The release carries a launcher for each platform. The macOS and Linux one was
+run start to finish — environment, database, server answering on the port. The
+Windows one has been read carefully and never executed, because neither of us
+has a Windows machine to execute it on.
+
+Reading it caught a real bug. It asked PowerShell to run `py -3.12` by passing
+both halves as a single command name, which PowerShell resolves as a program
+with a space in its name. That failed on machines using the `py` launcher —
+most Windows Python installs — and worked on machines with a plain `python` on
+the PATH, so it would have worked for whoever tested it once and failed for
+almost everybody else. Two smaller ones alongside it.
+
+Reading it cannot catch everything. The release workflow parses the script
+with PowerShell's own parser when the runner has one, which finds syntax
+errors and no logic errors at all. Treat the Windows launcher as untested
+until somebody reports otherwise; `git clone` and the four commands in
+[install.md](install.md) are the path that is known to work everywhere.
+
 ## Limits we closed, and how
 
 Kept here rather than deleted, because a limitations page that only ever grows

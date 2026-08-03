@@ -393,6 +393,7 @@ tools/parity.mjs    runs the browser classifier, so a test can compare the two
 tools/queuecheck.mjs  runs the offline outbox against a fake browser
 tools/demo_state.py winds the clock so the board goes red on camera
 tools/make_og.py    draws the social preview card
+scripts/            the launchers attached to each release, one per platform
 schema.sql          accounts · reports · assignments · checkins
 templates/          Jinja pages
 static/             CSS, JS, images
