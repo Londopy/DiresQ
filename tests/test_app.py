@@ -4166,3 +4166,195 @@ class TestNothingLeavesTheQueueQuietly:
         assert "function ours(url)" in text
         assert r"/^\/report\/\d+$/" in text
         assert "esc(outcome.url)" not in text.replace("ours(outcome.url)", "")
+
+
+class TestDuplicateLinksOnlyEverPointBackwards:
+    """`incident_root` walks `dupe_of` and says in its docstring that the
+    chain terminates because a report is always linked to an older one. That
+    was true and unenforced, which held only while the check ran exactly once
+    per report at insert time.
+
+    Run it over a table that already contains both halves of a pair — which
+    the demo seed does — and the two link to each other. The cycle guard then
+    hands back two different roots, the pair never groups, and there is no
+    error anywhere: the detector working perfectly and the feed showing
+    nothing.
+    """
+
+    def pair(self, client):
+        close(1)
+        first = file_report(client, client_id="n1").get_json()["id"]
+        second = file_report(client, client_id="n2").get_json()["id"]
+        return first, second
+
+    def links(self):
+        with diresq.app.app_context():
+            return {r["id"]: r["dupe_of"] for r in diresq.get_db().execute(
+                "SELECT id, dupe_of FROM reports")}
+
+    def test_a_rerun_cannot_make_two_reports_point_at_each_other(self, client):
+        first, second = self.pair(client)
+        with diresq.app.app_context():
+            for report_id in (first, second):
+                diresq.link_duplicate(report_id)
+
+        links = self.links()
+        assert links[first] != second, (
+            "the older report was pointed at the newer one, which is a cycle")
+        assert links[second] == first
+
+    def test_and_the_pair_still_groups_afterwards(self, client):
+        # The symptom the cycle actually produced: no error, no link visible
+        # as wrong, just a grouped card that silently stopped appearing.
+        first, second = self.pair(client)
+        with diresq.app.app_context():
+            for report_id in (first, second):
+                diresq.link_duplicate(report_id)
+        grouped = [i for i in client.get("/api/incidents").get_json()
+                   if i["duplicate_count"] > 1]
+        assert grouped, "the pair stopped grouping after a re-run"
+
+    def test_running_it_many_times_changes_nothing(self, client):
+        first, second = self.pair(client)
+        with diresq.app.app_context():
+            for _ in range(5):
+                for report_id in (first, second):
+                    diresq.link_duplicate(report_id)
+        assert self.links()[second] == first
+        assert self.links()[first] is None
+
+    def test_a_root_is_reachable_from_every_report(self, client):
+        # What the cycle broke. Walking up from anywhere must terminate at a
+        # report that points at nothing.
+        self.pair(client)
+        links = self.links()
+        for report_id in links:
+            root = diresq.incident_root(report_id, links)
+            assert links.get(root) is None, (
+                f"walking up from {report_id} ended at {root}, which still "
+                f"points somewhere — that is a cycle")
+
+
+class TestTheDemoSeedTellsTheStory:
+    """A judge opening the hosted demo clicks around for ninety seconds. If
+    the seed doesn't already show the offline story, none of it exists for
+    them — and the Devpost links straight there.
+
+    So the seed carries the case the whole feature was built for: two
+    neighbours filing one flood, one of them with no signal.
+    """
+
+    @pytest.fixture
+    def demo(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(diresq, "DATABASE", str(tmp_path / "demo.db"))
+        monkeypatch.setenv("DIRESQ_DEV_USER", "londo")
+        diresq.init_db()
+        diresq.seed_data()
+        return diresq.app.test_client()
+
+    def incidents(self, demo):
+        return demo.get("/api/incidents").get_json()
+
+    def test_the_feed_has_a_grouped_incident_on_first_load(self, demo):
+        grouped = [i for i in self.incidents(demo) if i["duplicate_count"] > 1]
+        assert grouped, "the demo shows none of the grouping work"
+
+    def test_it_is_the_worst_report_on_the_board(self, demo):
+        # Top of the feed, so it is the first thing anybody reads.
+        assert self.incidents(demo)[0]["duplicate_count"] > 1
+
+    def test_more_people_are_going_than_either_report_shows(self, demo):
+        """The convergence, which is the point.
+
+        One person has been on scene for over an hour; two more with boats
+        set off for the *other* report of the same house. Split across two
+        rows that reads as one job with somebody on it and another with
+        nobody. It is three people at one address.
+        """
+        top = self.incidents(demo)[0]
+        assert top["on_scene_count"] + top["en_route_count"] >= 3
+        assert top["on_scene_count"] >= 1 and top["en_route_count"] >= 2
+
+    def test_one_of_them_arrived_late_and_says_so(self, demo):
+        top = self.incidents(demo)[0]
+        assert top["synced_late"] is True
+        assert top["stale_minutes"] is not None
+
+    def test_the_card_says_all_of_it_without_anybody_typing(self, demo):
+        page = " ".join(demo.get("/").get_data(as_text=True).split())
+        assert "2 reports, one incident" in page
+        assert "to 1 incident" in page
+        assert "reached us later" in page
+
+    def test_the_two_free_responders_are_still_free(self, demo):
+        # A board where everybody is busy has nothing to say when a report
+        # needs a boat. Adding people to the duplicate must not eat them.
+        board = demo.get("/api/responders").get_json()
+        idle = [r["username"] for r in board if r["state"] == "available"]
+        assert "r.castillo" in idle and "t.oyelaran" in idle
+
+    def test_the_seed_does_not_hand_write_the_link(self):
+        """It runs the real detector.
+
+        Setting `dupe_of` directly would let the demo show a grouped card the
+        software could not actually produce — which is the one thing a demo
+        must never do, and exactly the failure this project keeps arguing
+        against everywhere else.
+        """
+        source = (diresq.SCHEMA.parent / "app.py").read_text(encoding="utf-8")
+        body = source.split("def seed_data(")[1].split("@app.cli.command")[0]
+        # Comments in here explain why it doesn't, and would match otherwise.
+        code = "\n".join(line for line in body.splitlines()
+                         if not line.lstrip().startswith("#"))
+        assert "link_duplicate(" in code
+        assert "dupe_of" not in code, "the seed writes the link by hand"
+
+    def test_the_other_seeded_reports_are_left_alone(self, demo):
+        # Only the one intended pair groups. Everything else in Katy is
+        # kilometres away and stays its own incident.
+        counts = [i["duplicate_count"] for i in self.incidents(demo)]
+        assert counts.count(1) == len(counts) - 1
+
+    def test_the_dead_mans_switch_demo_still_works(self, demo):
+        # s.reyes goes quiet and the board turns red. That is the closing
+        # beat of the video and must not have been disturbed.
+        board = demo.get("/api/responders").get_json()
+        assert any(r["username"] == "s.reyes" and r["overdue"] for r in board)
+
+
+class TestTheStaleLineDescribesTheLateReport:
+    """"Written N minutes ago, reached us later" takes N from one report and
+    the lateness from another unless something says otherwise. On a grouped
+    incident those need not be the same report, and two true facts assembled
+    into one sentence make a false one.
+    """
+
+    def test_the_age_shown_belongs_to_the_report_that_was_late(self, client):
+        close(1)
+        # Fresh, on time. Then an older one that sat in a queue.
+        first = file_report(client, client_id="fresh").get_json()["id"]
+        late = (datetime.now(timezone.utc)
+                - timedelta(minutes=55)).isoformat(timespec="seconds")
+        file_report(client, client_id="late", written_at=late)
+
+        incident = next(i for i in client.get("/api/incidents").get_json()
+                        if i["id"] == first)
+        assert incident["synced_late"] is True
+        assert incident["minutes_old"] == 0, "ordering should use the freshest"
+        assert incident["stale_minutes"] == 55, (
+            "the card would have said the incident was written 0 minutes ago "
+            "and also that it reached us late")
+
+    def test_the_page_prints_that_one(self, client):
+        close(1)
+        file_report(client, client_id="fresh")
+        late = (datetime.now(timezone.utc)
+                - timedelta(minutes=55)).isoformat(timespec="seconds")
+        file_report(client, client_id="late", written_at=late)
+        page = " ".join(client.get("/").get_data(as_text=True).split())
+        assert "Written 55 minutes ago, reached us later" in page
+
+    def test_nothing_late_means_nothing_to_report(self, client):
+        incident = client.get("/api/incidents").get_json()[0]
+        assert incident["synced_late"] is False
+        assert incident["stale_minutes"] is None

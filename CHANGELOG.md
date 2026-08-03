@@ -261,6 +261,14 @@ All notable changes to this project are documented here. Format follows
   both reports stay open, linkable and joinable, and the map still draws both
   pins, because two people reporting from opposite ends of a street pinned two
   real places.
+- The demo seed carries the case the whole feature exists for: two neighbours
+  filing the same flood on Katy Fort Bend Rd fifty metres apart, one of them
+  with no signal so it was written forty minutes before it arrived, and two
+  responders with boats already on their way to the second report without
+  knowing somebody had been inside the house for an hour. The seed does not
+  write the link by hand — it runs the same arrival-time detector the app
+  runs, so a demo can never show a grouped card the software could not
+  actually produce.
 - `GET /api/incidents`, the feed grouped that way. `/api/reports` is unchanged
   and still returns every report, because that is what the map needs.
 - The service worker keeps the blank report form once you have opened it, so
@@ -297,6 +305,19 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- Duplicate links could point in a circle. `link_duplicate` skipped only the
+  report it was called for, so running it over a table that already held both
+  halves of a pair made the two point at each other. Walking the chain then
+  hit its own cycle guard and returned two different roots, so the pair never
+  grouped — the detector working perfectly, the feed showing nothing, and no
+  error anywhere. The invariant the chain-walk depends on, that a report is
+  only ever linked to an older one, was documented and unenforced; now it is
+  enforced. Found by seeding the demo, which is the first thing to run the
+  check over reports that already existed.
+- The stale line on a grouped incident could take its age from one report and
+  its lateness from another. Two true facts assembled into a false sentence:
+  "written 0 minutes ago, reached us later". It now names the age of the
+  report that actually arrived late.
 - A retry of your own report could be refused as somebody else's. The
   idempotency lookup and the `INSERT` are two statements, so two retries of
   the same report could both pass the check, and the one that lost the race

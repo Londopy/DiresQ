@@ -342,6 +342,21 @@ inventing a certainty we don't have about which is right.
 A lone report is an incident of one and renders exactly as it always did. The
 common case is untouched, deliberately.
 
+**The seed runs the real detector.** The demo shows a grouped incident on
+first load, because a judge opening the hosted app for ninety seconds sees
+nothing of this otherwise. But the seed does not set `dupe_of` — it inserts
+two reports and calls `link_duplicate`, the same function the app calls when a
+queued report lands. A demo that hand-writes its own evidence can show
+something the software cannot produce, which is the failure this whole project
+argues against, committed by the thing meant to demonstrate it.
+
+That decision immediately earned itself: running the detector over reports
+that already existed was the first time anything had, and it exposed a cycle.
+`link_duplicate` skipped only the report it was called for, so both halves of
+a pair linked to each other, the chain-walk hit its cycle guard, and the pair
+silently stopped grouping. The invariant it relied on — a report is only ever
+linked to an *older* one — was written in a docstring and enforced nowhere.
+
 ## A report says when it was written, not when it arrived
 
 The check-in queue already solved this once, and a report needed the same

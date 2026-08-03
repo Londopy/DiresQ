@@ -173,6 +173,55 @@ thing instead of the thing somebody else was waiting on. The stub endpoints
 would have taken twenty minutes. Nobody was owed them by a schedule; they were
 owed by the fact that another person's next four hours depended on them.
 
+## The day after
+
+The fourteen hours above are the build. What follows was a second day with
+the deadline already met, and it changed what the project is — so it belongs
+in the log rather than being quietly folded into the feature list.
+
+**We measured the classifier properly and it was bad.** Checking it the
+obvious way — running it over its own training corpus — reported 100%.
+Held out one report at a time it scored 45%, against 36% for always guessing
+the commonest label, and it called *"child not breathing properly"* a MEDIUM.
+The fix took it to 75%. The number in the README is the second one, and the
+first one is in there too, because a project that argues for honest
+measurement cannot quote the flattering figure.
+
+**Then the app learned to work with no signal at all.** Not just check-ins —
+filing a report. That meant shipping the trained model to the phone, and the
+condition that made the port survivable was a parity harness holding the
+Python and the JavaScript side by side. It found a bug within a minute: the
+words behind a suggestion were ordered by floating-point noise, and CPython
+and V8 round `log` differently in the last bit. That had been wrong in the
+Python on every machine since the day it was written, and one implementation
+could never have shown it.
+
+**Three bugs found by writing something that used the code honestly.**
+
+The demo seed was the last of them, and the most instructive. We could have
+set `dupe_of` directly and produced a screenshot-perfect feed. Instead the
+seed calls the real detector — so the demo can never show a state the
+software could not produce. Doing it that way immediately surfaced a live
+bug: run the detector over a table already holding both halves of a pair and
+they linked *to each other*, the chain-walk hit its own cycle guard, and the
+pair silently stopped grouping. Detector working, feed showing nothing, no
+error anywhere. The invariant the whole thing depended on — only ever link to
+an older report — was written in a docstring and enforced nowhere. It is a
+`WHERE` clause now.
+
+The other two came the same way. Reviewing our own idempotency handler found
+that two retries landing together made the second one look like theft, and
+the outbox reads that as final and throws the report away. And a queue that
+expired unsent reports after twelve hours did it silently — somebody pressed
+submit, saw *"saved on this phone"*, and half a day later it was gone with
+nothing on screen.
+
+**What the second day taught us**, and it is the same lesson three times:
+*the failure that matters is the one that leaves no trace.* Every bug above
+passed its tests, threw no exception, and looked completely fine. What caught
+them was writing something that used the code for real — a harness, a seed, a
+review — rather than reading it again.
+
 ## What we'd keep
 
 Owning files rather than owning features. Two people editing `app.py` and

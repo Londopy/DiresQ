@@ -405,6 +405,15 @@ def group_incidents(reports: list[dict]) -> list[dict]:
             "minutes_old": min((r["minutes_old"] for r in members
                                 if r["minutes_old"] is not None), default=None),
             "synced_late": any(r["synced_late"] for r in members),
+            # And the age of the report that actually arrived late, which is
+            # not always the freshest one. The card says "written N minutes
+            # ago, reached us later" — taking N from one report and the
+            # lateness from another would be two true facts assembled into a
+            # false sentence.
+            "stale_minutes": min((r["minutes_old"] for r in members
+                                  if r["synced_late"]
+                                  and r["minutes_old"] is not None),
+                                 default=None),
             "auto_filed_for": lead["auto_filed_for"],
         })
 
@@ -725,10 +734,21 @@ def link_duplicate(report_id: int) -> dict | None:
     if mine is None:
         return None
 
+    # Only ever point backwards, at a report that arrived before this one.
+    #
+    # `incident_root` assumes that and says so, but nothing enforced it, and
+    # the assumption is only free while this runs exactly once per report at
+    # insert time. Run it over a table that already has both halves of a pair
+    # in it — which the demo seed does — and the two link to each other. The
+    # cycle guard in `incident_root` then quietly hands back two different
+    # roots and the pair never groups: the duplicate detector working
+    # perfectly, and the feed showing nothing, with no error anywhere.
+    #
+    # Ids are handed out in arrival order, so `id <` is that invariant.
     others = db.execute("""
         SELECT id, subject, description, lat, lng
         FROM reports
-        WHERE id != ? AND status NOT IN ('resolved', 'hidden')
+        WHERE id < ? AND status NOT IN ('resolved', 'hidden')
               AND auto_filed_for IS NULL
         ORDER BY id
     """, (report_id,)).fetchall()
@@ -2136,6 +2156,11 @@ SEED_ACCOUNTS = [
     # always has somebody between jobs.
     ("r.castillo", "responder", "boat,swiftwater,medical"),
     ("t.oyelaran", "responder", "chainsaw,truck,generator"),
+    # Two more with boats, who went to the *second* report of the flood on
+    # Katy Fort Bend Rd without knowing somebody was already inside it. They
+    # exist to make the duplicate cost something. See SEED_REPORTS.
+    ("p.adeyemi", "responder", "boat,medical"),
+    ("h.lindqvist", "responder", "boat,swiftwater"),
 ]
 
 # subject, description, priority, lat, lng, filed_by, minutes_ago
@@ -2178,6 +2203,27 @@ SEED_REPORTS = [
     ("Fence down, two dogs loose on Westheimer Pkwy",
      "Reporting so somebody has a record of it. Please don't send anyone.",
      "LOW", 29.7690, -95.8012, "kiyan", 18),
+
+    # The same flood as the first report, filed by the neighbour across the
+    # street, fifty metres away. She had no signal, so she wrote it forty
+    # minutes ago and it only reached us now — the eighth number is when it
+    # arrived, as opposed to when it was written.
+    #
+    # Two reports, one house. Ungrouped, that reads as two jobs: one with a
+    # person inside asking for help, and one with nobody going that the
+    # coverage-gap banner would count as an uncovered street. Two more people
+    # with boats set off for the second one without knowing anybody was
+    # already there.
+    #
+    # Nothing here writes `dupe_of`. The seed runs the same arrival-time
+    # detector the app runs, so if that ever stops working the demo stops
+    # showing the grouped card rather than quietly faking it.
+    ("Water over the porch on Katy Fort Bend, two upstairs",
+     "Across the street from us. Water is over the porch and into the house, "
+     "and there are two adults who have gone up to the second floor. No boat "
+     "on this street that I can see. Wrote this when it started and could not "
+     "send it.",
+     "HIGH", 29.7861, -95.8240, "kiyan", 40, 0),
 ]
 
 # report index, responder, status, staffing vote, joined how long ago,
@@ -2197,6 +2243,14 @@ SEED_ASSIGNMENTS = [
 
     # Roof: Sam went, and nobody has heard from him since.
     (4, "s.reyes",  "on_scene", None,          62, None, 47),
+
+    # The duplicate of the flood. Two people with boats on their way to a
+    # house londo has been standing in for over an hour, because to them it
+    # was a different report with nobody on it. This is the convergence the
+    # whole project is about, and until the feed grouped the two reports it
+    # was invisible in our own data.
+    (8, "p.adeyemi",    "en_route", None,      9,  20, None),
+    (8, "h.lindqvist",  "en_route", None,      6,  15, None),
 ]
 
 
@@ -2279,15 +2333,31 @@ def seed_data() -> tuple[int, int]:
                db.execute("SELECT id, username FROM accounts").fetchall()}
 
         report_ids = []
-        for subject, desc, priority, lat, lng, filed_by, minutes in SEED_REPORTS:
+        for subject, desc, priority, lat, lng, filed_by, minutes, *late \
+                in SEED_REPORTS:
+            # Most reports reached us when they were written. One didn't —
+            # an eighth number says how long ago it actually arrived.
+            arrived = late[0] if late else minutes
             cur = db.execute("""
                 INSERT INTO reports
                     (subject, description, priority, lat, lng,
                      status, sender, created_at, received_at)
                 VALUES (?, ?, ?, ?, ?, 'unassigned', ?, ?, ?)
             """, (subject, desc, priority, lat, lng, who[filed_by],
-                  ago(minutes), ago(minutes)))
+                  ago(minutes), ago(arrived)))
             report_ids.append(cur.lastrowid)
+
+        db.commit()
+
+        # Run the real duplicate check, in arrival order, exactly as the app
+        # does when a queued report lands. Writing `dupe_of` by hand here
+        # would let the demo show a grouped card the software could not
+        # actually produce, which is the one thing a demo must never do.
+        for report_id in sorted(report_ids,
+                                key=lambda rid: db.execute(
+                                    "SELECT received_at FROM reports WHERE id = ?",
+                                    (rid,)).fetchone()["received_at"]):
+            link_duplicate(report_id)
 
         for idx, username, status, vote, joined, eta_mins, checkin in SEED_ASSIGNMENTS:
             report_id = report_ids[idx]

@@ -73,10 +73,13 @@ function cardHtml(r) {
             merged.
         </p>` : "";
 
+    // stale_minutes, not minutes_old: on a grouped incident the freshest
+    // report and the one that arrived late need not be the same report, and
+    // combining them would make a false sentence out of two true facts.
     const stale = r.synced_late ? `
         <p class="stale">
-            <strong>Written ${r.minutes_old === null ? "earlier"
-                : `${r.minutes_old} minute${r.minutes_old === 1 ? "" : "s"} ago`},
+            <strong>Written ${r.stale_minutes === null ? "earlier"
+                : `${r.stale_minutes} minute${r.stale_minutes === 1 ? "" : "s"} ago`},
                 reached us later.</strong>
             Filed with no signal. It may already have been dealt with.
         </p>` : "";

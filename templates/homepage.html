@@ -129,8 +129,8 @@
                     {% if incident.synced_late %}
                     <p class="stale">
                         <strong>Written
-                            {%- if incident.minutes_old is not none %}
-                            {{ incident.minutes_old }} minute{{ 's' if incident.minutes_old != 1 }} ago
+                            {%- if incident.stale_minutes is not none %}
+                            {{ incident.stale_minutes }} minute{{ 's' if incident.stale_minutes != 1 }} ago
                             {%- else %} earlier{% endif %}, reached us later.</strong>
                         Filed with no signal. It may already have been dealt with.
                     </p>
