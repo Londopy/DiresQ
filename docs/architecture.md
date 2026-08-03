@@ -164,9 +164,10 @@ Python's sort is stable, so equal keys keep the order SQL gave them.
 ## What happens on a request
 
 1. `before_request` runs the silence sweep, but only for GETs on five
-   endpoints and only when somebody is signed in. It stamps `system.last_swept_at`
-   on the way through, which is what the board displays and what
-   `/api/responders` returns in `X-Last-Swept`.
+   endpoints and only when somebody is signed in. It stamps
+   `system.last_swept_at` on the way through — best effort, see below — which
+   is what the board displays and what `/api/responders` returns in
+   `X-Last-Swept`.
 2. The view calls `get_db()`, which lazily opens a connection on `g` with
    `row_factory = Row` and `PRAGMA foreign_keys = ON`.
 3. Context processors make `current_user`, `overdue_count()` and
@@ -184,8 +185,16 @@ with it — the worst possible failure for something whose only job is noticing
 that a person has gone quiet. So the check rides along on page loads, and
 `flask --app app sweep` exposes the same function for cron.
 
-Every run stamps `system.last_swept_at`, and the board renders it as *checked
-2s ago*, amber past five minutes. The sweep cannot die quietly, but "cannot die
+Every run tries to stamp `system.last_swept_at`, and the board renders it as
+*checked 2s ago*, amber past five minutes.
+
+*Tries*, because this write happens in `before_request` on the endpoints the
+board polls every three seconds — so a feature that reports on the alarm added
+a write to the alarm's own hot path, and a write that raises in a
+`before_request` returns an error page instead of a board. It is wrapped: a
+failed stamp is swallowed, the timestamp goes stale, and the board says so in
+amber. That reading is not a fallback, it is the truth. A check we could not
+record is not a check we can claim. The sweep cannot die quietly, but "cannot die
 quietly" was a property of the design rather than something anybody could
 observe. Now it is a number on the screen — which is the same standard this
 project applies to every other claim it makes.

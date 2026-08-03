@@ -157,8 +157,11 @@ X-Last-Swept: 2026-08-03T04:12:07+00:00
 
 The sweep that files a report about somebody who has gone quiet has no
 scheduler — it rides along on reads, so it cannot be a timer that dies
-quietly. This request is one of the reads that triggers it, so the header is
-exactly as fresh as the rows underneath it. The board shows it as *checked Ns
+quietly. This request is one of the reads that triggers it, so the header is normally
+exactly as fresh as the rows underneath it. If the stamp could not be written
+— the write is deliberately allowed to fail rather than take the page down —
+the header keeps the older value and the board shows amber, which is the
+honest reading. The board shows it as *checked Ns
 ago* and turns it amber past five minutes, ten before the fifteen-minute
 escalation it drives.
 
