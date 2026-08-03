@@ -17,6 +17,9 @@ DiresQ tracks the people going into it.**
 [![No JS required](https://img.shields.io/badge/works_without-JavaScript-89b4fa)](docs/architecture.md)
 [![Limitations](https://img.shields.io/badge/limitations-written_down-f38ba8)](docs/limits.md)
 
+[![parsed by timefuzz](https://img.shields.io/badge/parsed%20by-timefuzz-007ec6)](https://github.com/Londopy/timefuzz)
+[![changelog checked by patchnotes](https://img.shields.io/badge/changelog%20checked%20by-patchnotes-007ec6)](https://github.com/Londopy/patchnotes)
+
 [![Docs](https://img.shields.io/badge/docs-16_pages-cba6f7)](https://skythe7.github.io/DiresQ)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
