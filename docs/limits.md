@@ -75,12 +75,38 @@ arrived in the same batch.
 queue. Reconciling an edit against whatever happened while you were away needs
 conflict rules we have not earned the right to guess at.
 
+**A queued report expires after twelve hours**, because the server refuses
+anything older and would be right to — it describes a house as it was half a
+day ago. It is not thrown away silently: it moves aside, and the next time the
+report form is opened the app says a report never sent, shows what was
+written, and leaves refiling as the person's decision. A device with no
+connection for longer than that is a device this app cannot help, and the
+honest thing is to say so rather than let the words disappear.
+
 Map tiles are cached only where you have already looked. A tile cache cannot
 pre-fetch somewhere you have never been, which is often exactly where the
 disaster is.
 
 The full accounting is in [offline.md](offline.md), and it is deliberately
 blunt about which parts exist.
+
+## Duplicate detection is checked against every open report, on every insert
+
+`link_duplicate` runs when a report is written. It selects every open report,
+measures the distance to each in Python, then runs TF-IDF over whatever
+survives the radius. That is one pass over the open feed per report filed.
+
+At the scale this has ever run at — single digits — it is free. It is not
+free at a thousand open reports, and the shape is roughly quadratic across a
+whole sync batch, since each arriving report is compared against everything
+already there. A county-wide event syncing hundreds of queued reports at once
+is where it would first hurt.
+
+We are stating it rather than fixing it. The fix is a spatial index and an
+inverted index over the vocabulary, both of which are real work and neither of
+which we can measure the need for without data we don't have. A bound written
+down is a bound somebody can plan around; a bound nobody mentioned is one
+somebody discovers.
 
 ## Spam control is flagging, not verification
 

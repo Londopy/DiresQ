@@ -42,6 +42,8 @@ And if you stay quiet fifteen minutes past that, the server stops waiting to be 
 
 Any number of responders can join the same report — there's no claim lock, deliberately. Once you're physically on scene you can signal how staffed the site is, and that reorders the feed, so the next person who opens the app goes where the help isn't.
 
+**And it all works with no signal.** Install DiresQ to a home screen and it opens without browser chrome. With the radio off you can still file a report — the classifier runs on the phone and suggests a priority, the report is written to the device before the network is touched, and when signal returns it syncs, arrives with the time you wrote it rather than the time it landed, and gets checked for duplicates on arrival. What you *cannot* see offline is the feed or the accountability board: those are claims about other people that stop being true the moment they are saved, and a stale copy of "who needs help" sends somebody to an address that was cleared twenty minutes ago. Offline they are absent rather than wrong.
+
 ## How we built it
 
 Flask and SQLite, server-rendered pages with a JSON API layered on top, Leaflet for maps. The whole app works with JavaScript switched off.
@@ -54,11 +56,17 @@ So we hand-wrote a multinomial naive Bayes classifier — 250 lines, no dependen
 
 The same maths spots when your description matches a report **somebody has already filed**. Duplicate reports are exactly how six people end up at one address while a street nearby has nobody. That threshold was measured, not guessed: 0.157 worst false positive, 0.409 true match, threshold set at 0.30.
 
+The check used to run while you typed, which meant the one time it could not run was the one time it mattered — two neighbours on the same street, both with no signal, both filing the same flood, both syncing later. It runs **on arrival** now, for every report however it got here, comparing against every open report *at the moment this one is written* — which includes whatever else landed seconds earlier in the same sync. Distance is a veto, not a vote: 500 metres apart and two similar sentences are two different incidents.
+
+And the feed acts on it. Linked reports collapse into one card reading "3 reports, one incident", with the responders counted as **distinct people** rather than summed rows — somebody who joined two duplicates is one person, not two. The coverage-gap banner counts the incident once, because two duplicates of one uncovered flood is one street nobody is going to. Nothing is merged: both reports stay open, stay joinable, and both pins stay on the map, because two people reporting from opposite ends of a street are pinning two real places.
+
 We deliberately did not use an LLM, for three reasons in the order they mattered:
 
 1. **It has to explain itself.** The words shown *are* the decision — the ranked log-odds — not a separately generated rationalisation that can disagree with it. "Trust me" isn't available when somebody is deciding where to send a boat.
 2. **It has to be honest about being wrong.** Below 45% confidence it says nothing at all. A confident paragraph from a language model is much harder to disbelieve, and this is a domain where confidently wrong sends people to the wrong street.
-3. **It has to run.** No download, no API key, no network, no GPU. Our check-ins already queue offline; a classifier that needed somebody else's datacentre would be the one part of the system that fails exactly when it's needed.
+3. **It has to run.** No download, no API key, no network, no GPU. The whole app files reports offline now; a classifier that needed somebody else's datacentre would be the one part of the system that fails exactly when it's needed.
+
+So we ship it to the phone. `export-model` writes the trained word counts to an 8 KB JSON the service worker caches, and a JavaScript evaluator reads the same numbers — one corpus, two runtimes, not two classifiers. What makes that survivable is a parity harness that runs every corpus line plus a dozen awkward ones through both and fails on any disagreement. It found a real bug immediately: the words shown behind a suggestion were being ranked by floating-point noise, CPython and V8 rounding `log` differently in the last bit. That was wrong in the Python on every machine, and unfindable with one implementation.
 
 ## Challenges we ran into
 
@@ -88,7 +96,7 @@ The fix was a lexicon of the categories a triage protocol calls immediate, writt
 
 It still gets one report in four wrong. That's survivable because it lands in a dropdown you control, next to the words that caused it — and it would be unacceptable if it were deciding anything.
 
-**349 tests**, including 31 adversarial ones, a WCAG 2.1 AA audit, and a suite that reads our own documentation and fails the build when the numbers in it go stale.
+**458 tests**, including 31 adversarial ones, a WCAG 2.1 AA audit, and a suite that reads our own documentation and fails the build when the numbers in it go stale.
 
 ## What we learned
 
@@ -104,7 +112,7 @@ The report form marked its hidden latitude and longitude fields `required`. Hidd
 
 ## What's next for DiresQ
 
-**The radio.** A check-in already packs into 22 signed bytes — small enough for a LoRa payload — and there's a gateway script that forwards them to the API. What's missing is hardware. That's a purchase and a weekend, not a rewrite.
+**The radio.** This is the one thing left on the list that was there at the start. A check-in already packs into 22 signed bytes — small enough for a LoRa payload — and there's a gateway script that forwards them to the API. What's missing is hardware. That's a purchase and a weekend, not a rewrite.
 
 **Real data.** 55 training examples is a demonstration, not a dataset. Real deployment needs thousands of real reports, and real reports contain names and addresses, which is its own problem.
 
@@ -133,7 +141,7 @@ github-actions, ruff, wcag, start-triage, ics-214
 
 ## Development tools
 
-Sublime Text 4, Git and GitHub, GitHub Actions for CI, pytest (349 tests),
+Sublime Text 4, Git and GitHub, GitHub Actions for CI, pytest (458 tests),
 ruff, bandit, pip-audit, gitleaks, Leaflet and OpenStreetMap, Astro for the
 documentation site, Adobe Premiere Pro for the demo video, Discord for team
 coordination.

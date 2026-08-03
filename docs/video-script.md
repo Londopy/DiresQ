@@ -1,6 +1,8 @@
 # Demo video — shooting script
 
-Target: **2:30**. Hard ceiling 3:00.
+Target: **2:50**. Hard ceiling 3:00. The offline section at 2:10 is the one
+that earns the extra twenty seconds — it is the only part of the video where
+the app does something a viewer does not expect.
 
 Read this once, rehearse twice, record on the third. Do not read it word for
 word on camera — read it until you know the beats, then talk.
@@ -122,30 +124,67 @@ line.**
 
 ---
 
-## 2:10 — 2:25 · Offline
+## 2:10 — 2:45 · Offline
 
-**On screen:** a report page you're joined to. DevTools open, Network tab
-visible, **Offline** ticked.
+**The best thirty seconds in the video. Rehearse this one. Everything else is
+a page you point at; this is the only part where the app does something a
+viewer does not expect.**
 
-> One more thing. This is the app with the network switched off.
+**Setup before you roll:** open `/report/new` **once with the network on**, so
+the service worker has stored the form. Then DevTools → Network → tick
+**Offline**. Leave the Network tab visible in shot so nobody thinks you faked
+it.
 
-**Press *Check in*. The button reads "Saved — will send". Pill appears
-bottom-left.**
+**On screen:** `/report/new`, loaded with the network off.
 
-> It's kept on the phone with the time I pressed the button — not the time it
-> eventually sends. That matters: otherwise a responder who was silent for an
-> hour comes back green the moment their phone finds signal, and the alarm
-> that correctly fired gets cancelled by the network recovering.
+> This is the app with the network switched off. Not degraded — off.
 
-**Untick Offline. Within fifteen seconds the pill disappears.**
+**Type into the description box: *"water rising on Kingsland, two adults
+upstairs, can't get out"*. Wait for the suggestion panel.**
 
-> And back.
+> It still reads what I wrote and suggests HIGH, and tells me it decided that
+> from *rising*, *upstairs*. That's the same classifier, the same trained
+> model, running on the phone — because the person filing at 2am from a
+> flooded house is the person most likely to have no signal, and they were the
+> one person it never used to reach.
 
-If the sync is slow on camera, cut. Don't sit watching a pill.
+**Point at the grey box underneath.**
+
+> And it says what it *can't* do. It hasn't checked whether somebody already
+> reported this, because that needs everybody else's reports and we refuse to
+> keep those on a phone. It doesn't show an empty list — an empty list would
+> read as "we checked, there's nothing".
+
+**Press Submit.**
+
+> Saved on this phone. Not sent. Nobody has seen it.
+
+**Untick Offline. Wait for it to sync, then go to `/`.**
+
+> Now watch the feed.
+
+**Point at the card.**
+
+> *Written four minutes ago, reached us later* — because it describes a house
+> as it was four minutes ago, and a card that renders that as breaking news
+> sends somebody to an address that's already been cleared.
+>
+> And: *two reports, one incident.* My neighbour filed the same flood while
+> they had no signal either. Neither of us could see the other's report.
+> Both synced, both got compared on arrival, and the feed put them in one row.
+>
+> Three responders on each used to read as two comfortably staffed jobs.
+> Now it reads **six people going to one address** — which is the entire
+> reason this project exists.
+
+**Beat. That's the closing argument.**
+
+If the sync is slow on camera, cut between "not sent" and the feed. Don't sit
+watching a pill.
 
 ---
 
-## 2:25 — 2:40 · Close
+## 2:45 — 3:00 · Close
 
 **On screen:** either the board, or the docs site.
 
@@ -169,7 +208,10 @@ If the sync is slow on camera, cut. Don't sit watching a pill.
 | Feed shows 5 reports, board empty | Old database. `init-db` then `seed` |
 | Terminal scrolling in shot | Move it off-screen before recording |
 | Auto-filed report not there yet | Load `/board` once — the sweep runs on page load |
-| Offline sync takes ages | Cut it. Or run `flask --app app sweep` beforehand |
+| Offline sync takes ages | Cut between "not sent" and the feed |
+| `/report/new` won't load offline | The worker only keeps it after you've opened it once **online**. Do that before ticking Offline |
+| No suggestion panel offline | Same cause — the model is cached on first online load. Reload the form once with the network on |
+| Only one report in the group | File the neighbour's report first, from the same street, before you roll |
 | Nervous, rushing | You are. Everyone does. Slow down 20% |
 
 ## What to cut if you're over time

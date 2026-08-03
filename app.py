@@ -55,6 +55,12 @@ ETA_MAX_MINUTES = 240
 
 PRIORITIES = ("HIGH", "MEDIUM", "LOW")
 
+# Ascending order of severity, so `max(..., key=PRIORITY_ORDER.index)` picks
+# the worst. Used when several reports turn out to be one incident: a LOW
+# duplicate must never be able to quieten a HIGH one, for the same reason the
+# most cautious staffing signal wins.
+PRIORITY_ORDER = ("LOW", "MEDIUM", "HIGH")
+
 # Never ORDER BY priority directly: alphabetically HIGH < LOW < MEDIUM.
 PRIORITY_RANK = """
     CASE r.priority WHEN 'HIGH' THEN 3 WHEN 'MEDIUM' THEN 2 ELSE 1 END
@@ -304,17 +310,125 @@ def fetch_reports(include_resolved: bool = False) -> list[dict]:
     return reports
 
 
-def coverage_gaps(reports: list[dict] | None = None) -> list[dict]:
-    """Open reports with nobody on the way and nobody there.
+def incident_root(report_id: int, parent: dict[int, int | None]) -> int:
+    """Follow `dupe_of` up to the report everything else is a duplicate of.
+
+    `link_duplicate` always points a report at an older one, so these chains
+    terminate. The `seen` guard is for the impossible case anyway: a cycle
+    here would hang the feed, and the feed is the page somebody is staring at
+    during a flood.
+    """
+    seen = set()
+    while parent.get(report_id) is not None and report_id not in seen:
+        seen.add(report_id)
+        report_id = parent[report_id]
+    return report_id
+
+
+def group_incidents(reports: list[dict]) -> list[dict]:
+    """Collapse reports that describe one incident into one row.
+
+    This is the whole argument of the project, applied to its own data. We
+    already detect that two reports are the same incident. Left ungrouped,
+    six people spread across two duplicate rows renders as two comfortably
+    staffed reports — and the feed, whose entire job is to make convergence
+    visible, hides it. Three plus three looks fine. Six at one address is the
+    thing we exist to show.
+
+    So an incident carries:
+
+      * **distinct** responders, not summed counts. One person who joined both
+        duplicates is one person. Summing assignment rows would invent help
+        that isn't there, which is the same lie in the other direction.
+      * the most severe priority of its reports, and the most cautious
+        staffing signal. A duplicate filed as LOW cannot quieten a HIGH one.
+      * every report, still individually linkable. The grouping is a view. It
+        does not merge anything, and either report can still be opened,
+        joined and resolved on its own.
+
+    A lone report becomes an incident of one and renders exactly as it always
+    has, which is deliberate: nothing about the common case changes.
+    """
+    parent = {r["id"]: r["dupe_of"] for r in reports}
+    open_ids = set(parent)
+
+    # A report whose twin has been resolved is its own incident again — the
+    # thing it pointed at is no longer somewhere anybody is going.
+    for report_id, points_at in parent.items():
+        if points_at not in open_ids:
+            parent[report_id] = None
+
+    clustered: dict[int, list[dict]] = {}
+    for report in reports:
+        clustered.setdefault(incident_root(report["id"], parent),
+                             []).append(report)
+
+    # Who is actually out, per incident. One query rather than one per row.
+    crews: dict[int, dict[str, set]] = {}
+    if reports:
+        marks = ",".join("?" * len(open_ids))
+        for row in get_db().execute(f"""
+            SELECT report_id, responder, status FROM assignments
+            WHERE report_id IN ({marks}) AND status != 'cleared'
+        """, tuple(open_ids)):
+            root = incident_root(row["report_id"], parent)
+            crew = crews.setdefault(root, {"en_route": set(), "on_scene": set()})
+            crew[row["status"]].add(row["responder"])
+
+    incidents = []
+    for root, members in clustered.items():
+        members.sort(key=lambda r: r["id"])
+        lead = next(r for r in members if r["id"] == root)
+        crew = crews.get(root, {"en_route": set(), "on_scene": set()})
+
+        # Somebody en route to one report and on scene at its duplicate is on
+        # scene. Count them once, at the further-along status.
+        on_scene = crew["on_scene"]
+        en_route = crew["en_route"] - on_scene
+
+        incidents.append({
+            "id": root,
+            "reports": members,
+            "subject": lead["subject"],
+            "description": lead["description"],
+            "priority": max((r["priority"] for r in members),
+                            key=PRIORITY_ORDER.index),
+            "priority_rank": max(r["priority_rank"] for r in members),
+            "en_route_count": len(en_route),
+            "on_scene_count": len(on_scene),
+            "staffing": resolve_staffing(
+                [r["staffing"] for r in members
+                 if r["staffing"] != "unstaffed"]),
+            "duplicate_count": len(members),
+            # The freshest thing anybody said about this incident. An older
+            # duplicate must not make a report filed a minute ago look stale.
+            "minutes_old": min((r["minutes_old"] for r in members
+                                if r["minutes_old"] is not None), default=None),
+            "synced_late": any(r["synced_late"] for r in members),
+            "auto_filed_for": lead["auto_filed_for"],
+        })
+
+    incidents.sort(key=lambda i: (-i["priority_rank"],
+                                  -FEED_RANK.get(i["staffing"], 1),
+                                  -max(r["id"] for r in i["reports"])))
+    return incidents
+
+
+def coverage_gaps(incidents: list[dict] | None = None) -> list[dict]:
+    """Incidents with nobody on the way and nobody there.
 
     Not the same as understaffed. These are the ones where the count is zero
     — nobody has even said they're coming — which is the failure the whole
     project exists to make visible.
+
+    Counted per incident rather than per report. Two duplicates of one flood
+    with nobody going is one street nobody is going to, and reporting it as
+    two would inflate the number that is supposed to be the honest one.
     """
-    if reports is None:
-        reports = fetch_reports()
-    return [r for r in reports
-            if not r["en_route_count"] and not r["on_scene_count"]]
+    if incidents is None:
+        incidents = group_incidents(fetch_reports())
+    return [i for i in incidents
+            if not i["en_route_count"] and not i["on_scene_count"]]
 
 
 @app.context_processor
@@ -433,7 +547,8 @@ def fetch_report(report_id: int) -> dict | None:
 @app.get("/")
 @login_required
 def homepage():
-    return render_template("homepage.html", reports=fetch_reports())
+    return render_template("homepage.html",
+                           incidents=group_incidents(fetch_reports()))
 
 
 @app.get("/map")
@@ -641,6 +756,28 @@ def link_duplicate(report_id: int) -> dict | None:
     return best
 
 
+def claim_existing_report(client_id: str | None, sender: int) -> dict:
+    """Whose report is this id, now that the INSERT has lost the race?
+
+    Called only from the IntegrityError path. Two outcomes and they are very
+    different: our own retry, which is a success, or an id that genuinely
+    belongs to another account, which is a 409. Guessing wrong in the first
+    direction throws a report away.
+    """
+    row = get_db().execute("""
+        SELECT id, sender, created_at, received_at FROM reports
+        WHERE client_id = ?
+    """, (client_id,)).fetchone()
+
+    if row is None or row["sender"] != sender:
+        return {"ok": False, "error": "that report id belongs to someone else"}
+
+    return {"ok": True, "duplicate": True, "id": row["id"],
+            "created_at": row["created_at"],
+            "received_at": row["received_at"],
+            "synced_late": late_sync(row["created_at"], row["received_at"])}
+
+
 def create_report(*, subject: str, description: str, priority: str,
                   lat: float, lng: float, sender: int,
                   written_at: datetime, client_id: str | None) -> dict:
@@ -687,11 +824,18 @@ def create_report(*, subject: str, description: str, priority: str,
               written_at.isoformat(timespec="seconds"),
               received.isoformat(timespec="seconds")))
     except sqlite3.IntegrityError:
-        # Two retries landing together, or somebody else's id. The column is
-        # UNIQUE across the table, so a collision from another account is a
-        # 409 rather than a silent overwrite.
+        # The lookup above and this INSERT are two statements, so two retries
+        # of the *same* report can both pass the check and one of them lands
+        # here. Assuming that means somebody else's id was the bug: the loser
+        # got a 409, the outbox reads any 4xx as "the server looked at this
+        # and said no forever", and dropped the report. A flapping connection
+        # would have deleted somebody's call for help and told them the wrong
+        # reason for it.
+        #
+        # So look again before accusing anyone. If the row that beat us is
+        # ours, the id did exactly its job.
         db.rollback()
-        return {"ok": False, "error": "that report id belongs to someone else"}
+        return claim_existing_report(client_id, sender)
     db.commit()
 
     report_id = cur.lastrowid
@@ -1677,6 +1821,24 @@ def credits_page():
     return render_template("credits.html")
 
 
+@app.get("/api/incidents")
+@login_required
+def api_incidents():
+    """The feed, with duplicates of one incident collapsed into one row.
+
+    Separate from `/api/reports` rather than replacing it. The map wants every
+    report, because two people reporting the same flood from opposite ends of
+    a street pinned two real places and dropping one would be inventing
+    certainty we don't have. The feed wants the incident, because that is what
+    somebody decides where to drive from.
+    """
+    incidents = group_incidents(fetch_reports())
+    # The nested report rows are only needed by the page that renders them.
+    return jsonify([{k: v for k, v in i.items() if k != "reports"}
+                    | {"report_ids": [r["id"] for r in i["reports"]]}
+                    for i in incidents])
+
+
 @app.get("/api/reports")
 def api_reports():
     return jsonify(fetch_reports())
@@ -1800,10 +1962,26 @@ def record_checkin(responder_id: int, lat, lng, happened_at: datetime,
               happened_at.isoformat(timespec="seconds"),
               received.isoformat(timespec="seconds")))
     except sqlite3.IntegrityError:
-        # Two retries landing at the same moment. The id is UNIQUE across the
-        # table, so somebody else's is a 409 rather than a silent overwrite.
+        # Same race as create_report, same fix: the lookup above and this
+        # INSERT are two statements, so our own retry can land here. Look
+        # again before calling it somebody else's — the queue drops anything
+        # the server answers 4xx to, and a check-in is the message that says
+        # you are alive.
         db.rollback()
-        return {"ok": False, "error": "that check-in id belongs to someone else"}
+        seen = db.execute("""
+            SELECT responder, created_at, received_at FROM checkins
+            WHERE client_id = ?
+        """, (client_id,)).fetchone()
+        if seen is None or seen["responder"] != responder_id:
+            return {"ok": False,
+                    "error": "that check-in id belongs to someone else"}
+        return {
+            "ok": True,
+            "duplicate": True,
+            "at": seen["created_at"],
+            "received_at": seen["received_at"],
+            "synced_late": late_sync(seen["created_at"], seen["received_at"]),
+        }
     db.commit()
 
     return {

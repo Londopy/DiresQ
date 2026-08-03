@@ -83,70 +83,80 @@
 
         <div class="reports">
 
-            {% for report in reports %}
+            {% for incident in incidents %}
 
-            <a href="/report/{{ report.id }}" class="report-link">
+            <a href="/report/{{ incident.id }}" class="report-link">
                 <article
-                    class="report-card"
-                    data-title="{{ report.subject|lower }}"
-                    data-priority="{{ report.priority }}">
+                    class="report-card{% if incident.duplicate_count > 1 %} merged{% endif %}"
+                    data-title="{{ incident.subject|lower }}"
+                    data-priority="{{ incident.priority }}">
 
                     <h2>
-                        {{ report.subject }}
-                        {% if report.auto_filed_for %}
+                        {{ incident.subject }}
+                        {% if incident.auto_filed_for %}
                         <span class="auto-filed" title="Nobody filed this. The
                             server did, because a responder went quiet.">auto</span>
                         {% endif %}
                     </h2>
 
-                    <span class="priority {{ report.priority|lower }}">
-                        {{ report.priority }}
+                    <span class="priority {{ incident.priority|lower }}">
+                        {{ incident.priority }}
                     </span>
 
                     <p>
-                        {{ report.description[:120] }}...
+                        {{ incident.description[:120] }}...
                     </p>
+
+                    <!-- Two reports of one flood, staffed three and three,
+                         reads as two comfortable rows unless the feed says
+                         otherwise. Six people at one address is the thing
+                         this app exists to make visible, so it is said in
+                         words, above the count it changes. -->
+                    {% if incident.duplicate_count > 1 %}
+                    <p class="merged-flag">
+                        <strong>{{ incident.duplicate_count }} reports, one
+                            incident.</strong>
+                        Counted once below, and everyone going is counted
+                        once too. Open it to see each report separately
+                        &mdash; nothing has been merged.
+                    </p>
+                    {% endif %}
 
                     <!-- A report written forty minutes ago and synced just
                          now describes a house that may already have been
                          cleared. The card is not allowed to render that as
                          something that has only just come in. -->
-                    {% if report.synced_late %}
+                    {% if incident.synced_late %}
                     <p class="stale">
                         <strong>Written
-                            {%- if report.minutes_old is not none %}
-                            {{ report.minutes_old }} minute{{ 's' if report.minutes_old != 1 }} ago
+                            {%- if incident.minutes_old is not none %}
+                            {{ incident.minutes_old }} minute{{ 's' if incident.minutes_old != 1 }} ago
                             {%- else %} earlier{% endif %}, reached us later.</strong>
                         Filed with no signal. It may already have been dealt with.
                     </p>
                     {% endif %}
 
-                    {% if report.dupe_of %}
-                    <p class="dupe-flag">
-                        Looks like report #{{ report.dupe_of }} &mdash;
-                        &ldquo;{{ report.dupe_subject }}&rdquo;. Check before
-                        you go, or two of you will go to one address.
-                    </p>
-                    {% endif %}
-
                     <div class="responders">
-                        {% set responding = report.en_route_count + report.on_scene_count %}
+                        {% set responding = incident.en_route_count + incident.on_scene_count %}
                         <span class="count{% if responding == 0 %} nobody{% endif %}">
                             {% if responding == 0 %}
                                 0 responding
-                            {% elif report.on_scene_count %}
-                                {{ report.on_scene_count }} on scene
-                                {%- if report.en_route_count %},
-                                    {{ report.en_route_count }} en route
+                            {% elif incident.on_scene_count %}
+                                {{ incident.on_scene_count }} on scene
+                                {%- if incident.en_route_count %},
+                                    {{ incident.en_route_count }} en route
                                 {%- endif %}
                             {% else %}
-                                {{ report.en_route_count }} en route
+                                {{ incident.en_route_count }} en route
                             {% endif %}
+                            {%- if incident.duplicate_count > 1 %}
+                            to 1 incident
+                            {%- endif %}
                         </span>
 
-                        {% if report.staffing != 'unstaffed' %}
-                        <span class="staffing {{ report.staffing }}">
-                            {{ report.staffing.replace('_', ' ')|upper }}
+                        {% if incident.staffing != 'unstaffed' %}
+                        <span class="staffing {{ incident.staffing }}">
+                            {{ incident.staffing.replace('_', ' ')|upper }}
                         </span>
                         {% endif %}
                     </div>

@@ -3543,11 +3543,17 @@ class TestDuplicatesAreCaughtWhenTheyArrive:
         assert second["possible_duplicate"] is None, (
             "linked to a resolved report, which sends nobody anywhere")
 
-    def test_the_feed_shows_the_link(self, client):
+    def test_the_feed_groups_them_rather_than_listing_the_link(self, client):
+        # The feed used to print "looks like report #12" on the second card.
+        # Grouping says something stronger in the same space: it is one
+        # incident, and the responder count below is the number of people
+        # going to it rather than the number spread over two rows.
+        close(1)
         file_report(client, client_id="n1")
         file_report(client, client_id="n2")
-        page = client.get("/").get_data(as_text=True)
-        assert "Looks like report #" in page
+        page = " ".join(client.get("/").get_data(as_text=True).split())
+        assert "2 reports, one incident" in page
+        assert "Looks like report #" not in page
 
     def test_the_report_page_shows_the_link(self, client):
         first = file_report(client, client_id="n1").get_json()
@@ -3743,3 +3749,420 @@ class TestFilingOfflineIsHonestAboutIt:
         assert '"/report/new"' in pages
         for never in ['"/"', '"/board"', '"/map"']:
             assert never not in pages, f"the worker keeps {never}"
+
+
+class TestDuplicatesAreCountedAsOneIncident:
+    """The point of detecting duplicates, finally spent.
+
+    Two reports of one flood, three responders on each, renders as two
+    comfortably staffed rows unless the feed says otherwise. Three plus three
+    looks fine. Six people at one address while the next street has nobody is
+    the failure this entire project exists to make visible, and the feed was
+    hiding it in its own data.
+    """
+
+    def two_reports(self, client):
+        close(1)   # the seed's flooding house, at the same coordinates
+        first = file_report(client, client_id="n1").get_json()["id"]
+        second = file_report(client, client_id="n2").get_json()["id"]
+        return first, second
+
+    def incidents(self, client):
+        return client.get("/api/incidents").get_json()
+
+    def find(self, client, incident_id):
+        return next(i for i in self.incidents(client) if i["id"] == incident_id)
+
+    def test_two_reports_of_one_flood_are_one_row(self, client):
+        first, second = self.two_reports(client)
+        ids = [i["id"] for i in self.incidents(client)]
+        assert first in ids
+        assert second not in ids, "the duplicate is still its own row"
+
+    def test_the_row_says_how_many_reports_it_is(self, client):
+        first, _ = self.two_reports(client)
+        assert self.find(client, first)["duplicate_count"] == 2
+
+    def test_responders_across_both_are_counted_together(self, client):
+        first, second = self.two_reports(client)
+        client.post(f"/report/{first}/rescue")   # londo, through the app
+        join_as(second, "skythe")                # somebody else, same incident
+
+        incident = self.find(client, first)
+        assert incident["en_route_count"] == 2, (
+            "two people going to one incident read as one each")
+
+    def test_the_same_person_on_both_is_one_person(self, client):
+        """The trap in the obvious implementation.
+
+        Summing the per-report counts would say two people are going when one
+        is. Inventing help that isn't there is the same lie as hiding help
+        that is, pointing the other way.
+        """
+        first, second = self.two_reports(client)
+        client.post(f"/report/{first}/rescue")
+        client.post(f"/report/{second}/rescue")
+        assert self.find(client, first)["en_route_count"] == 1
+
+    def test_further_along_wins_when_someone_joined_both(self, client):
+        first, second = self.two_reports(client)
+        client.post(f"/report/{first}/rescue")
+        client.post(f"/report/{second}/rescue")
+        aid = assignment_id_for(second)
+        client.post(f"/api/assignments/{aid}/status", json={"status": "on_scene"})
+
+        incident = self.find(client, first)
+        assert incident["on_scene_count"] == 1
+        assert incident["en_route_count"] == 0, (
+            "counted once at each status instead of once at the furthest")
+
+    def test_the_worst_priority_wins(self, client):
+        # A duplicate filed LOW must not be able to quieten a HIGH one, for
+        # the same reason the most cautious staffing signal wins.
+        close(1)
+        first = file_report(client, client_id="n1", priority="LOW").get_json()["id"]
+        file_report(client, client_id="n2", priority="HIGH")
+        assert self.find(client, first)["priority"] == "HIGH"
+
+    def test_the_most_cautious_staffing_wins(self, client):
+        first, second = self.two_reports(client)
+        for report_id, vote in ((first, "overstaffed"), (second, "need_more")):
+            client.post(f"/report/{report_id}/rescue")
+            aid = assignment_id_for(report_id)
+            client.post(f"/api/assignments/{aid}/status", json={"status": "on_scene"})
+            client.post(f"/api/reports/{report_id}/staffing", json={"staffing": vote})
+        assert self.find(client, first)["staffing"] == "need_more"
+
+    def test_the_freshest_report_sets_the_age(self, client):
+        # An older duplicate must not make a report filed a minute ago look
+        # like something that may already have been dealt with.
+        close(1)
+        old = (datetime.now(timezone.utc)
+               - timedelta(minutes=90)).isoformat(timespec="seconds")
+        first = file_report(client, client_id="n1", written_at=old).get_json()["id"]
+        file_report(client, client_id="n2")
+        assert self.find(client, first)["minutes_old"] == 0
+
+    def test_a_lone_report_is_an_incident_of_one(self, client):
+        # Nothing about the common case changes. Every seeded report is its
+        # own incident and the card reads exactly as it always has.
+        for incident in self.incidents(client):
+            assert incident["duplicate_count"] >= 1
+        page = " ".join(client.get("/").get_data(as_text=True).split())
+        assert "reports, one incident" not in page
+
+    def test_the_coverage_gap_counts_the_incident_once(self, client):
+        """The number that is supposed to be the honest one.
+
+        Two duplicates of one flood with nobody going is one street nobody is
+        going to. Counting it twice inflates the banner whose entire job is
+        not to be inflated.
+        """
+        before = client.get("/").get_data(as_text=True)
+        gaps_before = int(re.search(r'<span class="n">(\d+)</span>',
+                                    before).group(1))
+        self.two_reports(client)   # resolves one seeded report, adds two
+        after = client.get("/").get_data(as_text=True)
+        gaps_after = int(re.search(r'<span class="n">(\d+)</span>',
+                                   after).group(1))
+        assert gaps_after == gaps_before, (
+            "two duplicates of one uncovered incident counted as two gaps")
+
+    def test_covering_one_of_them_covers_the_incident(self, client):
+        first, second = self.two_reports(client)
+        client.post(f"/report/{second}/rescue")
+        gaps = [i["id"] for i in diresq_gaps(client)]
+        assert first not in gaps, (
+            "somebody is on their way to this incident and it still reads as "
+            "a gap, because they joined the report that isn't the lead one")
+
+    def test_nothing_is_merged_in_the_database(self, client):
+        # The grouping is a view. Both reports still exist, still open, and
+        # either can still be joined and resolved on its own.
+        first, second = self.two_reports(client)
+        for report_id in (first, second):
+            assert client.get(f"/report/{report_id}").status_code == 200
+        with diresq.app.app_context():
+            rows = diresq.get_db().execute(
+                "SELECT status FROM reports WHERE id IN (?, ?)",
+                (first, second)).fetchall()
+        assert [r["status"] for r in rows] == ["unassigned", "unassigned"]
+
+    def test_the_map_still_shows_both_pins(self, client):
+        """Deliberately not grouped there.
+
+        Two people reporting one flood from opposite ends of a street pinned
+        two real places, and dropping one would be inventing a certainty we
+        do not have about which is right.
+        """
+        first, second = self.two_reports(client)
+        pinned = [r["id"] for r in client.get("/api/reports").get_json()]
+        assert first in pinned and second in pinned
+
+    def test_resolving_the_lead_leaves_the_other_standing(self, client):
+        first, second = self.two_reports(client)
+        client.post(f"/report/{first}/resolve")
+        ids = [i["id"] for i in self.incidents(client)]
+        assert second in ids, "the survivor vanished with its twin"
+        assert self.find(client, second)["duplicate_count"] == 1
+
+    def test_it_needs_a_session(self, anon):
+        assert anon.get("/api/incidents").status_code in (302, 401)
+
+
+def diresq_gaps(client):
+    """The coverage-gap list, as the banner computes it."""
+    with diresq.app.app_context():
+        return diresq.coverage_gaps()
+
+
+def join_as(report_id, username, status="en_route"):
+    """Put somebody other than the fixture user on a report.
+
+    The `client` fixture pins the session to londo, and the point of some of
+    these tests is that two *different* people are going to one incident.
+    """
+    with diresq.app.app_context():
+        db = diresq.get_db()
+        who = db.execute("SELECT id FROM accounts WHERE username = ?",
+                         (username,)).fetchone()["id"]
+        db.execute("""
+            INSERT INTO assignments (report_id, responder, status, joined_at)
+            VALUES (?, ?, ?, ?)
+        """, (report_id, who, status, diresq.now_iso()))
+        db.commit()
+
+
+class TestARetryIsNeverMistakenForATheft:
+    """The lookup and the INSERT are two statements, so two retries of the
+    same report can both pass the check and one lands on the UNIQUE
+    constraint. Assuming that means somebody else's id was a real bug: the
+    loser got a 409, the outbox reads any 4xx as "the server said no forever",
+    and dropped the report.
+
+    A flapping connection — the exact condition the queue exists for — would
+    have deleted somebody's call for help and told them the wrong reason.
+    """
+
+    @staticmethod
+    def steal(client_id, table, owner_column):
+        """Write a row under this id owned by somebody who isn't the fixture
+        user, the way a genuine collision between two accounts would look."""
+        with diresq.app.app_context():
+            db = diresq.get_db()
+            other = db.execute(
+                "SELECT id FROM accounts WHERE username != 'londo' LIMIT 1"
+            ).fetchone()["id"]
+            if table == "reports":
+                db.execute("""
+                    INSERT INTO reports (subject, description, priority,
+                        lat, lng, status, sender, client_id,
+                        created_at, received_at)
+                    VALUES ('Theirs', '', 'LOW', 29.78, -95.82, 'unassigned',
+                            ?, ?, ?, ?)
+                """, (other, client_id, diresq.now_iso(), diresq.now_iso()))
+            else:
+                db.execute("""
+                    INSERT INTO checkins (responder, lat, lng, client_id,
+                                          created_at, received_at)
+                    VALUES (?, 29.78, -95.82, ?, ?, ?)
+                """, (other, client_id, diresq.now_iso(), diresq.now_iso()))
+            db.commit()
+            return other
+
+    def test_losing_the_race_to_yourself_is_a_success(self, client, monkeypatch):
+        """The real path, not the helper it calls.
+
+        A concurrent retry is hard to schedule from a test, but what the race
+        *is* is precise: the idempotency lookup misses, the row exists by the
+        time the INSERT runs. So make the lookup miss once and let the rest
+        run for real, `except sqlite3.IntegrityError` included.
+        """
+        made = file_report(client, client_id="racer").get_json()
+
+        class LookupMisses:
+            """A database that answers the idempotency lookup with "nothing
+            here" exactly once, then behaves normally."""
+
+            def __init__(self, real):
+                self._real = real
+                self.armed = True
+
+            def execute(self, sql, params=()):
+                if self.armed and "FROM reports" in sql and "client_id" in sql:
+                    self.armed = False
+                    return self._real.execute("SELECT 1 WHERE 0")
+                return self._real.execute(sql, params)
+
+            def __getattr__(self, name):
+                return getattr(self._real, name)
+
+        real = diresq.get_db
+        blinkered = {}
+
+        def blind_once():
+            db = real()
+            return blinkered.setdefault(id(db), LookupMisses(db))
+
+        monkeypatch.setattr(diresq, "get_db", blind_once)
+        again = file_report(client, client_id="racer")
+
+        assert again.status_code == 200, (
+            "a retry of your own report was refused — the outbox reads that "
+            "as final and throws the report away")
+        body = again.get_json()
+        assert body["duplicate"] is True
+        assert body["id"] == made["id"], "handed back somebody else's report"
+        assert count_reports() == 6, "the race filed a second incident"
+
+    def test_and_it_does_not_file_a_second_one(self, client):
+        file_report(client, client_id="racer")
+        before = count_reports()
+        # Whatever the race does, the outcome the person needs is one report.
+        file_report(client, client_id="racer")
+        assert count_reports() == before
+
+    def test_a_genuine_collision_between_accounts_is_still_a_409(self, client):
+        # The check must not have become "always say yes". Somebody else's id
+        # is still refused rather than handing them another person's report.
+        self.steal("shared", "reports", "sender")
+        answer = file_report(client, client_id="shared")
+        assert answer.status_code == 409
+        assert "belongs to someone else" in answer.get_json()["error"]
+
+    def test_the_same_holds_for_check_ins(self, client):
+        self.steal("shared", "checkins", "responder")
+        answer = client.post("/api/checkin",
+                             json={"lat": 29.78, "lng": -95.82,
+                                   "client_id": "shared"})
+        assert answer.status_code == 409
+
+    def test_a_check_in_retry_of_your_own_is_not_a_409(self, client):
+        first = client.post("/api/checkin", json={"lat": 29.78, "lng": -95.82,
+                                                  "client_id": "mine"})
+        assert first.status_code == 201
+        again = client.post("/api/checkin", json={"lat": 29.78, "lng": -95.82,
+                                                  "client_id": "mine"})
+        assert again.status_code == 200
+        assert again.get_json()["duplicate"] is True
+
+    def test_the_outbox_only_drops_what_the_server_truly_refused(self):
+        # Why the above matters: a 4xx is treated as final. If a retry of your
+        # own report could produce one, this line would delete it.
+        source = (diresq.SCHEMA.parent / "static" / "scripts"
+                  / "reportqueue.js").read_text(encoding="utf-8")
+        assert "res.status >= 400 && res.status < 500" in source
+        assert "refused: true" in source
+
+
+class TestNothingLeavesTheQueueQuietly:
+    """A report that ages out used to be filtered on read: never written back,
+    never mentioned. Somebody pressed submit, read "saved on this phone", and
+    twelve hours later it was gone with nothing anywhere saying so.
+
+    This whole project is an argument that a silent failure is worse than a
+    loud one, and the queue was doing the thing the board exists to prevent.
+    """
+
+    @staticmethod
+    def source(name):
+        return (diresq.SCHEMA.parent / "static" / "scripts" / name
+                ).read_text(encoding="utf-8")
+
+    def test_an_expired_report_is_kept_not_deleted(self):
+        text = self.source("reportqueue.js")
+        assert "STRANDED_KEY" in text
+        assert "function strand(" in text
+        assert "export function stranded(" in text
+
+    def test_it_is_actually_removed_from_the_live_queue(self):
+        # The old version filtered on every read and wrote the same expired
+        # items back, so they sat in storage forever costing space.
+        body = self.source("reportqueue.js").split("function fresh(")[1]
+        assert "strand(expired)" in body
+        assert "write(live)" in body
+
+    def test_the_person_is_told_on_the_next_open(self):
+        text = self.source("report_file.js")
+        assert "never sent" in text
+        assert "showStranded()" in text
+
+    def test_it_shows_them_what_they_wrote(self):
+        # The queue is the only place those words still exist. A count would
+        # tell somebody they lost something without telling them what.
+        text = self.source("report_file.js")
+        assert "esc(item.subject)" in text
+        assert "esc(item.description)" in text
+
+    def test_it_does_not_disappear_on_its_own(self):
+        # It clears when they say they have read it, not on a timer.
+        text = self.source("report_file.js")
+        assert "dismiss-lost" in text
+        assert "clearStranded()" in text
+
+    def test_it_does_not_offer_a_retry_that_would_bounce(self):
+        # The server refuses anything this old and is right to — the report
+        # describes a house as it was half a day ago.
+        text = self.source("report_file.js")
+        assert "too old for the server to accept" in text
+        assert "file it again" in text
+
+    def test_it_still_says_to_call_911(self):
+        assert "call 911" in self.source("report_file.js")
+
+    def test_the_two_expiry_limits_cannot_drift(self):
+        """`MAX_AGE_HOURS` in the browser and `MAX_BACKDATE_HOURS` on the
+        server have to agree, in two languages, with nothing else connecting
+        them. Too low and reports are stranded the server would have taken;
+        too high and they are sent to be rejected."""
+        text = self.source("reportqueue.js")
+        match = re.search(r"const MAX_AGE_HOURS = (\d+)", text)
+        assert match, "MAX_AGE_HOURS is gone from reportqueue.js"
+        assert int(match.group(1)) == diresq.MAX_BACKDATE_HOURS, (
+            f"the browser drops reports after {match.group(1)}h but the "
+            f"server accepts them up to {diresq.MAX_BACKDATE_HOURS}h")
+
+    def test_the_check_in_queue_uses_the_same_number(self):
+        text = self.source("queue.js")
+        match = re.search(r"const MAX_AGE_HOURS = (\d+)", text)
+        assert match and int(match.group(1)) == diresq.MAX_BACKDATE_HOURS
+
+    @pytest.mark.skipif(shutil.which("node") is None,
+                        reason="node is not installed; this runs the real module")
+    def test_it_actually_does_this_and_not_only_says_so(self):
+        """The rest of this class reads the source, because the bugs it
+        guards are invisible at runtime and obvious in the file. This one runs
+        the real module against a fake browser, because "the words
+        `strand(expired)` appear in the file" does not prove a report survived
+        being expired — and that survival is the whole fix.
+        """
+        root = diresq.SCHEMA.parent
+        done = subprocess.run(
+            ["node", str(root / "tools" / "queuecheck.mjs")],
+            capture_output=True, text=True, cwd=str(root), timeout=60)
+        assert done.returncode == 0, done.stderr
+        result = json.loads(done.stdout)
+
+        assert result["pending"] == 1, "the fresh report stopped being sendable"
+        assert result["stranded"] == 1, "the expired report was thrown away"
+        assert result["stranded_subject"] == "Water rising on Kingsland"
+        assert "Two adults upstairs" in result["stranded_description"], (
+            "kept the fact of a lost report but not what it said — and this "
+            "is the only place those words still exist")
+        assert result["queue_ids"] == ["still-good"], (
+            "the expired report is still sitting in storage, filtered on "
+            "every read and written back forever")
+        assert result["stranded_after_clear"] == 0
+        assert result["pending_after_clear"] == 1, (
+            "dismissing what they had read also dropped a report that could "
+            "still be sent")
+
+    def test_a_link_we_did_not_mint_is_not_rendered(self):
+        """`esc()` stops an attacker breaking out of the attribute; it does
+        nothing about `javascript:`, which needs no quotes. The shape is
+        checked rather than trusted, so the next person to change what the
+        endpoint returns doesn't have to know that."""
+        text = self.source("report_file.js")
+        assert "function ours(url)" in text
+        assert r"/^\/report\/\d+$/" in text
+        assert "esc(outcome.url)" not in text.replace("ours(outcome.url)", "")

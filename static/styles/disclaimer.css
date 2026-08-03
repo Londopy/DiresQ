@@ -229,6 +229,48 @@ a{color:#89b4fa;}
 .file-status.sent{border-left-color:#a6e3a1;}
 .file-status.refused{border-left-color:#f38ba8;}
 
+/* A report that ran out of time in the queue before anybody saw it. Red, and
+   it does not go away on its own — somebody was told this was saved and it
+   has quietly stopped being true, which is the exact failure the rest of this
+   app exists to prevent. */
+.file-status.stranded{
+    border-left-color:#f38ba8;
+    background:#1e1e2e;
+}
+
+/* Their words, kept because this is the only place the text still exists. */
+.file-status .lost{
+    display:block;
+    margin:8px 0;
+    padding:8px 10px;
+    border-radius:6px;
+    background:#313244;
+    font-size:0.82rem;
+}
+
+.file-status .lost em{color:#f9e2af;font-style:normal;font-weight:600;}
+
+.file-status .said{
+    display:block;
+    margin-top:4px;
+    color:#bac2de;
+}
+
+.file-status .dismiss-lost{
+    margin-top:8px;
+    min-height:44px;
+    padding:10px 18px;
+    border:none;
+    border-radius:8px;
+    background:#45475a;
+    color:#cdd6f4;
+    font-size:0.85rem;
+    font-weight:600;
+    cursor:pointer;
+}
+
+.file-status .dismiss-lost:hover{background:#585b70;}
+
 /* "Open it" is an action, not a word in a sentence, so it gets a target a
    thumb can hit in the rain rather than the inline-link exemption. */
 .file-status a{

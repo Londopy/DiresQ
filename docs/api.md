@@ -23,7 +23,8 @@ Everything except `/login`, `/signup` and `/credits` needs a session.
 
 | Method | Route | Body | |
 | --- | --- | --- | --- |
-| `GET` | `/api/reports` | | The feed as JSON |
+| `GET` | `/api/reports` | | Every open report. What the map draws |
+| `GET` | `/api/incidents` | | The feed, with duplicates of one incident collapsed |
 | `POST` | `/api/reports` | see below | File one. What the offline queue posts |
 | `POST` | `/report/<id>/rescue` | `eta_text` *(optional)* | Join. Any number of people can |
 | `POST` | `/report/<id>/resolve` | | Close it. Reporter or on-scene only |
@@ -33,6 +34,41 @@ Everything except `/login`, `/signup` and `/credits` needs a session.
 
 Where responders disagree, the most cautious wins. The report's staffing is
 derived from votes, never stored.
+
+### Reports or incidents
+
+Two endpoints, because the feed and the map want different things.
+
+`/api/reports` is every open report. The map uses it: two people reporting one
+flood from opposite ends of a street pinned two real places, and dropping one
+would invent a certainty about which is right.
+
+`/api/incidents` collapses reports linked by `dupe_of` into one row, which is
+what somebody deciding where to drive needs. Each incident carries the lead
+report's `id` and `subject`, plus:
+
+```json
+{
+  "duplicate_count": 2,
+  "report_ids": [10, 11],
+  "en_route_count": 4,
+  "on_scene_count": 2,
+  "priority": "HIGH",
+  "staffing": "need_more",
+  "minutes_old": 3,
+  "synced_late": true
+}
+```
+
+The counts are **distinct responders**, not summed per-report counts —
+somebody who joined both duplicates is one person, counted at their
+further-along status. `priority` is the worst among the reports and `staffing`
+the most cautious, so a LOW duplicate cannot quieten a HIGH one.
+`minutes_old` comes from the freshest report, so an old duplicate cannot make
+a report filed a minute ago look stale.
+
+Nothing is merged. Every report in `report_ids` is still open, still at
+`/report/<id>`, and still independently joinable and resolvable.
 
 ### Filing a report
 

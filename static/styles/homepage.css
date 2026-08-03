@@ -429,10 +429,19 @@ gap:10px;
     color:#fab387;
 }
 
-/* Two reports that look like one incident. The link is advisory and both
-   rows stay in the feed — see link_duplicate in app.py for why this is never
-   a merge. */
-.report-card .dupe-flag{
+/* ------------------------------------------------------------------
+   Several reports that turned out to be one incident.
+
+   The card gets a visible edge as well as the sentence, because this is the
+   one row on the feed where the number below means something different from
+   every other row — six people at one address rather than six people at two.
+   Mauve, matching the link on the report page it came from.
+   ------------------------------------------------------------------ */
+.report-card.merged{
+    border-left:3px solid #cba6f7;
+}
+
+.report-card .merged-flag{
     margin:10px 0 0;
     padding:8px 10px;
     border-radius:6px;
@@ -441,4 +450,9 @@ gap:10px;
     color:#bac2de;
     font-size:.78rem;
     line-height:1.45;
+}
+
+.report-card .merged-flag strong{
+    display:block;
+    color:#cba6f7;
 }

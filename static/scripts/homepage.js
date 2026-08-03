@@ -45,11 +45,17 @@ function esc(value) {
 function countText(r) {
     const responding = r.en_route_count + r.on_scene_count;
     if (!responding) return "0 responding";
+
+    // "to 1 incident" only where it changes the reading. On a single report
+    // it is noise; on a grouped one it is the difference between two
+    // comfortable rows and six people at one address.
+    const one = r.duplicate_count > 1 ? " to 1 incident" : "";
+
     if (r.on_scene_count && r.en_route_count) {
-        return `${r.on_scene_count} on scene, ${r.en_route_count} en route`;
+        return `${r.on_scene_count} on scene, ${r.en_route_count} en route${one}`;
     }
-    if (r.on_scene_count) return `${r.on_scene_count} on scene`;
-    return `${r.en_route_count} en route`;
+    if (r.on_scene_count) return `${r.on_scene_count} on scene${one}`;
+    return `${r.en_route_count} en route${one}`;
 }
 
 function cardHtml(r) {
@@ -59,9 +65,25 @@ function cardHtml(r) {
             ${esc(r.staffing.replace(/_/g, " ").toUpperCase())}
         </span>`;
 
+    const merged = r.duplicate_count > 1 ? `
+        <p class="merged-flag">
+            <strong>${r.duplicate_count} reports, one incident.</strong>
+            Counted once below, and everyone going is counted once too.
+            Open it to see each report separately &mdash; nothing has been
+            merged.
+        </p>` : "";
+
+    const stale = r.synced_late ? `
+        <p class="stale">
+            <strong>Written ${r.minutes_old === null ? "earlier"
+                : `${r.minutes_old} minute${r.minutes_old === 1 ? "" : "s"} ago`},
+                reached us later.</strong>
+            Filed with no signal. It may already have been dealt with.
+        </p>` : "";
+
     return `
     <a href="/report/${r.id}" class="report-link">
-        <article class="report-card"
+        <article class="report-card${r.duplicate_count > 1 ? " merged" : ""}"
                  data-title="${esc(r.subject.toLowerCase())}"
                  data-priority="${esc(r.priority)}">
             <h2>${esc(r.subject)}</h2>
@@ -69,6 +91,8 @@ function cardHtml(r) {
                 ${esc(r.priority)}
             </span>
             <p>${esc(r.description.slice(0, 120))}...</p>
+            ${merged}
+            ${stale}
             <div class="responders">
                 <span class="count${responding === 0 ? " nobody" : ""}">
                     ${countText(r)}
@@ -85,14 +109,18 @@ let lastSeen = "";
 
 async function poll() {
     try {
-        const res = await fetch("/api/reports", {
+        // Incidents, not reports: two duplicates of one flood are one row
+        // here. The map still polls /api/reports, because two people
+        // reporting from opposite ends of a street pinned two real places.
+        const res = await fetch("/api/incidents", {
             headers: { Accept: "application/json" },
         });
         if (!res.ok) return;
 
         const reports = await res.json();
         const fingerprint = reports
-            .map(r => `${r.id}:${r.staffing}:${r.en_route_count}:${r.on_scene_count}`)
+            .map(r => `${r.id}:${r.staffing}:${r.en_route_count}`
+                      + `:${r.on_scene_count}:${r.duplicate_count}`)
             .join("|");
 
         if (fingerprint === lastSeen) return;

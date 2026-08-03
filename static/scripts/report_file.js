@@ -16,7 +16,7 @@
 //
 // See reportqueue.js for why step 1 comes first.
 
-import { file, pending, newId } from "./reportqueue.js";
+import { file, pending, newId, stranded, clearStranded } from "./reportqueue.js";
 
 const form = document.querySelector("form.report-card")
     || document.querySelector("form");
@@ -60,6 +60,21 @@ function esc(value) {
     }[c]));
 }
 
+/**
+ * Is this a link to one of our own reports?
+ *
+ * `url` comes back from our own server as `/report/<int>`, so today it is
+ * safe. `esc()` alone would not make it so: escaping quotes stops an
+ * attacker breaking out of the attribute, but `javascript:alert(1)` needs no
+ * quotes at all and would still run when the link is clicked. Rather than
+ * leave that resting on where the value happens to come from, check the shape
+ * — the next person to change what this endpoint returns should not have to
+ * know any of the above.
+ */
+function ours(url) {
+    return typeof url === "string" && /^\/report\/\d+$/.test(url);
+}
+
 function busy(on, label) {
     if (!button) return;
     button.disabled = on;
@@ -101,7 +116,7 @@ form?.addEventListener("submit", async (event) => {
         return;
     }
 
-    if (outcome.sent && outcome.url && !outcome.refused) {
+    if (outcome.sent && ours(outcome.url) && !outcome.refused) {
         location.assign(outcome.url);
         return;
     }
@@ -126,6 +141,54 @@ form?.addEventListener("submit", async (event) => {
         "queued");
 });
 
+/**
+ * Reports that ran out of time in the queue before anybody saw them.
+ *
+ * Shown on load, before anything else, and not dismissed by itself. Somebody
+ * pressed submit twelve hours ago and was told it was saved; the one thing
+ * this app must not do is let that quietly stop being true. It is also the
+ * only place their words still exist, so it shows them rather than a count.
+ *
+ * We do not offer to retry. The server refuses anything this old and would be
+ * right to — the report describes a house as it was half a day ago. The
+ * honest offer is the text back, and the decision to file it again.
+ */
+function showStranded() {
+    const lost = stranded();
+    if (!lost.length) return;
+
+    const when = (item) => {
+        const at = new Date(item.written_at);
+        return Number.isNaN(at.getTime()) ? "earlier"
+            : at.toLocaleString([], { month: "short", day: "numeric",
+                                      hour: "2-digit", minute: "2-digit" });
+    };
+
+    say(`<strong>${lost.length === 1
+            ? "A report you filed never sent."
+            : `${lost.length} reports you filed never sent.`}</strong>
+         This device had no connection for long enough that ${lost.length === 1
+            ? "it is" : "they are"} now too old for the server to accept.
+         Nobody saw ${lost.length === 1 ? "it" : "them"}.
+         ${lost.map((item) => `
+            <span class="lost">
+                <em>${esc(item.subject)}</em> &mdash; written ${esc(when(item))}
+                ${item.description
+                    ? `<span class="said">${esc(item.description)}</span>` : ""}
+            </span>`).join("")}
+         <span class="again">If any of this is still happening, file it again
+             now &mdash; and if somebody is in danger, call 911.</span>
+         <button type="button" class="dismiss-lost">I've read this</button>`,
+        "stranded");
+
+    status.querySelector(".dismiss-lost")?.addEventListener("click", () => {
+        clearStranded();
+        status.hidden = true;
+    });
+}
+
+showStranded();
+
 // The queue flushes on its own; this is only so somebody still looking at the
 // page finds out it went, and can follow it.
 document.addEventListener("diresq:reportsent", (event) => {
@@ -137,5 +200,5 @@ document.addEventListener("diresq:reportsent", (event) => {
         return;
     }
     say(`<strong>Sent.</strong> Your report is on the feed now.
-         ${url ? `<a href="${esc(url)}">Open it</a>` : ""}`, "sent");
+         ${ours(url) ? `<a href="${esc(url)}">Open it</a>` : ""}`, "sent");
 });

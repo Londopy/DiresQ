@@ -303,6 +303,45 @@ feed, both stay joinable, and the later one carries a line saying what it might
 be a duplicate of and how alike. A false positive costs somebody a second of
 reading. An automatic merge would cost somebody their report.
 
+## Detecting a duplicate is worth nothing until the feed counts it as one
+
+We shipped duplicate detection and then looked at what it had bought, which
+was: a line of text on the second card. Both reports still sat in the feed as
+separate rows. Three responders on one and three on the other rendered as two
+comfortably staffed jobs.
+
+That is the failure this project exists to expose, reproduced by the project.
+**Three plus three looks fine. Six at one address is the thing.** The feed
+whose entire purpose is to make convergence visible was hiding it in data it
+had generated itself.
+
+So reports linked by `dupe_of` collapse into one row. Four things had to be
+true for that to be honest rather than convenient:
+
+**Count people, not assignment rows.** The obvious implementation sums the
+per-report counts, and one person who joined both duplicates becomes two
+people. Inventing help that isn't there is the same lie as hiding help that
+is, pointing the other way. So it counts distinct responders, and somebody en
+route to one report and on scene at its twin counts once, at the further-along
+status.
+
+**The worst priority and the most cautious staffing win.** A duplicate filed
+LOW must not be able to quieten a HIGH one, for exactly the reason one
+responder shouting for help outranks three saying they have enough.
+
+**The coverage-gap banner counts the incident once.** Two duplicates of one
+flood with nobody going is *one street nobody is going to*. That banner is the
+number we most want to be honest, and reporting it as two would inflate it.
+
+**Nothing is merged.** The grouping is a view. Both reports stay open, both
+stay individually linkable, both can still be joined and resolved on their
+own, and the map still draws both pins — two people reporting one flood from
+opposite ends of a street pinned two real places, and dropping one would be
+inventing a certainty we don't have about which is right.
+
+A lone report is an incident of one and renders exactly as it always did. The
+common case is untouched, deliberately.
+
 ## A report says when it was written, not when it arrived
 
 The check-in queue already solved this once, and a report needed the same

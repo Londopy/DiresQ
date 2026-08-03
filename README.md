@@ -9,7 +9,7 @@ DiresQ tracks the people going into it.**
 
 [![CI](https://github.com/Skythe7/DiresQ/actions/workflows/ci.yml/badge.svg)](https://github.com/Skythe7/DiresQ/actions/workflows/ci.yml)
 [![Security](https://github.com/Skythe7/DiresQ/actions/workflows/security.yml/badge.svg)](https://github.com/Skythe7/DiresQ/actions/workflows/security.yml)
-[![Tests](https://img.shields.io/badge/tests-426%20passing-brightgreen)](tests/test_app.py)
+[![Tests](https://img.shields.io/badge/tests-458%20passing-brightgreen)](tests/test_app.py)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 [![Accessibility](https://img.shields.io/badge/accessibility-WCAG_2.1_AA_audited-a6e3a1)](docs/accessibility.md)
@@ -55,7 +55,7 @@ board turns red; the report on the right filed itself.</sub>
 | --- | --- |
 | **70 commits** | 65 of them inside the 14-hour window |
 | **12,579 lines of code** | Python, JavaScript, CSS, HTML, SQL |
-| **426 test functions** | 549 cases after parametrisation — every route, an adversarial pass |
+| **458 test functions** | 581 cases after parametrisation — every route, an adversarial pass |
 | **16 documentation pages** | including the one listing what we didn't build |
 | **No background jobs** | overdue is computed on read — nothing to forget to start, no timer that can silently die |
 
@@ -179,7 +179,16 @@ without limitations — it's one nobody checked.
   end up at one address while the next street has nobody. Checked when a
   report *arrives*, not while somebody types, so two neighbours who both filed
   offline and could not see each other's report are compared against each
-  other the moment they sync. It links them; it never merges them.
+  other the moment they sync.
+- **And then the feed counts them as one.** This is the part that matters.
+  Two reports of one flood with three responders each renders as two
+  comfortably staffed rows — and the feed, whose whole job is to make
+  convergence visible, would be hiding it in its own data. Grouped, it reads
+  **6 responding to 1 incident**, counts each person once even if they joined
+  both, takes the worst priority and the most cautious staffing signal, and
+  counts once in the coverage-gap banner. Nothing is merged: both reports stay
+  open, linkable and joinable. The map still shows both pins, because two
+  people reporting from opposite ends of a street pinned two real places.
 - **Triage it properly** — if you can't judge how bad something is, four
   questions run START, the protocol used at real multiple-casualty scenes, and
   pick the severity for you.
@@ -325,7 +334,7 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
-426 test functions, which parametrisation expands into 549 cases, covering
+458 test functions, which parametrisation expands into 581 cases, covering
 every route, the permission rules, feed ordering, staffing resolution, ETA
 parsing, overdue calculation, packet signing, the offline queues for both
 check-ins and reports, arrival-time duplicate detection, the auth guardrails
@@ -343,6 +352,7 @@ triage.py           START triage, mapped onto report severity
 transport.py        the check-in packet, small enough for a radio
 tools/gateway.py    forwards packets from a pipe or a serial port
 tools/parity.mjs    runs the browser classifier, so a test can compare the two
+tools/queuecheck.mjs  runs the offline outbox against a fake browser
 tools/demo_state.py winds the clock so the board goes red on camera
 tools/make_og.py    draws the social preview card
 schema.sql          accounts · reports · assignments · checkins

@@ -250,6 +250,19 @@ All notable changes to this project are documented here. Format follows
 - `flask --app app export-model` regenerates the browser's copy of the
   classifier. A test fails if the committed file has drifted from what the
   code would produce today, so forgetting the step is loud rather than silent.
+- Reports that describe one incident are counted as one in the feed. Two
+  reports of a single flood with three responders on each used to render as
+  two comfortably staffed rows — three plus three looks fine, and six people
+  at one address is the failure this project exists to make visible. The feed
+  was hiding it in data it had generated itself. A grouped card reads "6
+  responding to 1 incident", counts each person once even if they joined both
+  reports, takes the worst priority and the most cautious staffing signal of
+  its members, and counts once in the coverage-gap banner. Nothing is merged:
+  both reports stay open, linkable and joinable, and the map still draws both
+  pins, because two people reporting from opposite ends of a street pinned two
+  real places.
+- `GET /api/incidents`, the feed grouped that way. `/api/reports` is unchanged
+  and still returns every report, because that is what the map needs.
 - The service worker keeps the blank report form once you have opened it, so
   the offline queue has a door to be reached through. It is an empty form: it
   says nothing about who needs help, which is the test everything it keeps has
@@ -284,6 +297,26 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- A retry of your own report could be refused as somebody else's. The
+  idempotency lookup and the `INSERT` are two statements, so two retries of
+  the same report could both pass the check, and the one that lost the race
+  hit the `UNIQUE` constraint. That was treated as proof the id belonged to
+  another account — a 409, which the outbox reads as "the server looked at
+  this and said no forever", so it dropped the report. A flapping connection,
+  the exact condition the queue exists for, could delete somebody's call for
+  help and tell them the wrong reason. The collision is now looked up before
+  anybody is accused, and a genuine one between two accounts is still a 409.
+  The same shape was in the check-in path and is fixed there too.
+- A queued report that ran out of time disappeared without saying so. Anything
+  older than twelve hours was filtered out of the queue on the next read —
+  never written back, never mentioned. Somebody pressed submit, read "saved on
+  this phone", and half a day later it was gone with nothing anywhere saying
+  so: the silent disappearance this whole project argues against, happening
+  inside the thing that promised to keep it. Expired reports now move aside
+  rather than vanish, and the next time the form is opened the app says a
+  report never sent, when it was written, and what it said — the queue being
+  the only place those words still exist. It stays until the person says they
+  have read it. It does not offer a retry the server would refuse.
 - The words shown behind a suggestion were ordered by floating-point noise.
   Two words can be exactly as telling as each other — identical arithmetic —
   and as doubles one of them ended `...488` and the other `...479`, so which

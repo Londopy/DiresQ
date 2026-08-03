@@ -37,10 +37,20 @@
 
 const KEY = "diresq.queue.reports";
 
+// Reports that ran out of time before they ever reached anyone. Kept in their
+// own key rather than deleted — see `sift`.
+const STRANDED_KEY = "diresq.queue.reports.stranded";
+
 // The server refuses anything older than twelve hours, so carrying one past
-// that only earns a rejection. Drop it here instead — but say so, because a
-// report vanishing silently is its own kind of lie.
+// that only earns a rejection. Must match MAX_BACKDATE_HOURS in app.py; a
+// test asserts it, because two constants that have to agree across two
+// languages will otherwise drift the moment somebody tunes one of them.
 const MAX_AGE_HOURS = 12;
+
+// How many stranded reports to keep the text of. Enough that somebody who
+// was offline overnight can see what they lost; not so many that a broken
+// device fills its own storage with them.
+const MAX_STRANDED = 20;
 
 const RETRY_MS = 15000;
 
@@ -77,9 +87,87 @@ function write(items) {
     }
 }
 
-function fresh(items) {
+/**
+ * Split the queue into what can still be sent and what has run out of time,
+ * moving the second group somewhere it will be noticed.
+ *
+ * The first version of this just filtered. That is fine for a check-in and
+ * wrong for a report, in two ways at once.
+ *
+ * It was **silent**: somebody pressed submit, read "saved on this phone", and
+ * twelve hours later the report was gone with nothing anywhere saying so.
+ * This whole project is an argument that a silent failure is worse than a
+ * loud one, and the queue was quietly doing the thing the board exists to
+ * prevent — letting something disappear with nobody noticing.
+ *
+ * And it **never actually deleted anything**: expired items were filtered on
+ * every read and written back on the next save, so a report nobody could send
+ * sat in storage forever, costing space and being re-filtered on every call.
+ *
+ * So they move to their own key and stay there until the person has been told.
+ * Refiling is their decision, not ours: the server will refuse anything this
+ * old, so the honest offer is "here is what you wrote", not a retry that
+ * bounces.
+ */
+function sift(items) {
     const cutoff = Date.now() - MAX_AGE_HOURS * 3600 * 1000;
-    return items.filter((item) => Date.parse(item.written_at) > cutoff);
+    const live = [];
+    const expired = [];
+    for (const item of items) {
+        (Date.parse(item.written_at) > cutoff ? live : expired).push(item);
+    }
+    return { live, expired };
+}
+
+function strand(items) {
+    if (!items.length) return;
+    let kept = [];
+    try {
+        const raw = localStorage.getItem(STRANDED_KEY);
+        kept = raw ? JSON.parse(raw) : [];
+        if (!Array.isArray(kept)) kept = [];
+    } catch (err) {
+        kept = [];
+    }
+    // Newest last, oldest evicted first.
+    const all = kept.concat(items).slice(-MAX_STRANDED);
+    try {
+        localStorage.setItem(STRANDED_KEY, JSON.stringify(all));
+    } catch (err) {
+        // Nothing sensible to do, and losing the copy must not also lose the
+        // live queue.
+    }
+}
+
+/** The queue, with anything out of time moved aside first. */
+function fresh(items) {
+    const { live, expired } = sift(items);
+    if (expired.length) {
+        strand(expired);
+        write(live);
+    }
+    return live;
+}
+
+/** Reports that ran out of time before anybody saw them. */
+export function stranded() {
+    try {
+        const raw = localStorage.getItem(STRANDED_KEY);
+        const items = raw ? JSON.parse(raw) : [];
+        return Array.isArray(items) ? items : [];
+    } catch (err) {
+        return [];
+    }
+}
+
+/** Called once the person has actually been shown them. */
+export function clearStranded() {
+    try {
+        localStorage.removeItem(STRANDED_KEY);
+    } catch (err) {
+        // Then they get told twice, which is the safe direction to fail in.
+    }
+    announce();
 }
 
 export function pending() {
@@ -92,8 +180,9 @@ function remove(clientId) {
 }
 
 function announce() {
-    document.dispatchEvent(
-        new CustomEvent("diresq:reportqueue", { detail: { pending: pending() } }));
+    document.dispatchEvent(new CustomEvent("diresq:reportqueue", {
+        detail: { pending: pending(), stranded: stranded().length },
+    }));
 }
 
 async function post(report) {

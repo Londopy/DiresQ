@@ -348,9 +348,17 @@ Two guards on top of the text similarity:
 - **Resolved reports are not candidates.** Linking to something already dealt
   with sends nobody anywhere.
 
-**It links; it never merges.** Both reports stay in the feed and both stay
-joinable. TF-IDF over fifty-five examples is worth a coordinator's glance and
-nowhere near good enough to fold one person's call for help into another's.
+**It links; it never merges.** Both reports stay open and both stay joinable.
+TF-IDF over fifty-five examples is worth a coordinator's glance and nowhere
+near good enough to fold one person's call for help into another's.
+
+**The feed then counts them as one incident**, which is the part that actually
+buys anything. Two reports of one flood with three responders each renders as
+two comfortably staffed rows, and the feed whose job is to make convergence
+visible would be hiding it in its own data. Grouped, it reads *6 responding to
+1 incident*, counts each person once even if they joined both, and counts once
+in the coverage-gap banner. See [decisions.md](decisions.md) for the four
+things that had to be true for that to be honest rather than convenient.
 
 ## A report says when it was written
 
@@ -369,6 +377,28 @@ enough to matter the card says so:
 
 > **Written 40 minutes ago, reached us later.** Filed with no signal. It may
 > already have been dealt with.
+
+### When a report runs out of time
+
+Twelve hours, matching what the server will accept. Past that it cannot be
+sent, and the first version of this simply filtered it out of the queue on the
+next read — silently, and without ever removing it from storage.
+
+That was the project's own argument used against it. Somebody pressed submit,
+read *"saved on this phone"*, and half a day later the report was gone with
+nothing anywhere saying so — the exact silent disappearance the board exists
+to prevent, happening inside the thing that promised to keep it.
+
+Now it moves to its own key and the next time the report form opens, before
+anything else, the page says a report never sent, when it was written, and
+**what it said** — the queue is the only place those words still exist. It
+stays on screen until the person presses "I've read this". It does not offer a
+retry, because the server would refuse it and be right to. It offers the text
+back and the decision.
+
+`MAX_AGE_HOURS` in the browser and `MAX_BACKDATE_HOURS` on the server have to
+agree, in two languages, with nothing else connecting them — so a test reads
+both and fails if they drift.
 
 ### Still missing
 
