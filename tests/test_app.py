@@ -4204,6 +4204,34 @@ class TestTheLaunchersInTheRelease:
                               capture_output=True, text=True)
         assert done.returncode == 0, done.stderr
 
+    def test_the_interpreter_is_never_invoked_as_an_array(self):
+        """`& $Py` where $Py is @("py","-3.12") does not run `py -3.12`.
+
+        PowerShell flattens the array into one string and goes looking for a
+        program called "py -3.12". It fails only on the py-launcher path,
+        which is the most common Python install on Windows, and works fine on
+        the `python3` path — so it is exactly the kind of bug that survives a
+        quick test on the machine of whoever wrote it.
+        """
+        text = self.script("diresq-windows.ps1")
+        assert "& $PyExe @PyArgs" in text
+        assert "& $Py " not in text
+
+    def test_the_launcher_does_not_write_to_powershells_own_variables(self):
+        # $args holds a function's unbound arguments. Assigning to it inside
+        # a function is legal and quietly wrong.
+        text = self.script("diresq-windows.ps1")
+        assert "$args =" not in text
+        assert "@args" not in text
+
+    def test_the_shell_launcher_stays_within_bash_3_2(self):
+        # macOS still ships bash 3.2 — 2007, kept back by the GPLv3 licence
+        # change. Anything from bash 4 works everywhere we test and fails on
+        # every Mac.
+        text = self.script("diresq-macos-linux.sh")
+        for construct in ("mapfile", "readarray", "declare -A", "coproc"):
+            assert construct not in text, f"{construct} needs bash 4+"
+
     def test_neither_launcher_claims_an_architecture(self):
         # If anybody ever adds a "-x64" or "-arm64" variant, it will be a file
         # that differs from its sibling only in the name.

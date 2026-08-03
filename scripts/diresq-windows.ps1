@@ -38,36 +38,59 @@ function Die  ($m) { Write-Host "`nx $m`n" -ForegroundColor Red; exit 1 }
 # ----------------------------------------------------------------- python ---
 # 3.10 is the floor because CI tests 3.10 and 3.12, and a version nobody has
 # ever run this on is not a version we are going to claim support for.
+# The interpreter is kept as a command plus its arguments, never as one array
+# used as a command. `& $array` does not invoke `py -3.12` — PowerShell
+# flattens the array to a single string and looks for a program with a space
+# in its name. Splatting with @PyArgs is the form that works.
+$script:PyExe  = $null
+$script:PyArgs = @()
+
 function Find-Python {
-    # The py launcher first: it is the one that knows about every install.
+    $tries = @()
+
+    # The py launcher first: it is the one that knows about every install,
+    # including the ones that were never added to PATH.
     if (Get-Command py -ErrorAction SilentlyContinue) {
         foreach ($v in @("-3.12", "-3.11", "-3.10", "-3")) {
-            try {
-                & py $v -c "import sys; sys.exit(0 if sys.version_info[:2] >= (3,10) else 1)" 2>$null
-                if ($LASTEXITCODE -eq 0) { return @("py", $v) }
-            } catch { }
+            $tries += ,@("py", @($v))
         }
     }
     foreach ($name in @("python3", "python")) {
         if (Get-Command $name -ErrorAction SilentlyContinue) {
-            try {
-                & $name -c "import sys; sys.exit(0 if sys.version_info[:2] >= (3,10) else 1)" 2>$null
-                if ($LASTEXITCODE -eq 0) { return @($name) }
-            } catch { }
+            $tries += ,@($name, @())
         }
     }
-    return $null
+
+    foreach ($try in $tries) {
+        $exe   = $try[0]
+        # Not $args — that is an automatic variable holding a function's own
+        # unbound arguments, and writing to it inside a function is a trap.
+        $pyArg = $try[1]
+
+        # Answer on stdout rather than through the exit code. A native command
+        # writing to stderr under ErrorActionPreference=Stop raises, and the
+        # Windows Store python stub exits 9009 in ways that are not worth
+        # interpreting. A printed "1" is unambiguous.
+        try {
+            $probe = & $exe @pyArg -c "import sys; print(1 if sys.version_info[:2] >= (3,10) else 0)" 2>&1
+            if ("$probe".Trim() -eq "1") {
+                $script:PyExe  = $exe
+                $script:PyArgs = $pyArg
+                return $true
+            }
+        } catch { }
+    }
+    return $false
 }
 
-$Py = Find-Python
-if (-not $Py) {
+if (-not (Find-Python)) {
     Die "DiresQ needs Python 3.10 or newer.
 
    Install it from https://www.python.org/downloads/
    Tick 'Add Python to PATH' in the installer, then run this again."
 }
 
-Say ("Using " + (& $Py "--version" 2>&1))
+Say ("Using " + (& $PyExe @PyArgs "--version" 2>&1))
 
 # ----------------------------------------------------------------- source ---
 $Here = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -124,7 +147,7 @@ $Venv = Join-Path $Project ".venv"
 
 if (-not (Test-Path $Venv)) {
     Say "Creating a virtual environment"
-    & $Py -m venv $Venv
+    & $PyExe @PyArgs -m venv $Venv
     if ($LASTEXITCODE -ne 0) { Die "Could not create a virtual environment." }
 }
 
@@ -166,10 +189,14 @@ Write-Host @"
 "@
 
 # Give the server a moment before the browser goes looking for it.
-Start-Job -ScriptBlock {
-    Start-Sleep -Seconds 2
-    Start-Process "http://127.0.0.1:$using:Port"
-} | Out-Null
+#
+# A detached process rather than Start-Job: `$using:` inside an interpolated
+# string is not reliably expanded, and a background job that silently fails to
+# open a browser is a bug nobody reports and everybody works around.
+$Url = "http://127.0.0.1:" + $Port
+Start-Process -WindowStyle Hidden powershell -ArgumentList @(
+    "-NoProfile", "-Command", "Start-Sleep -Seconds 2; Start-Process '$Url'"
+) -ErrorAction SilentlyContinue | Out-Null
 
 # The Flask development server, deliberately. gunicorn does not run on
 # Windows at all, and this is one person on their own laptop — the case the
