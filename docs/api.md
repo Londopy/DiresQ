@@ -24,6 +24,7 @@ Everything except `/login`, `/signup` and `/credits` needs a session.
 | Method | Route | Body | |
 | --- | --- | --- | --- |
 | `GET` | `/api/reports` | | The feed as JSON |
+| `POST` | `/api/reports` | see below | File one. What the offline queue posts |
 | `POST` | `/report/<id>/rescue` | `eta_text` *(optional)* | Join. Any number of people can |
 | `POST` | `/report/<id>/resolve` | | Close it. Reporter or on-scene only |
 | `POST` | `/api/reports/<id>/staffing` | `staffing` | On-scene responders only |
@@ -32,6 +33,60 @@ Everything except `/login`, `/signup` and `/credits` needs a session.
 
 Where responders disagree, the most cautious wins. The report's staffing is
 derived from votes, never stored.
+
+### Filing a report
+
+```json
+{
+  "subject": "Water rising on Kingsland",
+  "description": "Water in the street, two adults upstairs",
+  "priority": "HIGH",
+  "lat": 29.7858,
+  "lng": -95.8244,
+  "client_id": "b2c1...",
+  "written_at": "2026-08-02T03:15:00+00:00"
+}
+```
+
+`subject`, `priority` and a coordinate pair are required. `client_id` and
+`written_at` are what a queued report adds, and both matter more than they
+look.
+
+**`client_id` makes sending it twice safe.** The browser mints it and writes
+it to the device *before* the first attempt, so a phone that dies mid-request
+retries with the same id after a restart. A `201` means the row was written; a
+`200` with `"duplicate": true` means the server already had that id and is
+handing back the report it wrote the first time — the content of the retry is
+ignored, because the id is the promise. The same id from a different account
+is a `409`. Ids are trimmed to 64 characters, and a report without one is
+never treated as a duplicate.
+
+This matters more than it does for a check-in. Resending a check-in twice is
+harmless; resending a report twice creates a second incident, which is the
+failure the whole project exists to prevent.
+
+**`written_at` is when somebody typed it**, not when it arrived. A report
+written forty minutes ago describes a house that may already have been
+cleared, so the feed orders on this and says so on the card when the gap is
+big enough to matter. It's a client claim, bounded exactly like a check-in's:
+more than two minutes ahead is rejected, more than 12 hours old is rejected,
+slightly ahead is clamped to now.
+
+The response carries both times plus `synced_late`, and:
+
+```json
+{ "possible_duplicate": { "id": 12, "subject": "...", "score": 0.61 } }
+```
+
+`null` when nothing matched. Every report is checked on arrival against every
+open report **including ones that landed seconds earlier in the same sync
+batch** — two neighbours with no signal filing the same flood is precisely the
+case, and neither could have seen the other's. A match needs similar wording
+*and* to be within 500 m. It is recorded as a link, never a merge: both
+reports stay in the feed and both stay joinable.
+
+Reports in the feed and on `/api/reports` carry `created_at`, `received_at`,
+`synced_late`, `minutes_old`, `dupe_of` and `dupe_score` accordingly.
 
 ## Responders
 
@@ -233,6 +288,39 @@ reason:
 
 Only `can_walk` is always required. START stops as soon as it has an answer,
 so the later fields aren't asked once the category is decided.
+
+## Suggestions
+
+| Method | Route | Body | |
+| --- | --- | --- | --- |
+| `POST` | `/api/suggest` | `text` | Priority, equipment, and the words behind both |
+| `GET` | `/api/model` | | The model card, limits included |
+| `GET` | `/api/model/priority.json` | | The trained model itself |
+
+`/api/suggest` also returns `duplicates` — open reports that read like the
+same incident. It's a courtesy for somebody online and typing; the check that
+has to hold runs on arrival, in `POST /api/reports`, because the reports most
+likely to duplicate each other are the ones filed with no signal.
+
+### The same suggestion with no signal
+
+`/api/model/priority.json` is the trained model — word counts, lexicons,
+thresholds — generated from `classify.py` by `flask --app app export-model`
+and committed to `static/model/priority.json`, where the service worker keeps
+it. `static/scripts/classify.js` evaluates it in the browser, so somebody
+filing at 2am with the towers down still gets a suggested priority.
+
+It returns the same shape as `/api/suggest` with two differences:
+
+- `"offline": true`
+- **no `duplicates` key at all** — absent, not empty. `[]` would read as *we
+  looked and found none*, and nothing has looked. Duplicate detection compares
+  against everybody else's open reports, which this app refuses to keep on a
+  device.
+
+The committed artifact is checked against what the code would generate today,
+and a parity test runs both implementations over the whole corpus and fails on
+any disagreement.
 
 ## Forms or JSON
 

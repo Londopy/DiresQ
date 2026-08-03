@@ -231,3 +231,34 @@ width:100%;
     }
 
 }
+/* ------------------------------------------------------------------
+   When this report was written, as opposed to when we got it.
+
+   Always shown, because "how old is this" is the first thing anyone deciding
+   whether to drive somewhere needs and the last thing a feed usually tells
+   them. The extra sentence only appears when the two times differ enough to
+   change the answer.
+   ------------------------------------------------------------------ */
+.filed-when{
+    margin:-20px 0 24px;
+    color:#a6adc8;
+    font-size:0.85rem;
+    line-height:1.55;
+}
+
+.filed-when strong{color:#fab387;}
+
+/* Another open report that reads like this one. A link, never a merge. */
+.dupe-flag{
+    margin:0 0 24px;
+    padding:14px 16px;
+    border-radius:10px;
+    background:#181825;
+    border-left:3px solid #cba6f7;
+    color:#bac2de;
+    font-size:0.88rem;
+    line-height:1.6;
+}
+
+.dupe-flag strong{color:#cdd6f4;}
+.dupe-flag a{color:#cba6f7;}

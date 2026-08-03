@@ -31,7 +31,20 @@ jobs:
           python-version: ${{ matrix.python }}
           cache: pip
 
+      # The suite holds the Python classifier and the browser one side by side
+      # and fails if they disagree. Without node that test skips, and a skip
+      # is not a pass — an offline suggestion that quietly differs from the
+      # online one is worse than no offline suggestion, because nothing on
+      # screen would say so.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
       - run: pip install -r requirements-dev.txt
+
+      # Guard against the parity test silently skipping if node ever goes away.
+      - name: node is here, so the parity test will actually run
+        run: node --version
 
       # Undefined names, syntax, unused imports. Not style.
       - name: Lint
@@ -140,7 +153,9 @@ jobs:
         run: |
           {
             echo "### CI"
-            echo "- tests: \`pytest -q\` on Python 3.10 and 3.12"
+            echo "- tests: \`pytest -q\` on Python 3.10 and 3.12, node present"
+            echo "  so the Python/browser classifier parity check runs rather"
+            echo "  than skipping"
             echo "- lint: ruff E9,F (advisory)"
             echo "- boot: login, disclaimer, offline, sw.js and the manifest"
             echo "  fetched from a real server, with the worker's content type"

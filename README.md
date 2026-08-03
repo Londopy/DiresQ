@@ -9,11 +9,11 @@ DiresQ tracks the people going into it.**
 
 [![CI](https://github.com/Skythe7/DiresQ/actions/workflows/ci.yml/badge.svg)](https://github.com/Skythe7/DiresQ/actions/workflows/ci.yml)
 [![Security](https://github.com/Skythe7/DiresQ/actions/workflows/security.yml/badge.svg)](https://github.com/Skythe7/DiresQ/actions/workflows/security.yml)
-[![Tests](https://img.shields.io/badge/tests-373%20passing-brightgreen)](tests/test_app.py)
+[![Tests](https://img.shields.io/badge/tests-426%20passing-brightgreen)](tests/test_app.py)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 [![Accessibility](https://img.shields.io/badge/accessibility-WCAG_2.1_AA_audited-a6e3a1)](docs/accessibility.md)
-[![Works offline](https://img.shields.io/badge/check--ins-work_offline-fab387)](docs/offline.md)
+[![Works offline](https://img.shields.io/badge/reports_&_check--ins-work_offline-fab387)](docs/offline.md)
 [![No JS required](https://img.shields.io/badge/works_without-JavaScript-89b4fa)](docs/architecture.md)
 [![Limitations](https://img.shields.io/badge/limitations-written_down-f38ba8)](docs/limits.md)
 
@@ -55,7 +55,7 @@ board turns red; the report on the right filed itself.</sub>
 | --- | --- |
 | **70 commits** | 65 of them inside the 14-hour window |
 | **12,579 lines of code** | Python, JavaScript, CSS, HTML, SQL |
-| **373 test functions** | 496 cases after parametrisation — every route, an adversarial pass |
+| **426 test functions** | 549 cases after parametrisation — every route, an adversarial pass |
 | **16 documentation pages** | including the one listing what we didn't build |
 | **No background jobs** | overdue is computed on read — nothing to forget to start, no timer that can silently die |
 
@@ -113,7 +113,7 @@ on its own, and now somebody knows where to start looking.
 
 ## What we can prove
 
-Four claims, each with the measurement behind it.
+Five claims, each with the measurement behind it.
 
 **The classifier is 75% accurate, and we know because we tried to fool it.**
 Run over its own training corpus it scored 100% — a worthless number, it had
@@ -131,9 +131,22 @@ packet carries an age rather than a timestamp, because a node running off a
 battery in a flood is the last clock you want to trust.
 [The threat model →](docs/security.md)
 
-**The accessibility audit found nine issues and we fixed all nine.** Three were
-critical. Every fix is held in place by a test, so they can't quietly come
-back. [The audit →](docs/accessibility.md)
+**The accessibility audit found thirteen issues and we fixed all thirteen.**
+Three were critical. Nine came from the first pass; four more from a second
+one over the offline report form, where contrast passed everywhere and the
+announcing didn't — a status region written to while still hidden, two live
+regions talking over each other. Every fix is held in place by a test, so they
+can't quietly come back. [The audit →](docs/accessibility.md)
+
+**The offline classifier is the same classifier, and a test proves it rather
+than assuming it.** The browser gets the trained model, generated from
+`classify.py`; a test fails if the committed copy has drifted, and a parity
+harness runs every corpus line plus a dozen awkward cases through both
+implementations and fails on any disagreement. It found a real bug on its
+first run: the words shown behind a suggestion were being ordered by
+floating-point noise, because CPython and V8 round `log` differently in the
+last bit. That was wrong in the Python on every machine, and unfindable while
+there was only one implementation. [How →](docs/offline.md)
 
 **We wrote down what's broken before anyone asked.** `/api/uplink` is
 unauthenticated. Location is self-reported. The radio firmware does not exist,
@@ -144,7 +157,10 @@ without limitations — it's one nobody checked.
 ## What it does
 
 - **File a report** — what, how bad, and where, with the location pinned on a
-  map or pulled from your phone's GPS.
+  map or pulled from your phone's GPS. **It works with no signal:** the report
+  is written to your phone before the network is touched, sends itself when
+  there is a connection, and carries an id minted before the first attempt, so
+  a phone that dies mid-send retries without filing a second incident.
 - **See the feed** — worst first, with responder counts on every card. A report
   nobody has gone to reads `0 responding`, and you can see it sitting under one
   with six people on it.
@@ -155,10 +171,15 @@ without limitations — it's one nobody checked.
   the most cautious signal wins.
 - **It reads what you wrote** — a classifier suggests the priority and what
   equipment is needed from the description, and shows you the words that
-  caused it. Naive Bayes, trained at import, 0.1 ms, no network. It also spots
-  when somebody has already reported the same incident, which is how six people
-  end up at one address. You always decide; touch the dropdown and it stops
-  touching it.
+  caused it. Naive Bayes, trained at import, 0.1 ms, no network. **It runs on
+  the phone too**, from the same trained model, so the person filing at 2am
+  with the towers down gets the suggestion that was built for them. You always
+  decide; touch the dropdown and it stops touching it.
+- **It notices when two reports are one incident** — which is how six people
+  end up at one address while the next street has nobody. Checked when a
+  report *arrives*, not while somebody types, so two neighbours who both filed
+  offline and could not see each other's report are compared against each
+  other the moment they sync. It links them; it never merges them.
 - **Triage it properly** — if you can't judge how bad something is, four
   questions run START, the protocol used at real multiple-casualty scenes, and
   pick the severity for you.
@@ -167,11 +188,14 @@ without limitations — it's one nobody checked.
   judged on when you pressed the button rather than when it arrived.
 - **Install it** — add DiresQ to your home screen and it opens without browser
   chrome, with its own icon. With the radio off you still get the report you
-  took, when you're due to check in, and where you last were. What you don't
-  get is the feed or the board: those are claims about other people that stop
+  took, when you're due to check in, where you last were, and a working report
+  form with the classifier behind it. What you don't get is the feed, the
+  board, or a duplicate check: those are claims about other people that stop
   being true the moment they're saved, and a stale one sends somebody to an
   address that was cleared twenty minutes ago. Offline they're absent rather
-  than wrong. [What's kept and what isn't →](docs/offline.md)
+  than wrong — and the form says so out loud rather than showing an empty
+  duplicate list, which would read as *checked, found none*.
+  [What's kept and what isn't →](docs/offline.md)
 - **The accountability board** — everyone who is out, what they're doing, and
   how long since anyone heard from them. Overdue sorts to the top.
 - **The dead man's switch** — stay silent fifteen minutes past your deadline
@@ -301,11 +325,13 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
-373 test functions, which parametrisation expands into 496 cases, covering
+426 test functions, which parametrisation expands into 549 cases, covering
 every route, the permission rules, feed ordering, staffing resolution, ETA
-parsing, overdue calculation, packet signing, the offline queue, the auth
-guardrails and an adversarial pass. CI runs them on every push, along with a
-boot check against a real server and the held-out accuracy measurement.
+parsing, overdue calculation, packet signing, the offline queues for both
+check-ins and reports, arrival-time duplicate detection, the auth guardrails
+and an adversarial pass. CI runs them on every push, along with a boot check
+against a real server, the held-out accuracy measurement, and a parity run
+that fails if the browser classifier and the Python one ever disagree.
 
 ## Layout
 
@@ -316,12 +342,16 @@ eta.py              free-text ETA parsing with a confidence gate
 triage.py           START triage, mapped onto report severity
 transport.py        the check-in packet, small enough for a radio
 tools/gateway.py    forwards packets from a pipe or a serial port
+tools/parity.mjs    runs the browser classifier, so a test can compare the two
 tools/demo_state.py winds the clock so the board goes red on camera
 tools/make_og.py    draws the social preview card
 schema.sql          accounts · reports · assignments · checkins
 templates/          Jinja pages
 static/             CSS, JS, images
 static/scripts/sw.js  caches map tiles you have already seen
+static/scripts/classify.js  the same trained model, evaluated on the phone
+static/scripts/reportqueue.js  reports written to the device before they are sent
+static/model/       the trained model, generated by `flask --app app export-model`
 tests/              pytest suite
 docs/               sixteen pages: why, install, architecture, decisions,
                     process, offline, security, accessibility, limits,
@@ -341,7 +371,12 @@ flask --app app init-db          # drop everything and rebuild
 flask --app app seed             # load an incident already in progress
 flask --app app sweep            # file reports for anyone gone quiet
 flask --app app node-key londo   # show or --rotate a radio key
+flask --app app export-model     # regenerate the browser's copy of the model
 ```
+
+Run `export-model` after touching the corpus or the lexicons in `classify.py`.
+A test fails if the committed artifact has gone stale, so forgetting is loud
+rather than silent.
 
 `sweep` is the dead man's switch without a browser. It also runs when a page
 is loaded, but put it on cron or Task Scheduler and the alarm stops depending
@@ -399,8 +434,9 @@ fork, offline, or if Pages is down.
   know is wrong
 - [Security](docs/security.md) — the threat model, packet signing, and the
   open redirect we shipped by accident
-- [Accessibility](docs/accessibility.md) — the WCAG 2.1 AA audit: nine issues
-  found, three critical, all fixed and held in place by tests
+- [Accessibility](docs/accessibility.md) — the WCAG 2.1 AA audit: thirteen
+  issues found across two passes, three critical, all fixed and held in place
+  by tests
 - [Limits](docs/limits.md) — what this doesn't do
 - [Disclaimer](docs/disclaimer.md) — it does not call for help, and the triage
   helper is not medical advice
@@ -426,6 +462,18 @@ fork, offline, or if Pages is down.
 - **The classifier is wrong one time in four.** Survivable because it lands in
   a dropdown you control, next to the words that caused it, and stops adjusting
   the moment you touch it. Unacceptable if it were deciding anything.
+- **Duplicate detection cannot run offline**, and that is a choice rather than
+  a gap. It compares against everybody else's open reports, and keeping that
+  list on a phone is the one thing this app refuses to do. The server checks
+  on arrival instead, so the check is deferred rather than lost — but between
+  filing and syncing, nothing has looked, and the form says so.
+- **Duplicate detection misses rewordings.** "flooding, couple on the second
+  floor" and "water rising, two adults upstairs" are one incident sharing
+  almost no vocabulary. Catching that needs embeddings, which need a model
+  file and a machine to run it on.
+- **A report edited or resolved offline still needs a connection.** Only new
+  reports queue. Reconciling an edit against whatever happened while you were
+  away needs conflict rules we have not earned the right to guess at.
 
 ## Team
 

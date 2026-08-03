@@ -178,6 +178,154 @@ The banner counts only reports where both counts are zero. Someone en route
 and not yet arrived takes a report out of it, because a person on the way is
 the thing we were missing.
 
+## A queued report needs an id; a queued check-in gets one for free
+
+Check-ins already carried a `client_id`, and it was easy to assume a report
+could reuse the same trick unchanged. It can't, and the difference is worth
+being precise about.
+
+A check-in is idempotent by nature. It means *I am alive at this time and
+place*. Sending it twice says the same thing twice, and the id is there to
+keep the log tidy rather than to prevent harm. Losing one in flight costs a
+timer that resets a minute later.
+
+A report is not. Sending it twice creates **a second incident**, and duplicate
+incidents are the convergence failure — six people at one address while the
+next street has nobody — that this entire project exists to make visible. The
+id stops being hygiene and starts being the safety property.
+
+Which changes three things:
+
+**It is minted before the first attempt, not in the retry path.** The check-in
+queue tries the network first and writes to `localStorage` only when that
+fails. A report is written down first and sent second. That ordering is the
+whole design: a phone that dies mid-request, an app killed by the OS, a tab
+closed in a panic — the retry after the restart carries the same id, because
+the id was already on disk before anything could go wrong. There is a test
+that reads `reportqueue.js` and fails if the two statements are the wrong way
+round, because that bug is invisible at runtime and obvious in the source.
+
+**It is checked server-side, before the `INSERT`.** Not by a client-side
+guard, which the restart erases. Not by the `UNIQUE` constraint alone, which
+only tells you about the collision after you have already tried to create it.
+`create_report` looks the id up and hands back the report it already wrote.
+
+**The plain form carries one too.** With JavaScript off there is no queue and
+nothing to retry, but Back-then-Submit is the same double-file with a person
+driving it. The server renders an id into the form. That created a second-order
+problem — the service worker keeps a copy of the form so it can be opened with
+no signal, and a cached form would hand one id to two genuinely different
+reports, filing the second as a resend of the first. So `report_file.js`
+replaces it on load, which is safe because a browser running the worker is by
+definition running JavaScript.
+
+## The classifier goes to the phone; duplicate detection stays on the server
+
+The classifier is Python and it ran on the server. The person it was built for
+— filing at 2am, frightened, untrained, being asked by a dropdown how bad
+their own emergency is — is the likeliest of anyone to have no signal, because
+a flood takes the towers out along with everything else. They were the one
+person it never reached.
+
+Three options, none free.
+
+**Defer classification until sync and mark the priority provisional.** The one
+we rejected first, because it helps nobody at the moment of filing. The
+priority field is required; offline they still have to pick, still with no
+help, and the server's later disagreement arrives long after the decision that
+mattered. It fixes the record and not the person.
+
+**Say nothing.** Defensible, and it is what we do for duplicates. But the
+reason it is right for duplicates is precisely the reason it is wrong here —
+see below.
+
+**Port it, and we did.** With the one condition that makes it survivable:
+`static/scripts/classify.js` is an evaluator, not a second classifier. The
+corpus, the lexicons and the thresholds live in `classify.py` and nowhere
+else; `flask --app app export-model` writes the trained counts to
+`static/model/priority.json`, a test fails if the committed file has drifted
+from what the code would generate today, and a parity test runs every corpus
+line plus a dozen awkward cases through both implementations and fails on any
+disagreement.
+
+Two implementations of one model is a drift bug with a delay on it, and an
+offline suggestion that quietly disagrees with the online one is *worse* than
+no offline suggestion, because nothing on screen would say so. The parity test
+is what buys the right to do this at all — and it paid for itself immediately:
+it found that the words behind a suggestion were being ordered by
+floating-point noise, `math.log` and `Math.log` disagreeing about the last bit
+of the same expression. That was a real bug in the Python, reachable from any
+machine, and it was invisible while there was only one implementation to look
+at.
+
+**Duplicate detection does not go.** It compares your description against the
+reports everybody else has open right now, and that list is the exact thing
+DiresQ refuses to keep on a device — a saved copy of who needs help is a lie
+that gets more convincing the longer it sits there. The line falls out of the
+same rule the service worker follows:
+
+> A priority is a fact about the words you typed, and it travels.
+> A duplicate is a fact about everybody else, and it does not.
+
+So offline the panel shows the priority and says, in a sentence, that nothing
+has checked whether somebody has already reported this. Not an empty list —
+`duplicates: []` reads as *we looked and found none*, which is the one thing it
+must not mean.
+
+## Duplicates are checked when the report arrives, not while somebody types
+
+The duplicate check used to live in `/api/suggest`, which is a live call made
+while you type. Which meant it never ran for a report filed offline — and the
+reports most likely to duplicate each other are exactly those.
+
+The scenario, in full: two neighbours on the same street, both with no signal,
+both file *"water rising on Kingsland"*. Neither can see the other's report,
+because neither has a connection. Both sync. Two reports, one incident, six
+people heading to one address. The check built to stop that was the one thing
+that could not run.
+
+So `link_duplicate` runs on arrival, for every report, however it got here.
+Because reports are written one at a time, comparing against every open report
+*at the moment this one is written* includes the ones that landed seconds
+earlier in the same batch — not merely the ones that existed before anybody
+went offline. That is the property the whole fix turns on.
+
+**Distance is a veto, not a vote.** A flood on a road of the same name three
+suburbs over shares all of its vocabulary and none of its incident, and text
+alone cannot tell the two apart. So a match has to pass the text test first,
+and being more than 500 m away is then allowed to say no. That radius is
+chosen, not measured, and we would rather write that down than dress it up.
+
+**It links; it never merges.** TF-IDF over a fifty-five line corpus is good
+enough to be worth a coordinator's glance and nowhere near good enough to fold
+one person's call for help into another person's row. Both reports stay in the
+feed, both stay joinable, and the later one carries a line saying what it might
+be a duplicate of and how alike. A false positive costs somebody a second of
+reading. An automatic merge would cost somebody their report.
+
+## A report says when it was written, not when it arrived
+
+The check-in queue already solved this once, and a report needed the same
+treatment for a sharper reason.
+
+A check-in stamped on arrival silently cancels an overdue alarm: somebody
+silent through their whole window comes back green the moment their phone
+finds a bar. A report stamped on arrival is worse than silent — it is
+*loud and wrong*. A description written forty minutes ago is a description of
+a house that may already have been cleared, and rendering it as breaking news
+sends the next available person to an address nobody needs to be at, while the
+street that filed thirty seconds ago sits below it.
+
+So reports carry both times. `created_at` is when it was written — a claim
+from a client, bounded exactly like a check-in's, because a claim is what it
+is. `received_at` is ours. The feed orders on `created_at`, which is the
+honest place for it, and any report where the gap is big enough to matter says
+so on the card and again on the page: *written 40 minutes ago, reached us
+later — treat it as that old, not as new.*
+
+The alternative was to show one time and pick which. Every version of that we
+tried was a lie in one direction or the other.
+
 ## Things we chose not to build
 
 - **The radio itself.** We built the packet and the endpoint that accepts it;
@@ -189,3 +337,9 @@ the thing we were missing.
 - **Chat.** It's a worse Discord.
 - **Push notifications.** Permission prompts on camera, inconsistent across
   browsers, low payoff.
+- **Automatic merging of duplicate reports.** We detect them and link them.
+  Merging on a fifty-five example model would eventually delete a real call
+  for help, and the person it belonged to would never know.
+- **Offline duplicate detection.** Not a limitation we ran out of time to
+  fix — it would require keeping everybody else's open reports on the device,
+  which is the one thing this app refuses to do. See above.

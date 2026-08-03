@@ -40,6 +40,13 @@
 
     <form action="/report/new" method="POST" class="report-card">
 
+        <!-- Rendered by the server, so pressing Back and submitting a second
+             time reuses it rather than filing a second incident. With
+             JavaScript on, report_file.js mints its own and this is unused;
+             without it, this is the only thing standing between a
+             double-tapped button and two rows. -->
+        <input type="hidden" name="client_id" value="{{ client_id }}">
+
 
 {% with messages = get_flashed_messages() %}
 {% if messages %}
@@ -147,9 +154,13 @@
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <script src="../static/scripts/report_make.js"></script>
-<!-- Suggests a priority from what you type. Layered on top: without it the
-     form is exactly the form it always was. -->
-<script src="../static/scripts/suggest.js"></script>
+<!-- Suggests a priority from what you type — from the server when there is
+     one, and from the same trained model running on the phone when there
+     isn't. Layered on top: without it the form is the form it always was. -->
+<script type="module" src="../static/scripts/suggest.js"></script>
+<!-- Writes the report to the device before sending it, so a report filed with
+     no signal is not lost and cannot arrive twice. -->
+<script type="module" src="../static/scripts/report_file.js"></script>
 
 <script src="/static/scripts/pwa.js"></script>
 </body>

@@ -210,6 +210,51 @@ All notable changes to this project are documented here. Format follows
   in a form you can take in at a glance. Motion is dropped entirely under
   `prefers-reduced-motion`; the colour carries the whole meaning without it.
 
+- File a report with no signal. The report is written to the device before the
+  network is touched, a pill in the corner counts what is waiting, and it sends
+  itself when there is a connection. The status line never says "sent" for
+  something that has not been: it says the report is on this phone, that nobody
+  has seen it, and that if this is life-threatening you should call 911 now.
+- A queued report cannot arrive twice. It carries an id minted before the first
+  attempt and written to storage before anything is sent, so a phone that dies
+  mid-request retries with the same id after a restart. The server recognises
+  it before writing the row and hands back the report it already filed.
+  Resending a check-in twice was always harmless; resending a report twice
+  would create a second incident, which is the convergence failure this whole
+  project exists to make visible. The plain form carries an id too, so
+  Back-then-Submit with JavaScript off cannot file twice either.
+- The classifier runs on the phone. The same trained model — word counts,
+  lexicons, thresholds — is exported from `classify.py` to a small JSON file
+  the service worker keeps, and evaluated in the browser. The person the
+  suggestion was built for is somebody filing at 2am from a flooded house, and
+  they are the likeliest of anyone to have no signal; until now they were the
+  one person it never reached. There is one corpus and it stays in Python: the
+  browser gets the model, never the training data.
+- A parity test runs every line of the corpus and a dozen awkward cases
+  through both implementations and fails if they disagree by so much as a
+  rounding error. An offline suggestion that quietly differs from the online
+  one would be worse than no offline suggestion, because nothing on screen
+  would say so.
+- Duplicate detection runs when a report arrives, against every open report
+  including the ones that landed seconds earlier in the same sync batch. Two
+  neighbours on one street, both with no signal, both filing "water rising on
+  Kingsland", is exactly the case the check was built for and exactly the case
+  it used to miss — it only ever ran while somebody was online and typing.
+  A match needs similar wording and to be within 500 m. It links the two
+  reports and never merges them: both stay in the feed and both stay joinable.
+- Reports say when they were written, not when they arrived. A report typed
+  forty minutes ago describes a house that may already have been cleared, so
+  the feed orders on the time it was written and marks any report where the
+  gap is big enough to matter: *written 40 minutes ago, reached us later — it
+  may already have been dealt with*.
+- `flask --app app export-model` regenerates the browser's copy of the
+  classifier. A test fails if the committed file has drifted from what the
+  code would produce today, so forgetting the step is loud rather than silent.
+- The service worker keeps the blank report form once you have opened it, so
+  the offline queue has a door to be reached through. It is an empty form: it
+  says nothing about who needs help, which is the test everything it keeps has
+  to pass. The feed and the board are still refused.
+
 ### Changed
 
 - Equipment is now read from the wording with a word list rather than a
@@ -239,6 +284,15 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- The words shown behind a suggestion were ordered by floating-point noise.
+  Two words can be exactly as telling as each other — identical arithmetic —
+  and as doubles one of them ended `...488` and the other `...479`, so which
+  one a coordinator was shown depended on the last bit of a logarithm. Found
+  by porting the classifier to the browser: CPython and V8 round the same
+  expression differently, and the two implementations started showing
+  different explanations for the same sentence. It was wrong in the Python on
+  every machine, and unfindable while there was only one implementation to
+  compare. Ties are now rounded flat and broken alphabetically.
 - Reports could be filed with no location at all. The location fields were
   marked required, but browsers do not validate hidden fields, so an untouched
   map submitted silently and the report never appeared on the map.

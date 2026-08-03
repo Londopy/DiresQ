@@ -40,6 +40,19 @@ It has to run. No download, no GPU, no API key, no network. Pure Python, a few
 milliseconds, deterministic, and it works in the disaster this app is for,
 where nothing else does.
 
+WHERE IT RUNS
+-------------
+On the server, and — for priority and equipment only — in the browser with the
+radio off. `export_model()` writes the trained counts and the lexicons to
+`static/model/priority.json`, and `static/scripts/classify.js` evaluates them.
+There is one corpus and it is in this file; the browser gets the model, never a
+second copy of the training data. A parity test runs both and fails if they
+disagree.
+
+Duplicate detection stays here and only here. It compares against the reports
+other people have open right now, and that list is exactly what DiresQ refuses
+to store on a device. See `export_model` for the argument.
+
 The maths is Bayes' theorem and inverse document frequency, both older than
 the people who wrote this file. That's a feature: you can read all of it.
 """
@@ -163,6 +176,21 @@ STOPWORDS = frozenset("""
 # Below this the suggestion is withheld rather than shown quietly wrong.
 MIN_CONFIDENCE = 0.45
 
+# Fewer tokens than this and we say nothing. Two words is not enough to be
+# confident about anything, and being confidently wrong is worse than silence.
+MIN_TOKENS = 3
+
+# Decimal places kept before ranking the words behind a suggestion. Two words
+# that are mathematically equally telling must come out equal, so the stated
+# tie-break decides instead of the last bit of a float. Twelve is far below
+# anything that could matter and far above double noise.
+TIE_PLACES = 12
+
+# Stripped in this order by _stem. Named rather than inlined because the
+# browser copy of the classifier is generated from these, and a suffix list
+# that lived in two places would be a suffix list that drifted.
+_SUFFIXES = ("ing", "ed", "es", "s")
+
 # Cosine similarity above which two reports are probably the same incident.
 #
 # Measured, not guessed. Against the eight seeded reports:
@@ -184,7 +212,7 @@ def _stem(word: str) -> str:
     """Crude suffix stripping. Split out so tokenise and surface_forms cannot
     drift apart — if they ever disagree, the explanation stops matching the
     decision, which is the one thing this file is not allowed to do."""
-    for suffix in ("ing", "ed", "es", "s"):
+    for suffix in _SUFFIXES:
         if len(word) > len(suffix) + 2 and word.endswith(suffix):
             return word[: -len(suffix)]
     return word
@@ -301,6 +329,19 @@ class NaiveBayes:
 
         Ranked by how much more likely each word is under this label than
         under the others — a word common everywhere explains nothing.
+
+        Two words can earn exactly the same edge — "trash" (seen once, in LOW)
+        and "street" (seen once each in HIGH and MEDIUM, three times in LOW)
+        both come out at 0.8149015059934. Mathematically identical; as
+        doubles, one of them ends ...488 and the other ...479, and which of
+        the two a coordinator is shown depends on the last bit of a logarithm.
+
+        That is not a tie-break, it is noise, and it took porting this to
+        JavaScript to notice — two libm implementations rounded the same
+        expression differently and the explanations diverged. So round the
+        edge well below anything meaningful, and let a stated rule decide the
+        rest: strongest first, then alphabetically. Boring, reproducible, and
+        the same on every machine.
         """
         others = [x for x in self.labels if x != label]
         ranked = []
@@ -310,8 +351,8 @@ class NaiveBayes:
             edge = self.weight(token, label) - max(
                 self.weight(token, other) for other in others)
             if edge > 0:
-                ranked.append((edge, token))
-        ranked.sort(reverse=True)
+                ranked.append((round(edge, TIE_PLACES), token))
+        ranked.sort(key=lambda pair: (-pair[0], pair[1]))
         return [token for _, token in ranked[:limit]]
 
 
@@ -494,7 +535,9 @@ def equipment_for(text: str) -> list[tuple[str, str]]:
         if hits:
             scored.append((len(hits), capability, hits[0]))
 
-    scored.sort(reverse=True)
+    # Most hits first, then alphabetically. Same rule as `why`, stated the
+    # same way, so neither ordering is an accident of how a sort was written.
+    scored.sort(key=lambda row: (-row[0], row[1]))
     # One clear winner beats two weak ones: only include a second if it has
     # real support of its own.
     keep = [(cap, word) for count, cap, word in scored if count >= 2][:2]
@@ -546,7 +589,7 @@ def suggest(text: str) -> Suggestion:
     Always a suggestion. Nothing here writes to a report — the person filing
     it picks, and this only changes what the dropdown starts on.
     """
-    if len(tokenise(text)) < 3:
+    if len(tokenise(text)) < MIN_TOKENS:
         # Two words is not enough to be confident about anything, and being
         # confidently wrong is worse than saying nothing.
         return Suggestion("MEDIUM", 0.0, [], {}, [], confident=False)
@@ -606,6 +649,57 @@ def duplicates(text: str, existing: list[dict], limit: int = 3) -> list[dict]:
     return scored[:limit]
 
 
+def export_model() -> dict:
+    """Everything a browser needs to reach the same answer this file does.
+
+    The classifier is Python and it runs on the server, which means the person
+    filing at 2am with no signal — exactly the person the suggestion was built
+    for — was the one person who never got it. This is how it gets to them.
+
+    What ships is the *trained model*, not a second copy of the logic: the
+    word counts, the lexicons, the stopwords, the thresholds. It is generated
+    from the objects above, so the corpus has one home and this file is still
+    it. `static/scripts/classify.js` is a plain evaluator over this data, and
+    a parity test runs every corpus line plus the awkward cases through both
+    and fails if they ever disagree by so much as a rounding error.
+
+    Deliberately absent: anything to do with duplicates. Duplicate detection
+    compares against the reports other people have open right now, and that
+    list is the exact thing this app refuses to keep on a phone — a saved copy
+    of who needs help is a lie that gets more convincing the longer it sits
+    there. A priority is a fact about the words you typed and it travels. A
+    duplicate is a fact about everybody else and it does not. So the browser
+    suggests a priority offline, says plainly that it cannot check for
+    duplicates yet, and the server does that check when the report lands.
+
+    Written to `static/model/priority.json` by `flask --app app export-model`,
+    committed, and served as a static file so the service worker keeps it
+    under the same rule as the stylesheets: it is part of the app, not a claim
+    about the world.
+    """
+    return {
+        # Bumped when the shape changes, so a stale cached copy is detectable
+        # rather than silently wrong.
+        "format": 1,
+        "labels": list(PRIORITIES),
+        "capabilities": list(CAPABILITIES),
+        "stopwords": sorted(STOPWORDS),
+        "suffixes": list(_SUFFIXES),
+        "min_confidence": MIN_CONFIDENCE,
+        "min_tokens": MIN_TOKENS,
+        "life_threat_phrases": list(LIFE_THREAT_PHRASES),
+        "routine_phrases": list(ROUTINE_PHRASES),
+        "stand_down_words": list(STAND_DOWN_WORDS),
+        "equipment_words": {cap: list(words)
+                            for cap, words in EQUIPMENT_WORDS.items()},
+        "priors": {label: _PRIORITY.docs[label] for label in PRIORITIES},
+        "totals": {label: _PRIORITY.totals[label] for label in PRIORITIES},
+        "vocabulary_size": len(_PRIORITY.vocabulary),
+        "counts": {label: dict(sorted(_PRIORITY.counts[label].items()))
+                   for label in PRIORITIES},
+    }
+
+
 def model_card() -> dict:
     """What this is, for anyone who asks. Including the bad news."""
     per_class = defaultdict(int)
@@ -618,13 +712,18 @@ def model_card() -> dict:
         "per_class": dict(per_class),
         "vocabulary": len(_PRIORITY.vocabulary),
         "capabilities": list(CAPABILITIES),
-        "runs": "locally, no network, no model file, deterministic",
+        "runs": ("locally, no network, no model file, deterministic — "
+                 "and in the browser with no signal, from the same trained "
+                 "model exported to static/model/priority.json"),
         "limits": [
             "English only",
             "trained on flood and storm reports, weaker on anything else",
             "bag of words, so it cannot read 'no longer trapped' correctly",
             "sixty examples is a demonstration, not a dataset",
             "duplicate detection misses rewordings that share no vocabulary",
+            "duplicate detection cannot run offline at all — it compares "
+            "against other people's open reports, which this app refuses to "
+            "keep on a phone. The server runs it when the report arrives",
             "suggests only — the person filing the report always decides",
         ],
         "duplicate_threshold": DUPLICATE_THRESHOLD,

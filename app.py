@@ -17,8 +17,10 @@ import csv
 import io
 import os
 import re
+import json
 import secrets
 import sqlite3
+import uuid
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 from math import atan2, cos, radians, sin, sqrt
@@ -240,11 +242,36 @@ def is_overdue(joined_at: str, eta: str | None, last_checkin: str | None) -> boo
 REPORT_COLUMNS = f"""
     r.id, r.subject, r.description, r.priority, r.lat, r.lng,
     r.status, r.needed, r.sender, r.auto_filed_for, r.created_at,
+    r.received_at, r.client_id, r.dupe_of, r.dupe_score,
+    dup.subject AS dupe_subject,
     a.username AS sender_name,
     COALESCE(SUM(asg.status = 'en_route'), 0) AS en_route_count,
     COALESCE(SUM(asg.status = 'on_scene'), 0) AS on_scene_count,
     {PRIORITY_RANK} AS priority_rank
 """
+
+
+def age(item: dict) -> dict:
+    """Say how old a report is, and whether it sat in a queue on the way here.
+
+    A report written forty minutes ago and synced just now describes a house
+    that may already have been cleared. The feed is not allowed to render that
+    as something that has only just come in — the whole argument of this
+    project is that a stale claim presented as a fresh one is worse than no
+    claim at all.
+
+    So both times travel with the report, along with the two numbers a person
+    actually reads: how long ago it was written, and whether the gap between
+    writing and arriving is big enough to mention.
+    """
+    written = parse_iso(item.get("created_at"))
+    item["synced_late"] = late_sync(item.get("created_at"),
+                                    item.get("received_at"))
+    item["minutes_old"] = (
+        None if written is None
+        else max(0, int((datetime.now(timezone.utc) - written).total_seconds() // 60))
+    )
+    return item
 
 
 def fetch_reports(include_resolved: bool = False) -> list[dict]:
@@ -254,6 +281,7 @@ def fetch_reports(include_resolved: bool = False) -> list[dict]:
         FROM reports r
         JOIN accounts a ON a.id = r.sender
         LEFT JOIN assignments asg ON asg.report_id = r.id
+        LEFT JOIN reports dup ON dup.id = r.dupe_of
         {where}
         GROUP BY r.id
         ORDER BY priority_rank DESC, r.created_at DESC
@@ -266,6 +294,7 @@ def fetch_reports(include_resolved: bool = False) -> list[dict]:
         # map.js reads latitude/longitude. Drop these two lines once it doesn't.
         item["latitude"] = row["lat"]
         item["longitude"] = row["lng"]
+        age(item)
         reports.append(item)
 
     # SQL ordered by priority; staffing is computed above, so the tie-break
@@ -349,6 +378,7 @@ def fetch_report(report_id: int) -> dict | None:
         FROM reports r
         JOIN accounts a ON a.id = r.sender
         LEFT JOIN assignments asg ON asg.report_id = r.id
+        LEFT JOIN reports dup ON dup.id = r.dupe_of
         WHERE r.id = ?
         GROUP BY r.id
     """, (report_id,)).fetchone()
@@ -359,6 +389,7 @@ def fetch_report(report_id: int) -> dict | None:
     item["latitude"] = row["lat"]
     item["longitude"] = row["lng"]
     item["staffing"] = staffing_for(report_id)
+    age(item)
     item["responders"] = [dict(x) for x in get_db().execute("""
         SELECT asg.id, asg.status, asg.eta, asg.staffing_vote, asg.joined_at,
                asg.position_mismatch,
@@ -549,39 +580,231 @@ def logout():
     return redirect(url_for("login"))
 
 
+def link_duplicate(report_id: int) -> dict | None:
+    """Look for an open report describing the same incident, and link to it.
+
+    Run on arrival, for every report, however it got here. That timing is the
+    whole point. The duplicate check used to live in `/api/suggest`, which is
+    a live call made while somebody types — so a report written offline was
+    never checked at all, and two neighbours on the same street with no signal
+    both filed "water rising on Kingsland", both synced, and six people went
+    to one address while the next street had nobody. That is the precise
+    failure this project exists to prevent, and the check that was built to
+    stop it was the one thing that could not run.
+
+    Running it here fixes both halves. The comparison is against every open
+    report *at the moment this one is written*, which — because reports are
+    written one at a time — includes the ones that arrived seconds earlier in
+    the same sync batch, not merely the ones that existed before anyone went
+    offline.
+
+    It links. It never merges. TF-IDF over a fifty-five line corpus is good
+    enough to be worth a coordinator's glance and nowhere near good enough to
+    fold somebody's call for help into somebody else's row. The later report
+    points at the earlier one; both stay in the feed, both stay joinable.
+    """
+    db = get_db()
+    mine = db.execute("""
+        SELECT id, subject, description, lat, lng FROM reports WHERE id = ?
+    """, (report_id,)).fetchone()
+    if mine is None:
+        return None
+
+    others = db.execute("""
+        SELECT id, subject, description, lat, lng
+        FROM reports
+        WHERE id != ? AND status NOT IN ('resolved', 'hidden')
+              AND auto_filed_for IS NULL
+        ORDER BY id
+    """, (report_id,)).fetchall()
+
+    # Distance is a veto, not a vote. Two reports have to read alike first;
+    # being nearby cannot make unrelated wording into a duplicate, but being
+    # three suburbs apart is enough to say two similar sentences are two
+    # different incidents.
+    near = []
+    for row in others:
+        away = metres_between(mine["lat"], mine["lng"], row["lat"], row["lng"])
+        if away is None or away <= DUPLICATE_RADIUS_M:
+            near.append({"id": row["id"], "subject": row["subject"],
+                         "description": row["description"]})
+
+    text = f"{mine['subject']} {mine['description']}"
+    matches = classify.duplicates(text, near, limit=1)
+    if not matches:
+        return None
+
+    best = matches[0]
+    db.execute("UPDATE reports SET dupe_of = ?, dupe_score = ? WHERE id = ?",
+               (best["id"], best["score"], report_id))
+    db.commit()
+    return best
+
+
+def create_report(*, subject: str, description: str, priority: str,
+                  lat: float, lng: float, sender: int,
+                  written_at: datetime, client_id: str | None) -> dict:
+    """Write a report, once, and say what we made of it.
+
+    Both ways in end up here — the form on the page and the offline queue —
+    so the two cannot drift apart about what filing a report means.
+
+    `client_id` is what makes sending twice safe. It is generated in the
+    browser and written to disk *before* the first attempt, so it survives the
+    phone dying mid-send: the retry after a restart carries the same id, and
+    this finds it and hands back the report it already wrote. Without that, a
+    connection flickering at the wrong moment files a second incident, and a
+    second incident is the convergence failure with extra steps.
+
+    The check is here, server-side, before the INSERT — not a client-side
+    guard, which a restart erases, and not a UNIQUE constraint alone, which
+    tells you about the collision only after you have already tried to create
+    it.
+    """
+    db = get_db()
+
+    if client_id:
+        seen = db.execute("""
+            SELECT id, created_at, received_at FROM reports
+            WHERE client_id = ? AND sender = ?
+        """, (client_id, sender)).fetchone()
+        if seen is not None:
+            return {"ok": True, "duplicate": True, "id": seen["id"],
+                    "created_at": seen["created_at"],
+                    "received_at": seen["received_at"],
+                    "synced_late": late_sync(seen["created_at"],
+                                             seen["received_at"])}
+
+    received = datetime.now(timezone.utc)
+    try:
+        cur = db.execute("""
+            INSERT INTO reports
+                (subject, description, priority, lat, lng,
+                 status, sender, client_id, created_at, received_at)
+            VALUES (?, ?, ?, ?, ?, 'unassigned', ?, ?, ?, ?)
+        """, (subject, description, priority, lat, lng, sender,
+              client_id or None,
+              written_at.isoformat(timespec="seconds"),
+              received.isoformat(timespec="seconds")))
+    except sqlite3.IntegrityError:
+        # Two retries landing together, or somebody else's id. The column is
+        # UNIQUE across the table, so a collision from another account is a
+        # 409 rather than a silent overwrite.
+        db.rollback()
+        return {"ok": False, "error": "that report id belongs to someone else"}
+    db.commit()
+
+    report_id = cur.lastrowid
+    return {
+        "ok": True,
+        "duplicate": False,
+        "id": report_id,
+        "created_at": written_at.isoformat(timespec="seconds"),
+        "received_at": received.isoformat(timespec="seconds"),
+        "synced_late": (received - written_at).total_seconds() > LATE_SYNC_SECONDS,
+        # Checked now, against everything open including whatever else just
+        # arrived. See link_duplicate.
+        "possible_duplicate": link_duplicate(report_id),
+    }
+
+
+def report_fields(source) -> tuple[dict, str | None]:
+    """Pull a report out of a form or a JSON body, and say what's wrong."""
+    fields = {
+        "subject": (source.get("subject") or "").strip(),
+        "description": (source.get("description") or "").strip(),
+        "priority": (source.get("priority") or "").strip().upper(),
+        "lat": to_float(source.get("lat")),
+        "lng": to_float(source.get("lng")),
+    }
+
+    if not fields["subject"]:
+        return fields, "Subject is required"
+    if fields["priority"] not in PRIORITIES:
+        return fields, "Priority must be HIGH, MEDIUM or LOW"
+    if fields["lat"] is None or fields["lng"] is None:
+        # The hidden lat/lng inputs carry `required`, but hidden inputs are
+        # exempt from browser validation, so an untouched map still submits.
+        return fields, "Click the map to set a location"
+    return fields, None
+
+
+def to_float(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 @app.route("/report/new", methods=["GET", "POST"])
 @login_required
 def report_new():
     if request.method == "POST":
-        subject = (request.form.get("subject") or "").strip()
-        priority = (request.form.get("priority") or "").strip().upper()
-        description = (request.form.get("description") or "").strip()
-        lat = request.form.get("lat", type=float)
-        lng = request.form.get("lng", type=float)
+        fields, problem = report_fields(request.form)
+        if problem:
+            flash(problem)
+            return render_template("report_make.html",
+                                   client_id=new_client_id()), 400
 
-        if not subject:
-            flash("Subject is required")
-        elif priority not in PRIORITIES:
-            flash("Priority must be HIGH, MEDIUM or LOW")
-        elif lat is None or lng is None:
-            # The hidden lat/lng inputs carry `required`, but hidden inputs are
-            # exempt from browser validation, so an untouched map still submits.
-            flash("Click the map to set a location")
-        else:
-            db = get_db()
-            cur = db.execute("""
-                INSERT INTO reports
-                    (subject, description, priority, lat, lng,
-                     status, sender, created_at)
-                VALUES (?, ?, ?, ?, ?, 'unassigned', ?, ?)
-            """, (subject, description, priority, lat, lng,
-                  current_user()["id"], now_iso()))
-            db.commit()
-            return redirect(url_for("report_detail", report_id=cur.lastrowid))
+        # The form carries an id too, rendered into the page. Without
+        # JavaScript there is no queue and nothing to retry, but a browser
+        # back-button and a second Submit is the same double-file with a
+        # person driving it, and this catches that as well.
+        written_at, when_problem = claimed_time(
+            (request.form.get("written_at") or "").strip())
+        if when_problem:
+            flash(when_problem)
+            return render_template("report_make.html",
+                                   client_id=new_client_id()), 400
 
-        return render_template("report_make.html"), 400
+        result = create_report(
+            **fields, sender=current_user()["id"], written_at=written_at,
+            client_id=(request.form.get("client_id") or "").strip()[:64] or None)
 
-    return render_template("report_make.html")
+        if not result["ok"]:
+            flash(result["error"])
+            return render_template("report_make.html",
+                                   client_id=new_client_id()), 409
+
+        return redirect(url_for("report_detail", report_id=result["id"]))
+
+    return render_template("report_make.html", client_id=new_client_id())
+
+
+def new_client_id() -> str:
+    """A fresh id for a form that has not been filled in yet."""
+    return f"srv-{uuid.uuid4()}"
+
+
+@app.post("/api/reports")
+@login_required
+def api_report_create():
+    """File a report, from the queue or from anything else that speaks JSON.
+
+    Same code as the form, so the offline path cannot quietly mean something
+    different from the online one. What it adds is the two things a queued
+    report needs and a live one doesn't: an id that makes resending free, and
+    a `written_at` so the feed knows this describes forty minutes ago.
+    """
+    payload = request.get_json(silent=True) or {}
+    fields, problem = report_fields(payload)
+    if problem:
+        return jsonify({"error": problem}), 400
+
+    written_at, when_problem = claimed_time(str(payload.get("written_at") or ""))
+    if when_problem:
+        return jsonify({"error": when_problem}), 400
+
+    client_id = str(payload.get("client_id") or "").strip()[:64] or None
+    result = create_report(**fields, sender=current_user()["id"],
+                           written_at=written_at, client_id=client_id)
+    if not result["ok"]:
+        return jsonify(result), 409
+
+    result["url"] = url_for("report_detail", report_id=result["id"])
+    # 200 for one we already had, 201 for one we wrote. The queue treats both
+    # as done — that is the point of the id.
+    return jsonify(result), 200 if result["duplicate"] else 201
 
 
 @app.get("/report/<int:report_id>")
@@ -667,8 +890,22 @@ CLOCK_SKEW_SECONDS = 120
 MAX_BACKDATE_HOURS = 12
 
 # Gap between "I checked in" and "we received it" that counts as a late sync,
-# so a coordinator can see someone was out of contact.
+# so a coordinator can see someone was out of contact. Reports use the same
+# figure: one that was written a while before it arrived is described as such
+# rather than allowed to look like it just came in.
 LATE_SYNC_SECONDS = 60
+
+# How far apart two reports can be and still be the same incident.
+#
+# Chosen, not measured — say so plainly. Two neighbours on one street are tens
+# of metres apart; a flood on a road of the same name three suburbs over is a
+# different incident with the same vocabulary, and text alone cannot tell them
+# apart. 500 m is wide enough for a street and its junctions and narrow enough
+# that "Kingsland" in two different places does not collapse into one row.
+#
+# It only ever *suppresses* a link. A pair that is close but reads differently
+# is still two reports, because the text test has to pass first.
+DUPLICATE_RADIUS_M = 500
 
 # How far past their deadline someone has to be before the server stops
 # waiting for a human to notice and files a report about them itself. Counted
@@ -863,15 +1100,15 @@ def sweep_silent_responders() -> list[int]:
         db.execute("""
             INSERT INTO reports
                 (subject, description, priority, lat, lng,
-                 status, sender, auto_filed_for, created_at)
-            VALUES (?, ?, 'HIGH', ?, ?, 'unassigned', ?, ?, ?)
+                 status, sender, auto_filed_for, created_at, received_at)
+            VALUES (?, ?, 'HIGH', ?, ?, 'unassigned', ?, ?, ?, ?)
         """, (
             f"No contact from {row['username']} for {silent} minutes",
             f"Filed automatically. {row['username']} was working "
             f"\"{row['report_subject']}\" and has not checked in since their "
             f"deadline passed. Pin is their {where}. Nobody has confirmed "
             f"they are alright — this needs a person, not a refresh.",
-            lat, lng, row["responder"], row["responder"], now_iso(),
+            lat, lng, row["responder"], row["responder"], now_iso(), now_iso(),
         ))
         filed.append(db.execute("SELECT last_insert_rowid() AS id")
                      .fetchone()["id"])
@@ -957,7 +1194,13 @@ def escalate_silence():
 
 
 def claimed_time(raw: str) -> tuple[datetime, str | None]:
-    """When a check-in says it happened. Empty means now.
+    """When something says it happened. Empty means now.
+
+    Used by check-ins and by reports, because both can sit in a queue and both
+    lie about their age if you stamp them on arrival. A check-in stamped on
+    arrival silently cancels an overdue alarm; a report stamped on arrival
+    reads as a house that needs help right now when it may have been cleared
+    half an hour ago.
 
     The value comes from the client, so it's a claim, not a fact. We bound it:
     barely in the future is clock drift, far in the future or very old is
@@ -1209,6 +1452,12 @@ def api_suggest():
 
     Also flags reports that look like the same incident. Duplicates are how
     six people end up at one address while a street nearby has nobody.
+
+    This is the courteous early warning, not the safety net. It only runs
+    while somebody is online and typing. The check that actually has to hold
+    runs in `link_duplicate` when the report is written, because the reports
+    most likely to duplicate each other are the ones filed offline by
+    neighbours who could not see each other's.
     """
     text = form_or_json("text")
     result = classify.suggest(text).as_dict()
@@ -1220,6 +1469,18 @@ def api_suggest():
     ]
     result["duplicates"] = classify.duplicates(text, open_reports)
     return jsonify(result)
+
+
+@app.get("/api/model/priority.json")
+def api_model_export():
+    """The trained model, for a browser that has to classify without us.
+
+    Served from the app as well as from `static/model/priority.json` so the
+    committed artifact can be checked against a live one. The static copy is
+    what the service worker keeps; this is what tells you the static copy is
+    stale.
+    """
+    return jsonify(classify.export_model())
 
 
 @app.get("/api/model")
@@ -1804,9 +2065,10 @@ def seed_minimal() -> tuple[int, int]:
             db.execute("""
                 INSERT INTO reports
                     (subject, description, priority, lat, lng,
-                     status, sender, created_at)
-                VALUES (?, ?, ?, ?, ?, 'unassigned', ?, ?)
-            """, (subject, desc, priority, lat, lng, sender, now_iso()))
+                     status, sender, created_at, received_at)
+                VALUES (?, ?, ?, ?, ?, 'unassigned', ?, ?, ?)
+            """, (subject, desc, priority, lat, lng, sender,
+                  now_iso(), now_iso()))
 
         db.commit()
     return len(accounts), len(reports)
@@ -1843,9 +2105,10 @@ def seed_data() -> tuple[int, int]:
             cur = db.execute("""
                 INSERT INTO reports
                     (subject, description, priority, lat, lng,
-                     status, sender, created_at)
-                VALUES (?, ?, ?, ?, ?, 'unassigned', ?, ?)
-            """, (subject, desc, priority, lat, lng, who[filed_by], ago(minutes)))
+                     status, sender, created_at, received_at)
+                VALUES (?, ?, ?, ?, ?, 'unassigned', ?, ?, ?)
+            """, (subject, desc, priority, lat, lng, who[filed_by],
+                  ago(minutes), ago(minutes)))
             report_ids.append(cur.lastrowid)
 
         for idx, username, status, vote, joined, eta_mins, checkin in SEED_ASSIGNMENTS:
@@ -1949,6 +2212,31 @@ def node_key_command(username: str, rotate: bool) -> None:
 
     print(f"responder id : {row['id']}")
     print(f"node key     : {key}")
+
+
+# Where the browser's copy of the trained model lives. Committed, because a
+# phone with no signal cannot run a build step, and because the service worker
+# has to be able to name it in SHELL_FILES.
+MODEL_FILE = Path(__file__).with_name("static") / "model" / "priority.json"
+
+
+@app.cli.command("export-model")
+def export_model_command() -> None:
+    """Write the trained classifier out for the browser to use offline.
+
+    The corpus lives in classify.py and stays there. This only ships the
+    counts it produced, so there is one place to edit a training example and
+    one command to run afterwards. A test fails if the committed file has
+    drifted from what classify.py would generate today, which is the part that
+    stops "regenerate the model" from becoming a step people forget.
+    """
+    MODEL_FILE.parent.mkdir(parents=True, exist_ok=True)
+    MODEL_FILE.write_text(
+        json.dumps(classify.export_model(), indent=1, sort_keys=True) + "\n",
+        encoding="utf-8")
+    size = MODEL_FILE.stat().st_size
+    print(f"wrote {MODEL_FILE.relative_to(Path(__file__).parent)} "
+          f"({size // 1024} KB)")
 
 
 if __name__ == "__main__":

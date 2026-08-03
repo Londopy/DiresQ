@@ -402,3 +402,43 @@ gap:10px;
     color:#a6adc8;
 
 }
+/* ------------------------------------------------------------------
+   A report that did not arrive when it was written.
+
+   Filed with no signal, queued on somebody's phone, synced later. The card
+   has to say so: a forty-minute-old description of a flooding house may be
+   describing a house that has already been cleared, and a card that renders
+   it as fresh sends somebody to the wrong street.
+
+   Amber rather than red. It is not wrong, it is old, and old is a thing to
+   take into account rather than a thing to distrust.
+   ------------------------------------------------------------------ */
+.report-card .stale{
+    margin:10px 0 0;
+    padding:8px 10px;
+    border-radius:6px;
+    background:#181825;
+    border-left:3px solid #fab387;
+    color:#bac2de;
+    font-size:.78rem;
+    line-height:1.45;
+}
+
+.report-card .stale strong{
+    display:block;
+    color:#fab387;
+}
+
+/* Two reports that look like one incident. The link is advisory and both
+   rows stay in the feed — see link_duplicate in app.py for why this is never
+   a merge. */
+.report-card .dupe-flag{
+    margin:10px 0 0;
+    padding:8px 10px;
+    border-radius:6px;
+    background:#181825;
+    border-left:3px solid #cba6f7;
+    color:#bac2de;
+    font-size:.78rem;
+    line-height:1.45;
+}

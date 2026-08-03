@@ -23,13 +23,20 @@ more than we did.
 | Node key issue and rotation | **Built.** `flask --app app node-key <user>` |
 | Browser offline queue | **Built.** Check-ins survive having no signal |
 | Deduplication of retries | **Built.** Client ids, so resending is free |
+| Filing a report with no signal | **Built.** Written to the device first, sent later |
+| Reports cannot arrive twice | **Built.** Id minted before the first attempt, checked before the `INSERT` |
+| Priority suggestion with no signal | **Built.** The same trained model, evaluated in the browser |
+| Duplicate detection offline | **Deliberately not built.** It needs everyone else's reports; see below |
+| Duplicate detection on arrival | **Built.** Including against the rest of the same sync batch |
+| Backdated reports | **Built.** A report says when it was written, and the feed says so |
 | Radio hardware and firmware | **Not built.** We have no radios |
 | Serial mode of the gateway | **Written, never run.** No hardware to run it against |
 | Map tiles kept once seen | **Built.** Capped, no pre-fetching |
 
-If you read nothing else: **check-ins survive having no signal, and the map
-keeps drawing where you have already been.** Reports, the feed and the board
-still need a connection. The radio is not built.
+If you read nothing else: **check-ins and reports both survive having no
+signal, the app suggests a priority without a server, and the map keeps
+drawing where you have already been.** The feed and the board still need a
+connection, on purpose. The radio is not built.
 
 ---
 
@@ -215,12 +222,159 @@ That is the worst shape a bug can have: correct on the developer's laptop,
 broken in deployment, and silent in between. Found by posting the exact string
 a browser sends rather than the one a Python test would naturally write.
 
+## Filing a report with no signal
+
+Built, and it is a different problem from the check-in queue in one way that
+matters enough to justify a second module.
+
+**A check-in sent twice is harmless. A report sent twice is a second
+incident** — and duplicate incidents are the convergence failure this whole
+project exists to make visible. So `reportqueue.js` is an outbox, not a retry
+buffer, and the order is the design:
+
+1. mint an id and write the report to `localStorage`
+2. only then touch the network
+3. only delete it once the server has said, in so many words, that it has it —
+   either *I wrote this* or *I already had this*
+
+Because step 1 happens before step 2, the id is on disk before anything can go
+wrong. A phone that dies mid-request, a browser killed by the OS, a tab closed
+in a panic: the retry after the restart carries the same id, the server
+recognises it and hands back the report it already wrote. A client-side guard
+would have been erased by the restart. A `UNIQUE` constraint on its own would
+only complain once the duplicate had already been attempted. The check is
+server-side, before the `INSERT`, in `create_report`.
+
+There is a test that reads `reportqueue.js` and fails if the save and the send
+are the wrong way round — that bug is invisible at runtime and obvious in the
+source, so the source is where it is checked.
+
+**With JavaScript off** there is no queue, but Back-then-Submit is the same
+double-file with a person driving it, so the server renders an id into the
+form as well.
+
+### What the interface promises, and what it doesn't
+
+A report that has been queued is **not** described as sent. The status line
+says *"Saved on this phone. Not sent yet — there is no connection, so nobody
+has seen this,"* it repeats *if this is life-threatening, call 911 now*, and a
+pill in the corner counts what is waiting. If `localStorage` refuses us
+entirely, the module gets out of the way and lets the plain form post happen,
+because a report that cannot be written down must not be promised.
+
+### Reaching the form at all
+
+An offline queue you cannot open the form for does nothing, so the service
+worker keeps a copy of `/report/new` once you have actually opened it —
+lazily, not at install, because the page needs a session and `addAll` rejects
+atomically. It is a blank form: it says nothing about who needs help, so it
+passes the rule at the top of this page. The one thing it does carry, the
+server-minted id, would go stale in a cache and hand one id to two different
+reports — so it is replaced on load.
+
+## The classifier, on the phone
+
+The suggestion exists for somebody filing at 2am from a flooded house. That
+person is the likeliest of anyone to have no signal, and until this shipped
+they were the one person it never reached: it was Python, on a server, over a
+network that was gone.
+
+`flask --app app export-model` writes the trained model — word counts,
+lexicons, thresholds — to `static/model/priority.json`, about 8 KB.
+`static/scripts/classify.js` evaluates it. The service worker keeps both,
+under the same rule as the stylesheets: **a trained model is a frozen table of
+word counts, not a claim about the world right now.** There is a test that
+fails if any field in it starts to look like live data.
+
+There is one corpus and it is in `classify.py`. The browser gets the model,
+never the training data — also tested.
+
+### The parity test, and what it caught
+
+Two implementations of one model is a drift bug with a delay on it, and an
+offline suggestion that quietly disagrees with the online one is worse than no
+offline suggestion, because nothing on screen would say so. So `tools/parity.mjs`
+runs the shipped `classify.js` under node, and a test pushes every line of the
+corpus plus a dozen awkward cases through both, failing on any disagreement.
+
+It paid for itself on the first run. The words shown behind a suggestion were
+being ranked by an edge score computed with `math.log`, and two words that are
+*exactly* as telling as each other — mathematically identical — came out
+differing in the fifteenth decimal place. CPython and V8 rounded that last bit
+differently, so the two implementations showed a coordinator different
+explanations for the same sentence. That was a real bug in the Python,
+reachable on any machine, and it was unfindable while there was only one
+implementation to look at. Ties are now rounded flat and broken alphabetically.
+
+### What deliberately does not go offline
+
+**Duplicate detection.** It compares your description against the reports
+everyone else has open right now, and that list is precisely what this app
+refuses to keep on a device. The line is the same one the service worker
+follows everywhere else:
+
+> A priority is a fact about the words you typed, and it travels.
+> A duplicate is a fact about everybody else, and it does not.
+
+So offline the panel shows the priority and says, in a sentence, that nothing
+has checked whether somebody has already reported this, and that the server
+will when it sends. Not an empty list — `duplicates: []` reads as *we looked
+and found none*, which is the one thing it must not mean.
+
+## Duplicates are caught when the reports arrive
+
+The duplicate check used to run only while somebody was online and typing,
+which meant it never ran for a report filed offline — and those are the
+reports most likely to duplicate each other.
+
+Two neighbours on the same street, both with no signal, both file *"water
+rising on Kingsland"*. Neither can see the other's report. Both sync. Two
+reports for one incident, six people heading to one address, and the check
+built to prevent exactly that was the one thing that could not run.
+
+`link_duplicate` now runs on arrival, for every report, however it got here.
+Because reports are written one at a time, comparing against every open report
+*at the moment this one is written* includes the ones that landed seconds
+earlier in the same batch. That is the property the fix turns on, and there is
+a test that files three at once and checks each was compared against the ones
+beside it.
+
+Two guards on top of the text similarity:
+
+- **Distance is a veto.** More than 500 m apart and it is a different
+  incident, however alike the wording. A flood on a road of the same name
+  three suburbs over shares all its vocabulary and none of its emergency.
+  That radius is chosen, not measured.
+- **Resolved reports are not candidates.** Linking to something already dealt
+  with sends nobody anywhere.
+
+**It links; it never merges.** Both reports stay in the feed and both stay
+joinable. TF-IDF over fifty-five examples is worth a coordinator's glance and
+nowhere near good enough to fold one person's call for help into another's.
+
+## A report says when it was written
+
+The same fix as the check-in queue, for a sharper reason.
+
+A check-in stamped on arrival silently cancels an overdue alarm. A report
+stamped on arrival is worse than silent, it is loud and wrong: a description
+written forty minutes ago is a description of a house that may already have
+been cleared, and rendering it as breaking news sends the next available
+person to an address nobody needs to be at.
+
+So a report carries `created_at` — when it was written, a client claim bounded
+exactly like a check-in's — and `received_at`, which is ours. The feed orders
+on the first, which is the honest place for it, and where the gap is big
+enough to matter the card says so:
+
+> **Written 40 minutes ago, reached us later.** Filed with no signal. It may
+> already have been dealt with.
+
 ### Still missing
 
-The queue covers check-ins. Filing a *report* offline does not work — that
-needs the same treatment and a way to reconcile a report that may already
-exist. Check-ins came first because they are the message that says you are
-alive.
+Everything in the queue is a *new* report. A report **edited** offline, or
+resolved offline, still needs a connection — that needs conflict rules we
+haven't earned the right to guess at yet.
 
 ### What the server already does
 
@@ -260,10 +414,14 @@ over a LAN address it quietly does nothing.
 **The cache is capped** at 1,200 tiles, roughly 20 MB, oldest evicted first.
 Somebody's phone is not ours to fill.
 
-**Nothing else is cached.** Not the feed, not the API, not a report. A cached
-report list is a lie about who currently needs help, and check-ins already
-have the queue. There's a test that fails if either is added to the shell
-list.
+**Nothing that describes other people is cached.** Not the feed, not the
+board, not a report. A cached report list is a lie about who currently needs
+help. There's a test that fails if either is added to the shell list.
+
+What *is* kept alongside the tiles: the app's own files, the trained
+classifier, and one page — the blank report form, so the offline queue has
+something to be reached through. All three pass the same test: they say
+nothing about who needs help right now.
 
 Note the ceiling, which no amount of code moves: **a tile cache can only ever
 cover where you have already been.** It cannot pre-fetch somewhere you have
@@ -312,13 +470,18 @@ Sorted by that rule:
 | Your check-in deadline | Yes | Derived from when you joined and when you last checked in — both already past |
 | Your last known position | Yes | It is a record of where you were, not where you are |
 | Queued check-ins | Yes | Yours, unsent, and timestamped when you pressed the button |
+| **Queued reports** | **Yes** | Yours, unsent, carrying the id that stops them arriving twice |
+| The trained classifier | Yes | A frozen table of word counts. It describes English, not Katy |
+| The blank report form | Yes | An empty form. Without it the queue has no door |
 | The report feed | **No** | A list of who needs help, and it is wrong within a minute |
 | The accountability board | **No** | Other people's safety, and a stale copy is reassuring in exactly the wrong way |
+| Which reports look like duplicates | **No** | It is a fact about everybody else's reports, so it cannot travel. The server checks on arrival |
 
 That is what `/api/me` is for. It returns your own state and nobody else's,
-and it is the only response the worker is allowed to store — there's a test
-asserting the list of cached URLs is exactly `["/api/me"]`, and another that
-fails if any other responder's name appears in the payload.
+and it is the only *response* the worker is allowed to store — there's a test
+asserting the list of cached URLs is exactly `["/api/me"]`, another asserting
+the only page it keeps is `/report/new`, and another that fails if any other
+responder's name appears in the payload.
 
 Offline, you get the job you took, when you're due to check in, where you last
 were, and a line saying when that was saved. Where the live feed would be,

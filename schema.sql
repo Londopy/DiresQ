@@ -54,7 +54,40 @@ CREATE TABLE reports (
     -- Also what stops it filing a second one: an open report pointing at the
     -- same person means the alarm has already been raised.
     auto_filed_for INTEGER REFERENCES accounts(id),
-    created_at  TEXT    NOT NULL
+
+    -- Made by the browser before the report is sent, and written to disk
+    -- before the first attempt, so it is the same id after a browser restart.
+    --
+    -- A check-in sent twice is harmless. A report sent twice is a second
+    -- incident, and a second incident is six people at one address while the
+    -- next street has nobody — the exact failure this project exists to
+    -- prevent. So this is UNIQUE, and checked before the row is written
+    -- rather than after.
+    --
+    -- Null for anything that never went through the queue.
+    client_id   TEXT    UNIQUE,
+
+    -- When it was WRITTEN. For a report filed offline this is the moment
+    -- somebody typed it, not the moment their phone found signal. A report
+    -- written forty minutes ago describes a house that may already be
+    -- cleared, and the feed has to be able to say so.
+    created_at  TEXT    NOT NULL,
+
+    -- When the server actually got it. Ours, not the client's. The gap
+    -- between the two is the staleness, and it is shown rather than hidden.
+    received_at TEXT    NOT NULL,
+
+    -- Another open report that looks like the same incident, and how alike.
+    -- A link, never a merge: the TF-IDF check is good enough to be worth
+    -- showing and nowhere near good enough to delete somebody's call for
+    -- help on. Set on arrival, so a report that synced from a queue is
+    -- checked against everything that arrived alongside it.
+    -- SET NULL rather than the default: if the report being pointed at ever
+    -- goes away, what remains is a report with no twin, not a broken row. It
+    -- also means DROP TABLE during a schema rebuild doesn't trip over the
+    -- table's reference to itself.
+    dupe_of     INTEGER REFERENCES reports(id) ON DELETE SET NULL,
+    dupe_score  REAL
 );
 
 -- One flag per person per report.
@@ -67,6 +100,7 @@ CREATE TABLE report_flags (
 
 CREATE INDEX idx_reports_status ON reports(status);
 CREATE INDEX idx_reports_auto_filed ON reports(auto_filed_for);
+CREATE INDEX idx_reports_dupe_of ON reports(dupe_of);
 
 
 -- Many responders to one report. No claim lock, by design.

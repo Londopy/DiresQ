@@ -1,13 +1,6 @@
-const form = document.querySelector("form");
-
-form.addEventListener("submit", () => {
-
-    const button = document.querySelector(".submit-btn");
-
-    button.disabled = true;
-    button.textContent = "Submitting...";
-
-});
+// The map and the location picker. Submitting is report_file.js's job — it
+// has to write the report to disk before the network sees it, and that is a
+// different concern from where the pin goes.
 
 const map = L.map("map").setView([-2.5,118],5);
 

@@ -71,13 +71,21 @@ So the app reads what they wrote:
 
 ```
 HIGH · 95% sure · boat
-Suggested from: rising, upstairs, fast. You decide — change it if it's wrong.
+Suggested from: rising, fast, upstairs. You decide — change it if it's wrong.
 ```
 
 That block is not an illustration. It is what the code returns for that
 sentence, and a test in the suite runs it to make sure this page cannot drift
 away from the software it describes — which it had, quietly, until somebody
 typed the example into the real thing.
+
+The order of those three words changed once, and the reason is worth knowing.
+`fast` and `upstairs` are exactly as telling as each other here — identical
+arithmetic — and which one came second was decided by the last bit of a
+logarithm. That surfaced when the same model was ported to the browser: two
+implementations of `log` rounded the same expression differently and the two
+explanations diverged. Ties are now rounded flat and broken alphabetically, so
+the answer is the same on every machine. See `NaiveBayes.why`.
 
 The dropdown moves to HIGH. **The moment you touch it yourself, the model
 stops touching it** for the rest of the form. Somebody who has made a decision

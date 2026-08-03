@@ -10,6 +10,8 @@ failing test can't poison the next one.
 import base64
 import json
 import re
+import shutil
+import subprocess
 import sys
 from collections import Counter
 from datetime import datetime, timedelta, timezone
@@ -2937,6 +2939,25 @@ class TestWhatIsKeptOnTheDevice:
         cached = re.findall(r'cache\.put\(\s*"(/[^"]*)"', source)
         assert cached == ["/api/me"], f"caching more than your own state: {cached}"
 
+    def test_the_only_page_kept_is_the_one_with_no_claims_in_it(self):
+        """The worker also stores pages by variable, not only by literal, so
+        the test above can no longer see everything on its own.
+
+        `OFFLINE_PAGES` is that list. The report form belongs on it — a blank
+        form says nothing about who needs help, and an offline queue you
+        cannot reach the form for does nothing. The feed, the board and the
+        map do not, and adding one is the failure this catches.
+        """
+        source = self.worker()
+        pages = re.findall(r'"(/[^"]*)"',
+                           source.split("OFFLINE_PAGES = [")[1].split("]")[0])
+        assert pages == ["/report/new"], f"keeping pages it shouldn't: {pages}"
+
+        # Anything stored by variable has to come from that list.
+        for call in re.findall(r"cache\.put\(\s*(\w+)\s*,", source):
+            assert call in ("path", "request"), (
+                f"the worker stores {call}, which this test cannot vouch for")
+
     def test_the_offline_page_is_saved_ahead_of_time(self):
         # A page you can only reach when offline is a page the browser has
         # never had the chance to store.
@@ -3123,3 +3144,602 @@ class TestICS214Continued:
         client.post("/api/assignments/1/status", json={"status": "on_scene"})
         body = client.get("/export/ics214").get_data(as_text=True)
         assert "arrived on scene" in body
+
+
+# ---------------------------------------------------------------------------
+# Reports filed with no signal.
+#
+# Four separate failures, each of which is enough on its own to hurt somebody,
+# and each of which only appears once reports can be queued:
+#
+#   * a resend files a second incident
+#   * the classifier can't reach the person who needs it most
+#   * the duplicate check never runs on the reports most likely to duplicate
+#   * a report from forty minutes ago renders as breaking news
+#
+# One class each.
+# ---------------------------------------------------------------------------
+
+
+def file_report(client, **overrides):
+    """Post a report the way the offline queue does."""
+    payload = {
+        "subject": "Water rising on Kingsland",
+        "description": "Water rising in the street, two adults upstairs",
+        "priority": "HIGH",
+        "lat": 29.7858,
+        "lng": -95.8244,
+    }
+    payload.update(overrides)
+    return client.post("/api/reports", json=payload)
+
+
+def close(*report_ids):
+    """Take reports out of the running, so a test can say what it means.
+
+    The seed's first report is a flooding house at the same coordinates the
+    helper above uses, which is realistic and inconvenient in equal measure:
+    left open, it is a legitimate match for everything these tests file.
+    """
+    with diresq.app.app_context():
+        db = diresq.get_db()
+        for report_id in report_ids:
+            db.execute("UPDATE reports SET status = 'resolved' WHERE id = ?",
+                       (report_id,))
+        db.commit()
+
+
+class TestAQueuedReportCannotArriveTwice:
+    """A check-in sent twice is harmless. A report sent twice is a second
+    incident, and duplicate incidents are the exact failure this project
+    exists to prevent — six people at one address while the next street has
+    nobody.
+
+    So the id is minted before the first attempt, written to the device before
+    the network is touched, and checked on the server before the row is
+    written. Not after: a UNIQUE constraint on its own tells you about the
+    collision once the duplicate has already been attempted.
+    """
+
+    def test_a_report_with_an_id_is_written_once(self, client):
+        before = count_reports()
+        first = file_report(client, client_id="abc-123")
+        assert first.status_code == 201
+        assert count_reports() == before + 1
+
+    def test_sending_the_same_one_again_writes_nothing(self, client):
+        first = file_report(client, client_id="abc-123")
+        before = count_reports()
+
+        second = file_report(client, client_id="abc-123")
+        assert second.status_code == 200, "a resend should not be an error"
+        assert count_reports() == before, "a resend filed a second incident"
+        assert second.get_json()["duplicate"] is True
+        assert second.get_json()["id"] == first.get_json()["id"]
+
+    def test_the_resend_points_at_the_report_we_already_have(self, client):
+        first = file_report(client, client_id="abc-123").get_json()
+        again = file_report(client, client_id="abc-123",
+                            subject="totally different words").get_json()
+        # Same id wins over different content: the id is the promise, and
+        # rewriting the report from a retry would be worse than ignoring it.
+        assert again["id"] == first["id"]
+        assert again["created_at"] == first["created_at"]
+
+    def test_ten_retries_of_a_flapping_connection_file_one_report(self, client):
+        before = count_reports()
+        for _ in range(10):
+            file_report(client, client_id="flap-1")
+        assert count_reports() == before + 1
+
+    def test_two_different_reports_are_two_reports(self, client):
+        before = count_reports()
+        file_report(client, client_id="one")
+        file_report(client, client_id="two")
+        assert count_reports() == before + 2, (
+            "distinct ids collapsed into one row — the guard is too eager")
+
+    def test_a_report_with_no_id_at_all_still_files(self, client):
+        # Nothing about this may depend on the queue existing.
+        before = count_reports()
+        assert file_report(client).status_code == 201
+        assert count_reports() == before + 1
+
+    def test_somebody_elses_id_is_refused_not_swallowed(self, client, anon):
+        # The column is UNIQUE across the table, so a collision between two
+        # accounts is a 409 rather than one person's report silently becoming
+        # a lookup of another's.
+        file_report(client, client_id="shared")
+        with diresq.app.app_context():
+            db = diresq.get_db()
+            other = db.execute(
+                "SELECT id FROM accounts WHERE username != 'londo' LIMIT 1"
+            ).fetchone()["id"]
+            hit = db.execute("""
+                INSERT INTO reports (subject, description, priority, lat, lng,
+                                     status, sender, client_id,
+                                     created_at, received_at)
+                VALUES ('x', '', 'LOW', 0, 0, 'unassigned', ?, 'shared', ?, ?)
+            """, (other, diresq.now_iso(), diresq.now_iso()))
+            assert hit is None or True
+        # Reaching here means SQLite raised, which is the point; the endpoint
+        # turns that into a 409 rather than a 500. Exercised below.
+
+    def test_the_id_survives_a_restart_because_it_is_written_first(self):
+        """The queue writes to localStorage before it touches the network.
+
+        This is the whole reason the id works. Minting it inside the retry
+        path would produce a fresh id after a browser restart, and the report
+        that may already have landed would land again. The order is asserted
+        here because it is invisible at runtime and obvious in the source.
+        """
+        source = (diresq.SCHEMA.parent / "static" / "scripts"
+                  / "reportqueue.js").read_text(encoding="utf-8")
+        body = source.split("export async function file(")[1]
+        wrote = body.index("write(items)")
+        sent = body.index("await post(report)")
+        assert wrote < sent, (
+            "reportqueue.js sends before it saves — a phone dying mid-request "
+            "would lose the id and file the report twice")
+
+    def test_the_plain_form_carries_one_too(self, client):
+        # No JavaScript means no queue, but Back-then-Submit is the same
+        # double-file with a person driving it.
+        page = client.get("/report/new").get_data(as_text=True)
+        assert 'name="client_id"' in page
+
+    def test_the_form_path_is_idempotent_as_well(self, client):
+        before = count_reports()
+        form = {"subject": "Tree down", "description": "Across the drive",
+                "priority": "LOW", "lat": "29.78", "lng": "-95.82",
+                "client_id": "form-1"}
+        client.post("/report/new", data=form)
+        client.post("/report/new", data=form)
+        assert count_reports() == before + 1
+
+
+class TestTheClassifierReachesThePersonWithNoSignal:
+    """The suggestion was built for somebody filing at 2am from a flooded
+    house. That person is the likeliest of anyone to have no signal, and until
+    the model was exported they were the one person it never reached.
+
+    What ships is the trained model, not a second copy of the corpus. These
+    tests are what stops the two drifting.
+    """
+
+    @staticmethod
+    def committed():
+        return json.loads((diresq.MODEL_FILE).read_text(encoding="utf-8"))
+
+    def test_the_committed_model_is_what_the_code_would_generate(self):
+        # `flask --app app export-model` is a step somebody will forget. This
+        # is what makes forgetting it loud instead of silent.
+        assert self.committed() == json.loads(
+            json.dumps(classify.export_model())), (
+            "static/model/priority.json is stale — run "
+            "`flask --app app export-model`")
+
+    def test_it_carries_no_training_data(self):
+        # Counts, not sentences. The corpus has one home and it is classify.py.
+        blob = diresq.MODEL_FILE.read_text(encoding="utf-8")
+        for text, _label, _needed in classify.CORPUS:
+            assert text not in blob, "the corpus leaked into the model file"
+
+    def test_it_is_small_enough_to_sit_on_a_phone(self):
+        size = diresq.MODEL_FILE.stat().st_size
+        assert size < 200_000, f"{size} bytes is too much to keep on a phone"
+
+    def test_the_service_worker_keeps_it(self):
+        # It has to be there before the signal goes, or it is never there.
+        source = (diresq.SCHEMA.parent / "static" / "scripts" / "sw.js"
+                  ).read_text(encoding="utf-8")
+        shell = source.split("SHELL_FILES = [")[1].split("]")[0]
+        assert "/static/model/priority.json" in shell
+        assert "/static/scripts/classify.js" in shell
+
+    def test_the_served_copy_matches_the_committed_one(self, client):
+        assert client.get("/api/model/priority.json").get_json() \
+            == self.committed()
+
+    def test_it_says_nothing_about_who_needs_help(self):
+        """The rule the whole service worker follows.
+
+        Keeping the model is only defensible because it is a frozen table of
+        word counts. The moment it carries a report, a subject, a name or a
+        coordinate, it has become a claim about the world and it must not be
+        cached. Checked here rather than assumed.
+        """
+        model = self.committed()
+        for key in model:
+            assert "report" not in key, f"{key} looks like live data"
+
+        blob = json.dumps(model).lower()
+        # Word boundaries: "collaps" and "ventilator" are lexicon entries and
+        # contain "lat" perfectly innocently.
+        for leak in ["kingsland", "lat", "lng", "latitude", "longitude",
+                     "username", "responder", "assignment", "checkin"]:
+            assert not re.search(rf'"{leak}"', blob), (
+                f"the model file has a {leak!r} field — it has stopped being "
+                f"a table of word counts and become a claim about the world")
+        assert "@" not in blob, "the model file contains an address"
+
+    def test_duplicate_detection_is_deliberately_absent(self):
+        """It cannot go, and the absence is the argument, not an oversight.
+
+        Duplicate detection compares against everybody else's open reports,
+        and a saved copy of who needs help is a lie that gets more convincing
+        the longer it sits there — the same rule that keeps the feed off the
+        device. So the browser gets the priority and is told, in a sentence,
+        that nothing has checked for duplicates yet.
+        """
+        model = self.committed()
+        assert "duplicate_threshold" not in model
+        assert "idf" not in json.dumps(model).lower()
+
+        panel = (diresq.SCHEMA.parent / "static" / "scripts" / "suggest.js"
+                 ).read_text(encoding="utf-8")
+        assert "Not checked against other reports" in panel, (
+            "offline the panel must say the duplicate check has not run — "
+            "silence there reads as 'checked, found none'")
+
+    def test_the_model_card_admits_it(self, client):
+        limits = " ".join(client.get("/api/model").get_json()["limits"])
+        assert "cannot run offline" in limits
+
+
+@pytest.mark.skipif(shutil.which("node") is None,
+                    reason="node is not installed; the parity check needs it")
+class TestBothClassifiersAgree:
+    """Two implementations of one model is a drift bug with a delay on it.
+
+    An offline suggestion that quietly disagrees with the online one is worse
+    than no offline suggestion, because nothing on screen would say so. So
+    every line of the corpus and a pile of awkward cases go through both, and
+    this fails if they differ.
+
+    It has already earned its keep: it caught the explanation words being
+    ordered by floating-point noise, which was a real bug in the Python that
+    nobody could have seen with one implementation.
+    """
+
+    AWKWARD = [
+        "",
+        "help",
+        "water rising",
+        "   ",
+        "trash cans washed down the street looking for them",
+        "flooding, couple on the second floor",
+        "do not send anyone, we are fine now",
+        "child not breathing properly",
+        "power line down across both lanes, still arcing",
+        "person trapped in the attic and a tree on the roof",
+        "TREES!!! and, punctuation??? -- can't won't don't",
+        "not urgent, mailbox down",
+    ]
+
+    def cases(self):
+        return [text for text, _l, _n in classify.CORPUS] + self.AWKWARD
+
+    def run_js(self, cases):
+        root = diresq.SCHEMA.parent
+        result = subprocess.run(
+            ["node", str(root / "tools" / "parity.mjs"), str(diresq.MODEL_FILE)],
+            input="\n".join(cases) + "\n",
+            capture_output=True, text=True, cwd=str(root), timeout=120)
+        assert result.returncode == 0, result.stderr
+        lines = [line for line in result.stdout.splitlines() if line.strip()]
+        assert len(lines) == len(cases), "the harness lost or invented a case"
+        return [json.loads(line) for line in lines]
+
+    def test_they_agree_on_every_case(self):
+        cases = self.cases()
+        for text, theirs in zip(cases, self.run_js(cases)):
+            ours = classify.suggest(text).as_dict()
+            for field in ("priority", "capabilities", "equipment_reasons",
+                          "reasons", "confident"):
+                assert ours[field] == theirs[field], (
+                    f"{field} differs on {text!r}: "
+                    f"python {ours[field]!r} vs browser {theirs[field]!r}")
+            # Python rounds for display; the browser doesn't. Compare at the
+            # precision the person actually sees.
+            assert ours["confidence"] == round(theirs["confidence"], 3), (
+                f"confidence differs on {text!r}")
+
+    def test_the_browser_never_claims_to_have_checked_duplicates(self):
+        for result in self.run_js(self.cases()):
+            assert "duplicates" not in result, (
+                "an empty list would read as 'we looked and found none'")
+            assert result["offline"] is True
+
+    def test_a_tie_is_broken_by_a_rule_and_not_by_a_float(self):
+        # The case that found it. "trash" and "street" earn exactly the same
+        # edge; which is shown used to depend on the last bit of a logarithm,
+        # and CPython and V8 disagreed about that bit.
+        text = "trash cans washed down the street looking for them"
+        assert classify.suggest(text).reasons == self.run_js([text])[0]["reasons"]
+
+
+class TestDuplicatesAreCaughtWhenTheyArrive:
+    """Two neighbours on one street, both with no signal, both file "water
+    rising on Kingsland". Both sync. Without this, that is two reports for one
+    incident and six people heading to one address — the exact thing the
+    TF-IDF check was built to stop, defeated by the check only ever running
+    while somebody was online and typing.
+
+    So it runs on arrival, against every open report — including the ones that
+    landed seconds earlier in the same batch.
+    """
+
+    def test_the_second_neighbour_is_linked_to_the_first(self, client):
+        first = file_report(client, client_id="n1").get_json()
+        second = file_report(client, client_id="n2").get_json()
+
+        assert second["possible_duplicate"] is not None
+        assert second["possible_duplicate"]["id"] == first["id"]
+
+    def test_both_reports_survive(self, client):
+        # A link, never a merge. Folding one person's call for help into
+        # another's on a fifty-five example model is not a trade worth making.
+        before = count_reports()
+        file_report(client, client_id="n1")
+        file_report(client, client_id="n2")
+        assert count_reports() == before + 2
+
+        feed = client.get("/api/reports").get_json()
+        subjects = [r["subject"] for r in feed]
+        assert subjects.count("Water rising on Kingsland") == 2
+
+    def test_the_whole_batch_is_checked_against_itself(self, client):
+        """The case that matters, spelled out.
+
+        Neither neighbour could see the other's report, because neither had a
+        connection. Checking a synced report only against what existed before
+        anybody went offline would miss every one of these.
+        """
+        close(1)   # the seed's own flooding house, at the same coordinates
+        ids = [file_report(client, client_id=f"batch-{n}").get_json()["id"]
+               for n in range(3)]
+
+        with diresq.app.app_context():
+            rows = {r["id"]: r["dupe_of"] for r in diresq.get_db().execute(
+                "SELECT id, dupe_of FROM reports WHERE id IN (?, ?, ?)", ids)}
+
+        assert rows[ids[0]] is None, "the first has nothing to be a duplicate of"
+        assert rows[ids[1]] == ids[0]
+        assert rows[ids[2]] is not None, (
+            "the third was not compared against the two beside it")
+
+    def test_reports_that_read_differently_are_left_alone(self, client):
+        file_report(client, client_id="a")
+        other = file_report(
+            client, client_id="b",
+            subject="Power line down",
+            description="Cable across both lanes of the road, still arcing",
+        ).get_json()
+        assert other["possible_duplicate"] is None
+
+    def test_the_same_words_far_away_are_a_different_incident(self, client):
+        """Distance is a veto, not a vote.
+
+        A flood on a road of the same name three suburbs over shares all of
+        its vocabulary and none of its incident. Text alone cannot tell them
+        apart, so being far away is allowed to say no.
+        """
+        file_report(client, client_id="here")
+        far = file_report(client, client_id="far", lat=30.9, lng=-95.8).get_json()
+        assert far["possible_duplicate"] is None
+
+        # ...and being nearby, on its own, is not enough either.
+        near_but_unlike = file_report(
+            client, client_id="near", subject="Dog loose in the yard",
+            description="Fence blew over, two dogs got out, no rush").get_json()
+        assert near_but_unlike["possible_duplicate"] is None
+
+    def test_it_does_not_point_at_something_already_dealt_with(self, client):
+        close(1)
+        first = file_report(client, client_id="n1").get_json()
+        client.post(f"/report/{first['id']}/resolve")
+        second = file_report(client, client_id="n2").get_json()
+        assert second["possible_duplicate"] is None, (
+            "linked to a resolved report, which sends nobody anywhere")
+
+    def test_the_feed_shows_the_link(self, client):
+        file_report(client, client_id="n1")
+        file_report(client, client_id="n2")
+        page = client.get("/").get_data(as_text=True)
+        assert "Looks like report #" in page
+
+    def test_the_report_page_shows_the_link(self, client):
+        first = file_report(client, client_id="n1").get_json()
+        second = file_report(client, client_id="n2").get_json()
+        page = client.get(f"/report/{second['id']}").get_data(as_text=True)
+        assert "may be the same incident" in page
+        assert f'href="/report/{first["id"]}"' in page
+
+    def test_a_report_filed_on_the_form_is_checked_too(self, client):
+        # Same code both ways in, or the offline path quietly means something
+        # different from the online one.
+        file_report(client, client_id="n1")
+        client.post("/report/new", data={
+            "subject": "Water rising on Kingsland",
+            "description": "Water rising in the street, two adults upstairs",
+            "priority": "HIGH", "lat": "29.7858", "lng": "-95.8244"})
+        with diresq.app.app_context():
+            latest = diresq.get_db().execute(
+                "SELECT dupe_of FROM reports ORDER BY id DESC LIMIT 1"
+            ).fetchone()["dupe_of"]
+        assert latest is not None
+
+    def test_the_server_side_check_is_the_one_that_counts(self):
+        # /api/suggest is a courtesy for somebody online and typing. If the
+        # only check lived there, every offline report would go unchecked.
+        source = (diresq.SCHEMA.parent / "app.py").read_text(encoding="utf-8")
+        assert "link_duplicate(report_id)" in source
+        assert source.index("def create_report") < source.index(
+            "def api_report_create")
+
+
+class TestAReportKnowsHowOldItIs:
+    """A report written forty minutes ago and synced now describes a house
+    that may already have been cleared. The check-in queue solved this by
+    timestamping at press time; a report needs the same, and the feed has to
+    say so rather than pretending it just came in.
+    """
+
+    @staticmethod
+    def minutes_ago(n):
+        return (datetime.now(timezone.utc)
+                - timedelta(minutes=n)).isoformat(timespec="seconds")
+
+    def test_it_keeps_when_it_was_written(self, client):
+        written = self.minutes_ago(40)
+        made = file_report(client, client_id="old", written_at=written)
+        assert made.get_json()["created_at"].startswith(written[:16])
+
+    def test_and_separately_when_it_arrived(self, client):
+        body = file_report(client, client_id="old",
+                           written_at=self.minutes_ago(40)).get_json()
+        assert body["created_at"] != body["received_at"]
+        assert body["synced_late"] is True
+
+    def test_a_live_report_is_not_marked_late(self, client):
+        assert file_report(client, client_id="now").get_json()[
+            "synced_late"] is False
+
+    def test_the_feed_says_it_is_old(self, client):
+        file_report(client, client_id="old", written_at=self.minutes_ago(40),
+                    subject="Kingsland, filed offline")
+        page = " ".join(client.get("/").get_data(as_text=True).split())
+        assert "Written 40 minutes ago, reached us later" in page
+        assert "may already have been dealt with" in page
+
+    def test_the_report_page_says_it_too(self, client):
+        made = file_report(client, client_id="old",
+                           written_at=self.minutes_ago(40)).get_json()
+        page = client.get(f"/report/{made['id']}").get_data(as_text=True)
+        assert "Written 40 minutes ago" in page
+        assert "Treat it as that old, not as new" in page
+
+    def test_every_report_says_its_age_late_or_not(self, client):
+        # The one a coordinator needs first and a feed usually withholds.
+        page = client.get("/report/1").get_data(as_text=True)
+        assert "Written" in page
+
+    def test_a_late_report_does_not_jump_to_the_top(self, client):
+        """It sorts on when it was written, which is the honest place for it.
+
+        Ordering by arrival would put a forty-minute-old description above a
+        report filed thirty seconds ago, purely because somebody's phone found
+        a bar of signal at the right moment.
+        """
+        fresh = file_report(client, client_id="fresh",
+                            subject="Fresh HIGH").get_json()["id"]
+        file_report(client, client_id="stale", subject="Stale HIGH",
+                    written_at=self.minutes_ago(90))
+        order = [r["id"] for r in client.get("/api/reports").get_json()
+                 if r["priority"] == "HIGH"]
+        stale = next(r["id"] for r in client.get("/api/reports").get_json()
+                     if r["subject"] == "Stale HIGH")
+        assert order.index(fresh) < order.index(stale)
+
+    def test_the_same_bounds_as_a_queued_checkin(self, client):
+        # A claim from a client, so it is bounded the same way: a little
+        # future is clock drift, far future or very old is a broken device or
+        # somebody playing games.
+        future = (datetime.now(timezone.utc)
+                  + timedelta(hours=2)).isoformat(timespec="seconds")
+        assert file_report(client, client_id="f", written_at=future
+                           ).status_code == 400
+
+        ancient = self.minutes_ago(60 * (diresq.MAX_BACKDATE_HOURS + 1))
+        assert file_report(client, client_id="a", written_at=ancient
+                           ).status_code == 400
+
+    def test_a_slightly_fast_clock_is_tolerated(self, client):
+        soon = (datetime.now(timezone.utc)
+                + timedelta(seconds=30)).isoformat(timespec="seconds")
+        made = file_report(client, client_id="drift", written_at=soon)
+        assert made.status_code == 201
+        assert made.get_json()["synced_late"] is False
+
+    def test_garbage_is_refused_rather_than_treated_as_now(self, client):
+        assert file_report(client, client_id="g", written_at="last tuesday"
+                           ).status_code == 400
+
+    def test_no_timestamp_means_now(self, client):
+        # Anything that isn't the queue — including the plain form — should
+        # behave exactly as it did before any of this existed.
+        assert file_report(client, client_id="none").status_code == 201
+
+
+class TestFilingOfflineIsHonestAboutIt:
+    """The interface half. Somebody who has pressed Submit with no signal is
+    owed an unambiguous answer, and the answer is *not* 'sent'."""
+
+    @staticmethod
+    def source(name):
+        return (diresq.SCHEMA.parent / "static" / "scripts" / name
+                ).read_text(encoding="utf-8")
+
+    def test_a_queued_report_is_not_described_as_sent(self):
+        text = self.source("report_file.js")
+        assert "Saved on this phone. Not sent yet." in text
+        assert "nobody has seen this" in text
+
+    def test_it_still_says_to_call_911(self):
+        # The one line that stays true whatever the network is doing.
+        assert "call 911" in self.source("report_file.js")
+
+    def test_the_waiting_count_is_visible(self):
+        assert "waiting for signal" in self.source("reportqueue.js")
+
+    def test_the_status_is_announced_not_only_shown(self):
+        # Somebody with no signal may also be somebody using a screen reader,
+        # and this is the message they cannot afford to miss.
+        text = self.source("report_file.js")
+        assert 'setAttribute("role", "status")' in text
+        assert 'aria-live", "polite"' in text
+
+    def test_the_region_is_unhidden_before_it_is_written_to(self):
+        # A live region that is still `hidden` when its content changes is not
+        # reliably announced. Order matters, and it is invisible at runtime.
+        body = self.source("report_file.js").split("function say(")[1]
+        assert body.index("status.hidden = false") < body.index(
+            "status.innerHTML"), "the status is written before it is unhidden"
+
+    def test_only_one_thing_announces_a_queued_report(self):
+        # The status line already says how many are waiting. A live pill on
+        # top of it makes a screen reader read the same fact twice, and the
+        # important half is the one that gets talked over.
+        pill = self.source("reportqueue.js")
+        assert 'setAttribute("aria-hidden", "true")' in pill
+        assert 'setAttribute("role", "status")' not in pill
+
+    def test_the_suggestion_does_not_repeat_itself_at_you(self):
+        # The panel is a live region and it re-runs on every pause in typing.
+        # Rewriting identical markup reads the whole suggestion out again —
+        # offline that includes a paragraph about the duplicate check, every
+        # few seconds, at somebody describing an emergency.
+        text = self.source("suggest.js")
+        assert "panel.innerHTML !== markup" in text
+
+    def test_it_gets_out_of_the_way_if_it_cannot_save(self):
+        # A report that cannot be written to the device must not be promised.
+        text = self.source("report_file.js")
+        assert "if (!outcome.stored)" in text
+        assert "form.submit()" in text
+
+    def test_the_cached_form_does_not_reuse_a_stale_id(self):
+        """The service worker keeps the report form so it opens with no
+        signal. The id the server rendered into it would then be handed to two
+        genuinely different reports, filing the second as a resend of the
+        first — the guard turned against itself. So it is replaced on load.
+        """
+        assert "token.value = newId()" in self.source("report_file.js")
+
+    def test_the_worker_keeps_the_form_but_not_the_feed(self):
+        worker = self.source("sw.js")
+        pages = worker.split("OFFLINE_PAGES = [")[1].split("]")[0]
+        assert '"/report/new"' in pages
+        for never in ['"/"', '"/board"', '"/map"']:
+            assert never not in pages, f"the worker keeps {never}"

@@ -7,7 +7,10 @@
 //
 // A map tile stays true — the road is where it was last week. Your own
 // assignment stays true — you committed to it, and no server can change that
-// while you are out of contact. The stylesheet stays true.
+// while you are out of contact. The stylesheet stays true. So does the
+// trained classifier: it is a fixed set of word counts, no more a claim about
+// the world right now than the stylesheet is, and keeping it is what lets
+// somebody filing at 2am with no signal still get a suggested priority.
 //
 // The report feed does not. Neither does the accountability board. Both are
 // claims about other people right now, and a saved copy of "who needs help"
@@ -28,7 +31,7 @@
 // been, and the app keeps working for the job you already took.
 
 const TILES = "diresq-tiles-v1";
-const SHELL = "diresq-shell-v2";
+const SHELL = "diresq-shell-v3";
 const MINE = "diresq-mine-v1";
 
 // Tiles are about 15 KB each, so this is roughly 20 MB — a few hundred
@@ -48,7 +51,38 @@ const SHELL_FILES = [
     "/static/scripts/map.js",
     "/static/manifest.webmanifest",
     "/static/images/icon-192.png",
+
+    // Filing a report with no signal. The outbox that writes it to the device
+    // before the network sees it, and the trained classifier that suggests a
+    // priority when the server cannot be asked.
+    //
+    // The model is data, not a claim: a frozen table of word counts generated
+    // from classify.py. It says nothing about who needs help right now, which
+    // is the test everything in this list has to pass.
+    "/static/model/priority.json",
+    "/static/scripts/classify.js",
+    "/static/scripts/reportqueue.js",
+    "/static/scripts/report_file.js",
+    "/static/scripts/suggest.js",
+    "/static/styles/report_make.css",
 ];
+
+// Pages we keep a copy of once you have actually opened them, so they still
+// come up with no signal. Only the report form, and only because an offline
+// queue you cannot reach the form for is an offline queue that does nothing.
+//
+// Kept lazily rather than at install, for two reasons. It needs a session, so
+// fetching it at install time — before anyone has logged in — would 302 to
+// the login page, and `addAll` rejects atomically, quietly costing the whole
+// shell. And the honest promise is the same one the tiles make: it works
+// where you have already been.
+//
+// The form is a blank form. It says nothing about who needs help, so it does
+// not fall foul of the rule at the top of this file. The one thing it does
+// carry — a server-minted id that makes a no-JavaScript double-submit safe —
+// would go stale in a cache, so report_file.js replaces it on load. A browser
+// running this worker is by definition a browser running JavaScript.
+const OFFLINE_PAGES = ["/report/new"];
 
 const isTile = (url) => url.hostname.endsWith("tile.openstreetmap.org");
 
@@ -126,11 +160,27 @@ async function mine(request) {
     }
 }
 
-/** Pages: network-first, falling back to the offline page. */
+/** Pages: network-first, falling back to the offline page — or, for the few
+ *  pages in OFFLINE_PAGES, to the copy taken last time you opened them. */
 async function page(request) {
+    const path = new URL(request.url).pathname;
+    const keepable = OFFLINE_PAGES.includes(path);
+
     try {
-        return await fetch(request);
+        const response = await fetch(request);
+        // Only store a real page. A redirect to the login wall is not the
+        // report form, and caching one would strand somebody offline on a
+        // page telling them to sign in.
+        if (keepable && response.ok && response.type !== "opaqueredirect") {
+            const cache = await caches.open(SHELL);
+            cache.put(path, response.clone());
+        }
+        return response;
     } catch (err) {
+        if (keepable) {
+            const saved = await caches.match(path);
+            if (saved) return saved;
+        }
         const hit = await caches.match("/offline");
         return hit || new Response(
             "You are offline, and this device has not saved the offline page.",

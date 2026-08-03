@@ -4,9 +4,10 @@ The people most likely to need a tool like this are the people least likely to
 have perfect vision, a steady hand, or a working mouse. So this got audited
 rather than assumed.
 
-Nine issues, three of them critical. All fixed, and all now held in place by
-tests that run in CI — because an audit nobody can repeat is a claim, not a
-result.
+Nine issues, three of them critical. Then four more when reports learned to
+work offline and the form grew a status message somebody cannot afford to
+miss. Thirteen in total, all fixed, and all now held in place by tests that
+run in CI — because an audit nobody can repeat is a claim, not a result.
 
 ---
 
@@ -108,6 +109,36 @@ invisible until it has focus.
   phone, by someone standing in the thing they are reporting.
 - No `prefers-reduced-motion` handling *(2.3.3)*
 
+### Found later, when reports learned to work offline
+
+Filing a report with no signal added three live regions and a status message
+somebody genuinely cannot afford to miss. A second audit over just that
+surface found four things. Contrast passed everywhere — all nineteen new
+foreground/background pairs clear 4.5:1, and every coloured border that
+carries meaning clears 3:1 — but the announcing did not.
+
+- **The status region was written to while it was still `hidden`** *(4.1.3)*.
+  A live region that is hidden when its content changes is not reliably
+  announced, so the one message that says *"saved on this phone, nobody has
+  seen this"* could have arrived silently for the person least able to check
+  the screen for themselves. It is unhidden first now, and a test reads the
+  order of the two statements, because that bug is invisible at runtime.
+- **Two live regions announced the same fact** *(4.1.3)*. The waiting-count
+  pill and the status line both fired on submit, so a screen reader read the
+  count and talked over the sentence that mattered. The pill is `aria-hidden`
+  on this page: it is the visual copy of something already said aloud.
+- **The suggestion panel repeated itself** *(4.1.3)*. It re-renders on every
+  pause in typing, and rewriting identical markup into a live region reads the
+  whole suggestion out again. Offline that now includes a paragraph explaining
+  the duplicate check has not run — a paragraph read at somebody every few
+  seconds while they are describing an emergency. It only writes when the
+  answer has actually changed.
+- **"Open it" was an inline-sized target** *(2.5.5)*. It is an action rather
+  than a word in a sentence, so it does not get the inline exemption. 44px.
+
+None of the four would have been caught by the contrast test or by looking at
+the page. Colour was the easy part and it was already right.
+
 ## What was already right
 
 Worth recording, because it was mostly by accident of building the boring way:
@@ -123,7 +154,8 @@ Worth recording, because it was mostly by accident of building the boring way:
 
 ## How it's enforced
 
-`TestAccessibility` — 48 cases, run in CI on every push:
+`TestAccessibility`, plus the live-region checks in
+`TestFilingOfflineIsHonestAboutIt` — run in CI on every push:
 
 | Test | Catches |
 | --- | --- |
@@ -134,6 +166,9 @@ Worth recording, because it was mostly by accident of building the boring way:
 | No input named only by a placeholder | Parses the markup, matches `<label for>` and `aria-label` against every `<input>` |
 | Board is polite, not assertive | A future "make it announce faster" |
 | Contrast of every pair used for real text | Computes the ratio from the hex and fails below 4.5:1 |
+| The status region is unhidden before it is written | A live region announcing nothing |
+| Only one thing announces a queued report | Two regions talking over each other |
+| The suggestion panel does not rewrite identical markup | A paragraph repeated at somebody every few seconds |
 
 The contrast test is the one worth looking at — it doesn't check a list of
 approved colours, it does the WCAG relative-luminance maths and asserts the

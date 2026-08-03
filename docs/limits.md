@@ -50,20 +50,34 @@ Someone with a dead battery flags identically to someone in a flooded
 basement. Someone hurt but able to tap a button doesn't flag at all. The timer
 tells you when to *start asking*, and that's all we claim for it.
 
-## Only check-ins work offline
+## The feed and the board never work offline, on purpose
 
-Check-ins survive having no signal. They are kept on the phone with the time
-they were made, sent when a connection returns, and carry an id so a retry is
-recognised rather than logged twice.
+Check-ins and new reports both survive having no signal. Both are kept on the
+phone with the time they were made, sent when a connection returns, and carry
+an id so a retry is recognised rather than filed twice. The classifier runs on
+the phone too, so the priority suggestion reaches somebody filing at 2am with
+the towers down.
 
-**Everything else still needs a connection.** You cannot file a report
-offline, the feed will not load, and the board will not update. Reports are
-the harder half — one filed offline may need reconciling against one somebody
-else already filed for the same thing, and we have not solved that.
+**The feed and the board still need a connection, and always will.** They are
+claims about other people that stop being true the moment they are saved, and
+a stale one sends somebody to an address that was cleared twenty minutes ago.
+Offline they are absent rather than wrong.
 
-Map tiles are not cached either, and a tile cache can only ever cover where
-you have already been. It cannot pre-fetch somewhere you have never looked,
-which is often exactly where the disaster is.
+**Duplicate detection cannot run offline either**, for the same reason: it
+compares your description against everybody else's open reports. So between
+filing a report offline and it syncing, nothing has checked whether somebody
+has already reported the same thing — and the form says so rather than showing
+an empty list, which would read as *checked, found none*. The server runs the
+check when the report lands, against everything open including whatever else
+arrived in the same batch.
+
+**Editing or resolving a report still needs a connection.** Only new reports
+queue. Reconciling an edit against whatever happened while you were away needs
+conflict rules we have not earned the right to guess at.
+
+Map tiles are cached only where you have already looked. A tile cache cannot
+pre-fetch somewhere you have never been, which is often exactly where the
+disaster is.
 
 The full accounting is in [offline.md](offline.md), and it is deliberately
 blunt about which parts exist.
@@ -183,6 +197,9 @@ is not being maintained.
 | Was | Now |
 | --- | --- |
 | Nothing worked offline | Check-ins queue on the phone and sync with the time they were made |
+| Reports could not be filed offline | They queue too, carry an id that stops a retry filing a second incident, and say when they were written |
+| The classifier could not reach anyone without signal | The same trained model runs in the browser |
+| Duplicates were only checked while somebody was online and typing | Checked on arrival, against the rest of the same sync batch |
 | The radio endpoint was unauthenticated | Every packet is signed per node and verified before anything is written |
 | The dead man's switch needed somebody to have a tab open | `flask --app app sweep` runs it from cron |
 | Signing in could bounce you to another website | Only same-site paths accepted |

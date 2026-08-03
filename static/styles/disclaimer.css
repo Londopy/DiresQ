@@ -179,3 +179,95 @@ a{color:#89b4fa;}
 }
 
 .suggestion .dupe:hover{background:#45475a;}
+
+/* Which of the two ran. Quiet, because it is provenance and not a warning —
+   the suggestion itself is identical either way. */
+.suggestion .whence{
+    color:#a6adc8;
+    font-size:0.72rem;
+    font-style:italic;
+}
+
+/* Offline, nothing has compared this against anybody else's report, and
+   saying nothing would read as "checked, found none". Grey rather than amber:
+   it is a gap in what we know, not a problem with the report. */
+.suggestion .unchecked{
+    margin:8px 0 0;
+    padding:8px 10px;
+    border-radius:6px;
+    background:#313244;
+    border-left:3px solid #6c7086;
+    color:#bac2de;
+    font-size:0.8rem;
+    line-height:1.45;
+}
+
+/* ------------------------------------------------------------------
+   What happened when you pressed Submit.
+
+   The queued case is the one that matters. Somebody with no signal has just
+   filed a report and is entitled to know, without ambiguity, that nobody has
+   seen it yet — so this is a live region, it is amber rather than green, and
+   it repeats the one line that is never wrong.
+   ------------------------------------------------------------------ */
+.file-status{
+    margin:4px 0 8px;
+    padding:12px 14px;
+    border-radius:8px;
+    background:#181825;
+    border-left:3px solid #6c7086;
+    color:#cdd6f4;
+    font-size:0.85rem;
+    line-height:1.5;
+}
+
+.file-status[hidden]{display:none;}
+
+.file-status strong{display:block;margin-bottom:3px;}
+
+.file-status.queued{border-left-color:#fab387;}
+.file-status.sent{border-left-color:#a6e3a1;}
+.file-status.refused{border-left-color:#f38ba8;}
+
+/* "Open it" is an action, not a word in a sentence, so it gets a target a
+   thumb can hit in the rain rather than the inline-link exemption. */
+.file-status a{
+    display:inline-block;
+    min-height:44px;
+    padding:12px 4px;
+    color:#89b4fa;
+}
+
+/* The one line that stays true whatever the network is doing. */
+.file-status .again{
+    display:block;
+    margin-top:6px;
+    color:#f38ba8;
+    font-weight:600;
+}
+
+/* The waiting count, repeated where the eye goes rather than only in the
+   status line. Same pill as the check-in queue uses elsewhere (actions.css),
+   restated here because this page does not load that file. A queue you cannot
+   see is a queue you do not trust. */
+.queue-pill{
+    position:fixed;
+    left:16px;
+    bottom:16px;
+    z-index:1000;
+    padding:9px 14px;
+    border-radius:99px;
+    background:#313244;
+    border-left:3px solid #fab387;
+    color:#cdd6f4;
+    font-size:0.8rem;
+    box-shadow:0 6px 20px rgba(0,0,0,0.45);
+    /* Zoomed to 400% on a 320px viewport this would otherwise run off the
+       screen and take the count with it. */
+    max-width:calc(100vw - 32px);
+}
+
+/* Sits above the check-in pill on any page that ever shows both. */
+.queue-pill.reports{bottom:64px;}
+
+.queue-pill[hidden]{display:none;}

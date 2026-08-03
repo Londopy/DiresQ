@@ -78,6 +78,39 @@
 
         </div>
 
+        <!-- Both times, always, and the gap between them named when it is
+             big enough to change what somebody does. A report is a claim
+             about a moment; rendering it without saying which moment is how
+             a cleared house keeps drawing people to it. -->
+        <p class="filed-when">
+            {% if report.minutes_old is not none %}
+            Written {{ report.minutes_old }} minute{{ 's' if report.minutes_old != 1 }} ago
+            {% else %}
+            Written at an unknown time
+            {% endif %}
+            {%- if report.synced_late %}, and only reached us
+            <strong>after it was written</strong> &mdash; it was filed with no
+            signal and sat on somebody's phone until they got some.
+            Treat it as that old, not as new.
+            {%- else %}.{% endif %}
+        </p>
+
+        {% if report.dupe_of %}
+        <!-- A link, never a merge. TF-IDF over fifty-five examples is worth a
+             coordinator's glance and nowhere near good enough to fold one
+             person's call for help into another's. -->
+        <p class="dupe-flag">
+            <strong>This may be the same incident as
+                <a href="/report/{{ report.dupe_of }}">#{{ report.dupe_of }} &mdash;
+                    &ldquo;{{ report.dupe_subject }}&rdquo;</a>.</strong>
+            Matched on wording and on being close by, at
+            {{ (report.dupe_score * 100)|round|int }}% similar. Both reports
+            are still here and both can still be joined &mdash; check before
+            you set off, because two crews at one address is one crew missing
+            from somewhere else.
+        </p>
+        {% endif %}
+
         <section>
 
             <h2>Description</h2>
