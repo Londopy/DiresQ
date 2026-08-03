@@ -169,6 +169,18 @@ takes the alarm with it, silently, which is the worst way for an alarm to
 fail. An external scheduler failing is at least visible to the machine running
 it.
 
+**The board now says when the sweep last ran** — *checked 2s ago* beside the
+live indicator, amber past five minutes, ten before the fifteen-minute
+escalation it drives. That does not remove this limitation and is not meant
+to. It removes the *silence* from it. Before, "the check runs on every read"
+was a sentence in a comment; now it is a number you can watch move, and if it
+stops moving you can see that too.
+
+On a board somebody is watching it will always read a few seconds, because the
+watching is what runs it. That is the honest shape of the guarantee: this is a
+system that works while somebody is looking, and it now shows you that rather
+than asking you to assume it.
+
 It also can't tell the difference between a phone that died and a person who
 is hurt. It files the same report either way, which is the right failure —
 sending someone to check on a flat battery costs an hour, and the other

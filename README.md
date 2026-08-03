@@ -67,7 +67,7 @@ board turns red; the report on the right filed itself.</sub>
 <!-- /frozen -->
 
 That table is the night itself and does not move. It has kept growing since:
-**24,801 lines written** — **18,998 lines of code** and 5,803 of
+**24,866 lines written** — **18,999 lines of code** and 5,867 of
 documentation — across **550 test functions**, 695 cases after
 parametrisation.
 
@@ -248,7 +248,12 @@ without limitations — it's one nobody checked.
   how long since anyone heard from them. Overdue sorts to the top.
 - **The dead man's switch** — stay silent fifteen minutes past your deadline
   and the server files a report about you, at your last known position. A red
-  row only helps if somebody is looking at the board.
+  row only helps if somebody is looking at the board. There is no scheduler and
+  no background timer: the check rides along on reads, because a timer that
+  dies takes the alarm with it silently. And because *"it runs on every read"*
+  is a claim about an alarm, the board shows when it last ran — **checked 2s
+  ago**, amber if it ever stops. The thing that notices when people go quiet
+  will not go quiet without saying so.
 - **Coverage gaps, counted out loud** — a banner saying how many reports have
   nobody going to them at all. Not the same as understaffed. On the map the
   same judgement is a colour: pins are red where nobody has said they're
@@ -540,7 +545,8 @@ fork, offline, or if Pages is down.
   not something to expose.
 - **The dead man's switch runs on page loads, not a timer.** If nobody has
   DiresQ open, nothing is swept. One tab on the board is enough, but that's a
-  dependency, not a guarantee.
+  dependency, not a guarantee — so the board displays when the sweep last ran,
+  which makes the dependency visible instead of assumed.
 - **The classifier is wrong one time in four.** Survivable because it lands in
   a dropdown you control, next to the words that caused it, and stops adjusting
   the moment you touch it. Unacceptable if it were deciding anything.

@@ -141,7 +141,10 @@ which is the worst way for an alarm to fail. The sweep is idempotent, so
 polling it a hundred times a minute changes nothing after the first.
 
 It has one real flaw: if nobody opens the app at all, nothing is checked. That
-is written down in `limits.md` rather than argued away.
+is written down in `limits.md` rather than argued away — and since the board
+now shows when the sweep last ran, it is visible on the screen as well as in
+the documentation. A flaw you can see is a different thing from a flaw you
+have to be told about.
 
 ## The transport seam is a packet, not a radio
 
