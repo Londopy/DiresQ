@@ -84,9 +84,15 @@ Nothing is merged. Every report in `report_ids` is still open, still at
 }
 ```
 
-`subject`, `priority` and a coordinate pair are required. `client_id` and
-`written_at` are what a queued report adds, and both matter more than they
-look.
+`subject`, `priority` and a coordinate pair are required. The coordinate has
+to be on Earth — `lat` within ±90, `lng` within ±180 — and anything else is a
+`400`. That check was missing for most of this project's life: SQLite stored
+`lat: 999` without complaint, this endpoint served it without complaint, and
+Leaflet projected it off the canvas, so the report was in the feed, counted in
+the totals, and absent from the map with nothing anywhere saying why.
+
+`client_id` and `written_at` are what a queued report adds, and both matter
+more than they look.
 
 **`client_id` makes sending it twice safe.** The browser mints it and writes
 it to the device *before* the first attempt, so a phone that dies mid-request

@@ -139,6 +139,53 @@ carries meaning clears 3:1 — but the announcing did not.
 None of the four would have been caught by the contrast test or by looking at
 the page. Colour was the easy part and it was already right.
 
+### Found in the final audit, the day of submission
+
+A third pass, this time reading the stylesheets rather than the palette, and
+the report form rather than the pages that already had tests.
+
+| Element | Foreground | Background | Ratio | Needed |
+| --- | --- | --- | --- | --- |
+| `.hint` on a report card | `#45475a` | `#313244` | **1.38:1** | 4.5:1 |
+| `.hint` on the triage card | `#45475a` | `#181825` | **1.92:1** | 4.5:1 |
+| `.match-block .hint` | `#6c7086` | `#313244` | **3.0:1** | 4.5:1 |
+
+`.hint` is the small print under a field that explains how the field works —
+*"Try 30 min, 2 hours, or leave it"*, and on the triage page *"A normal adult
+is around 12–20"*, which is the reference the question cannot be answered
+without. It was the text a first-time user needs most and it was the text
+nobody could read. Nine instances across two pages.
+
+The third row is the interesting one: `.match-block .hint` is more specific
+than `.hint`, so fixing the base rule left it behind. A contrast fix can be
+undone by specificity without anybody touching the colour.
+
+*WCAG 1.4.3 Contrast (Minimum) — Level AA*
+
+Then the labels. The earlier audit fixed login, sign-up and the search boxes,
+and the test written to keep them fixed listed those four pages — so the
+report form, the form this entire application exists to submit, was never
+checked. It had four problems:
+
+- **Subject, Priority and Description had `<label>` with no `for`**, not
+  wrapping their control either. A screen reader announces an unnamed text
+  box; the placeholder is the only clue, and it disappears on the first
+  keystroke. This is the same finding as the first audit, on the page that
+  matters most, eight weeks later. *(1.3.1, 3.3.2, 4.1.2)*
+- **`<label>Location</label>` pointed at nothing at all.** It titles the
+  picker — a button, a map and a readout — which is a group, not a field. A
+  label with no control tells a screen reader a field is coming and then does
+  not deliver one. It is a `<p class="field-label">` now. *(1.3.1)*
+- **The breaths-per-minute input had no accessible name.** Its `<legend>`
+  names the group, not the control. *(4.1.2)*
+- **`<select>` and `<textarea>` were never checked by anything.** The label
+  test only ever looked at `<input>`.
+
+The lesson both halves share: the tests were written around the bug that was
+found, not the rule that was broken. A test that lists pages will not cover
+the page added next week, and a test that lists colours will not see the one
+you are about to use.
+
 ## What was already right
 
 Worth recording, because it was mostly by accident of building the boring way:
@@ -163,16 +210,28 @@ Worth recording, because it was mostly by accident of building the boring way:
 | Every page has a skip link and a `main` | Regressions on new pages |
 | Every page loads the focus stylesheet | Someone dropping the include |
 | No `<img>` without `alt` | Images added later |
-| No input named only by a placeholder | Parses the markup, matches `<label for>` and `aria-label` against every `<input>` |
+| No control named only by a placeholder | Parses the markup, matches `<label for>` and `aria-label` against every `<input>`, `<select>` and `<textarea>`, on six pages including the report form |
+| No `<label for>` points at a control that isn't there | A label with no field is styled text that promises one |
 | Board is polite, not assertive | A future "make it announce faster" |
-| Contrast of every pair used for real text | Computes the ratio from the hex and fails below 4.5:1 |
+| Contrast of the palette pairs | Computes the ratio from the hex and fails below 4.5:1 |
+| No stylesheet sets text to an unreadable grey | Reads all fourteen stylesheets — the palette test could not see these |
 | The status region is unhidden before it is written | A live region announcing nothing |
 | Only one thing announces a queued report | Two regions talking over each other |
 | The suggestion panel does not rewrite identical markup | A paragraph repeated at somebody every few seconds |
 
-The contrast test is the one worth looking at — it doesn't check a list of
-approved colours, it does the WCAG relative-luminance maths and asserts the
-result. Change a colour to something unreadable and the suite fails.
+The contrast test does the WCAG relative-luminance maths rather than checking
+names against an approved list, which is the right idea. For most of this
+project it was also **checking the wrong thing**: the pairs were written out
+by hand in the test, so it verified the palette and never once read a
+stylesheet. Any class using a colour that wasn't on the list was invisible to
+it, which is exactly how `.hint` sat at 1.38:1 for weeks under a test whose
+whole job was contrast, passing.
+
+There are two tests now. The original still checks the palette. A second one
+reads every stylesheet, finds the greys that are unreadable on anything we put
+behind them, and fails unless `a11y.css` demonstrably lifts that selector —
+so a fix cannot be quietly undone by a more specific rule, which is the other
+way this went wrong.
 
 ## What has not been done
 

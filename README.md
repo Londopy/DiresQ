@@ -67,7 +67,7 @@ board turns red; the report on the right filed itself.</sub>
 <!-- /frozen -->
 
 That table is the night itself and does not move. It has kept growing since:
-**17,651 lines of code** and **524 test functions**, 666 cases after
+**18,125 lines of code** and **524 test functions**, 666 cases after
 parametrisation. Those two are checked by a test, so unlike the snapshot they
 cannot quietly go stale.
 

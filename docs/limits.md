@@ -205,9 +205,21 @@ we have not met.
 ## Accessibility is checked, not audited
 
 The markup is tested against the parts of WCAG 2.1 AA that can be tested:
-language, landmarks, skip links, labels on every input, alt text, live-region
-politeness, and the contrast ratio of every colour pair used for real text.
-Those tests run in CI.
+language, landmarks, skip links, labels on every control, alt text,
+live-region politeness, and contrast. Those tests run in CI.
+
+Two of those tests were narrower than this page said they were, and stayed
+that way for weeks. The label test listed four pages, so the report form — the
+form this application exists to submit — was never checked, and four of its
+controls had labels attached to nothing. The contrast test listed ten colour
+pairs by hand and never read a stylesheet, so `.hint` sat at 1.38:1 underneath
+it, passing. Both were found by auditing the code rather than trusting the
+tests, on the last day.
+
+The general version of that is worth more than either bug: **a test written
+around the defect you just found will keep passing when the same defect
+appears somewhere the test does not list.** Both are now written against the
+rule instead — every control on every page, every colour in every stylesheet.
 
 What has **not** happened is a person using a screen reader on it. Automated
 checks catch roughly a third of real accessibility problems, and the third

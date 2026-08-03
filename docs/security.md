@@ -125,6 +125,34 @@ of thing that stops being true when somebody reaches for `|safe`.
 Foreign keys are enforced with `PRAGMA foreign_keys = ON` — off by default in
 SQLite, which surprises people.
 
+## Response headers, and the one that fought the map
+
+Every response carries a Content Security Policy, `X-Content-Type-Options`,
+`Referrer-Policy` and friends. The policy names Leaflet's CDN for scripts and
+styles and the OpenStreetMap hosts for images, rather than opening either
+category with a wildcard. `script-src` never gets `'unsafe-inline'`; styles do,
+because Leaflet writes an inline `style` on every tile it positions, and that
+is the half that does not make injected markup executable.
+
+The service worker gets **its own, narrower policy**, and it has to. A worker
+is governed by the headers on its own script, and every `fetch()` it makes is
+judged against `connect-src` — never `img-src`, even when the thing it is
+fetching is an image the page beside it is allowed to load directly. Serving
+`/sw.js` with the page policy therefore forbade the worker from fetching map
+tiles at all.
+
+That failure was almost perfectly disguised. Until the worker claims the page,
+tiles are fetched by the page itself and `img-src` lets them through, so the
+map always painted correctly and then went grey as soon as somebody moved it.
+It looked like a rendering bug, and it was an access-control decision working
+exactly as written.
+
+Two things worth taking from it. A policy tight enough to be worth having is
+tight enough to break something, and the breakage will not look like a policy
+error. And a security header applied globally by an `after_request` hook lands
+on responses that are not pages — workers, manifests, JSON — where the same
+directives mean different things.
+
 ## What CI refuses to let through
 
 Three checks, on every push:

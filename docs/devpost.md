@@ -4,11 +4,12 @@ The copy that actually went on the submission, kept here so the repository
 and the public project page can't drift apart.
 
 Devpost supplies seven fixed headings and this is written to them. An earlier
-draft of this file was organised differently and carried two errors into it:
-it quoted a confidence figure of 95% against a sentence the classifier does
-not return 95% for, and it said the corpus was sixty-five examples when it has
-always been fifty-five. Both are corrected below. The example is now one we
-ran against the code:
+draft carried two errors: it attached a confidence figure to a sentence that
+did not produce it, and it said the corpus was sixty-five examples when it has
+always been fifty-five. Both are corrected below.
+
+Every figure quoted here was re-run against the code on the day of
+submission rather than remembered:
 
     "Water rising fast, grandmother upstairs, she cannot walk down"
       ->  HIGH, 95%, boat, from: rising, upstairs, fast

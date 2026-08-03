@@ -311,7 +311,7 @@ happens.
 
 | File | Lines | What it owns |
 | --- | --- | --- |
-| `app.py` | 2,577 | Routes, queries, the rules, CLI commands |
+| `app.py` | 2,620 | Routes, queries, the rules, CLI commands |
 | `classify.py` | 805 | The classifier, its corpus, and the browser export |
 | `transport.py` | 204 | The radio packet: layout, signing, verification |
 | `eta.py` | 175 | Free-text ETA parsing behind a confidence gate |
