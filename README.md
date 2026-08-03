@@ -9,7 +9,7 @@ DiresQ tracks the people going into it.**
 
 [![CI](https://github.com/Skythe7/DiresQ/actions/workflows/ci.yml/badge.svg)](https://github.com/Skythe7/DiresQ/actions/workflows/ci.yml)
 [![Security](https://github.com/Skythe7/DiresQ/actions/workflows/security.yml/badge.svg)](https://github.com/Skythe7/DiresQ/actions/workflows/security.yml)
-[![Tests](https://img.shields.io/badge/tests-474%20passing-brightgreen)](tests/test_app.py)
+[![Tests](https://img.shields.io/badge/tests-495%20passing-brightgreen)](tests/test_app.py)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 [![Accessibility](https://img.shields.io/badge/accessibility-WCAG_2.1_AA_audited-a6e3a1)](docs/accessibility.md)
@@ -58,7 +58,7 @@ board turns red; the report on the right filed itself.</sub>
 | --- | --- |
 | **70 commits** | 65 of them inside the 14-hour window |
 | **12,579 lines of code** | Python, JavaScript, CSS, HTML, SQL |
-| **474 test functions** | 597 cases after parametrisation — every route, an adversarial pass |
+| **495 test functions** | 626 cases after parametrisation — every route, an adversarial pass |
 | **16 documentation pages** | including the one listing what we didn't build |
 | **No background jobs** | overdue is computed on read — nothing to forget to start, no timer that can silently die |
 
@@ -353,7 +353,7 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
-474 test functions, which parametrisation expands into 597 cases, covering
+495 test functions, which parametrisation expands into 626 cases, covering
 every route, the permission rules, feed ordering, staffing resolution, ETA
 parsing, overdue calculation, packet signing, the offline queues for both
 check-ins and reports, arrival-time duplicate detection, the auth guardrails
