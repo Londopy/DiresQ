@@ -1999,14 +1999,58 @@ class TestTheDocsAreNotOutOfDate:
     """Numbers in prose rot silently. Every one of these was wrong at least
     once before this test existed."""
 
+    # Everything between these markers is the snapshot taken at the end of the
+    # 14-hour build window. It is history and is supposed to disagree with the
+    # repository as it stands, so it is cut out before any of this looks.
+    FROZEN = re.compile(r"<!--\s*frozen.*?<!--\s*/frozen\s*-->", re.S)
+
+    # Files counted as "lines of code". Whatever the rule is it has to be
+    # written down somewhere, and a test that computes the number the same way
+    # the README claims it is the only place it stays written down.
+    CODE_SUFFIXES = {".py", ".js", ".css", ".html", ".sql", ".mjs", ".astro"}
+    SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv",
+                 "dist", ".astro", ".pytest_cache", ".ruff_cache", "site_out"}
+
+    # Line counts are approximate by nature: they move with almost every
+    # commit, so asserting them exactly would fail on the commit that fixed
+    # them. Five percent is loose enough to survive a normal day's work and
+    # tight enough to catch what this class exists for — the module map said
+    # `app.py` was 1,696 lines while it was 2,577, and nothing complained.
+    TOLERANCE = 0.05
+
+    def live(self, name):
+        """The doc text with the frozen snapshot removed."""
+        text = (diresq.SCHEMA.parent / name).read_text(encoding="utf-8")
+        return self.FROZEN.sub("", text)
+
     def counted(self, name):
         """Pull "251 test functions" or "24 routes" out of the docs."""
-        readme = (diresq.SCHEMA.parent / "README.md").read_text(encoding="utf-8")
-        arch = (diresq.SCHEMA.parent / "docs" / "architecture.md").read_text(
-            encoding="utf-8")
-        found = re.findall(rf"(\d+)\s+{name}", readme + arch)
+        found = re.findall(rf"(\d+)\s+{name}",
+                           self.live("README.md")
+                           + self.live("docs/architecture.md"))
         assert found, f"no '<number> {name}' claim found in the docs"
         return {int(n) for n in found}
+
+    def lines_in(self, relative):
+        path = diresq.SCHEMA.parent / relative
+        assert path.exists(), f"the docs describe {relative}, which is gone"
+        return len(path.read_text(encoding="utf-8").splitlines())
+
+    def code_lines(self):
+        total = 0
+        for path in (diresq.SCHEMA.parent).rglob("*"):
+            if not path.is_file() or path.suffix not in self.CODE_SUFFIXES:
+                continue
+            if any(part in self.SKIP_DIRS for part in path.parts):
+                continue
+            total += len(path.read_text(encoding="utf-8",
+                                        errors="replace").splitlines())
+        return total
+
+    def assert_close(self, claimed, actual, what):
+        slack = max(1, int(actual * self.TOLERANCE))
+        assert abs(claimed - actual) <= slack, (
+            f"{what}: docs say {claimed:,}, it is {actual:,}")
 
     def test_the_test_count_is_true(self):
         source = Path(__file__).read_text(encoding="utf-8")
@@ -2042,6 +2086,71 @@ class TestTheDocsAreNotOutOfDate:
         sql = diresq.SCHEMA.read_text(encoding="utf-8")
         actual = len(re.findall(r"CREATE TABLE (\w+)", sql))
         assert actual == 5, "docs say five tables in several places"
+
+    def test_the_index_count_is_true(self):
+        # The module map said five indexes while there were six. Written as a
+        # word, so no numeric check would ever have caught it.
+        sql = diresq.SCHEMA.read_text(encoding="utf-8")
+        actual = len(re.findall(r"CREATE (?:UNIQUE )?INDEX", sql))
+        words = {5: "five", 6: "six", 7: "seven", 8: "eight"}
+        assert actual in words, f"{actual} indexes, past what this test knows"
+        arch = self.live("docs/architecture.md")
+        assert f"{words[actual]} indexes" in arch, (
+            f"there are {actual} indexes; architecture.md does not say so")
+
+    def test_the_module_map_line_counts_are_close(self):
+        # Every row of the table in architecture.md, against the file it
+        # names. This is the one that had rotted furthest.
+        rows = re.findall(r"^\| `([\w./]+)` \| ([\d,]+) \|",
+                          self.live("docs/architecture.md"), re.M)
+        assert len(rows) >= 6, "the module map has lost its rows"
+        for name, claimed in rows:
+            self.assert_close(int(claimed.replace(",", "")),
+                              self.lines_in(name), f"module map, {name}")
+
+    def test_the_readme_line_count_is_close(self):
+        # Outside the frozen snapshot, which is the night's figure and is
+        # meant to disagree with the repository as it stands today.
+        claimed = re.findall(r"\*\*([\d,]+) lines of code\*\*",
+                             self.live("README.md"))
+        assert claimed, "the README no longer states a current line count"
+        for number in claimed:
+            self.assert_close(int(number.replace(",", "")), self.code_lines(),
+                              "README lines of code")
+
+    def test_the_python_line_count_is_close(self):
+        claimed = re.findall(r"([\d,]+)\s+lines of Python",
+                             self.live("docs/architecture.md"))
+        assert claimed, "architecture.md no longer states a Python line count"
+        actual = sum(self.lines_in(name) for name in
+                     ["app.py", "classify.py", "eta.py", "transport.py",
+                      "triage.py", "tools/gateway.py"])
+        for number in claimed:
+            self.assert_close(int(number.replace(",", "")), actual,
+                              "architecture.md lines of Python")
+
+    def test_the_devpost_copy_states_the_real_test_count(self):
+        # Not covered by counted(), which reads only the README and
+        # architecture.md — so this one sat at 474 for twenty-one tests.
+        source = Path(__file__).read_text(encoding="utf-8")
+        actual = len(re.findall(r"^\s*def test_", source, re.M))
+        devpost = self.live("docs/devpost.md")
+        claimed = re.findall(r"(\d+)\s+tests\b", devpost)
+        assert claimed, "docs/devpost.md no longer states a test count"
+        for number in claimed:
+            assert int(number) == actual, (
+                f"devpost.md says {number} tests, there are {actual}")
+
+    def test_the_frozen_snapshot_is_still_marked(self):
+        # If somebody deletes the markers, every number inside the night's
+        # table silently becomes a live claim and this whole class starts
+        # failing for the wrong reason. Cheaper to say so directly.
+        readme = (diresq.SCHEMA.parent / "README.md").read_text(
+            encoding="utf-8")
+        assert readme.count("<!-- frozen") == 1, "the frozen marker is gone"
+        assert readme.count("<!-- /frozen -->") == 1, "unclosed frozen block"
+        assert "12,579" not in self.live("README.md"), (
+            "the night's line count has escaped the frozen block")
 
     def test_the_documented_packet_size_is_the_real_one(self):
         # The packet grew from 14 to 18 to 22 bytes as it gained a signature

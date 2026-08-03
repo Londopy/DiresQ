@@ -12,8 +12,8 @@ something in the code, or take it apart.
 ## Shape
 
 Flask, SQLite through the `sqlite3` module, Jinja templates rendered on the
-server, and a small amount of JavaScript that layers on top. Roughly 2,300
-lines of Python across six modules, 33 routes, five tables, 495 test
+server, and a small amount of JavaScript that layers on top. Roughly 4,000
+lines of Python across six modules, 33 routes, five tables, 501 test
 functions.
 
 ```
@@ -62,7 +62,7 @@ produces.
 
 ## Data model
 
-Five tables. `schema.sql` is 123 lines and is the shortest useful description
+Five tables. `schema.sql` is 177 lines and is the shortest useful description
 of the app.
 
 ```
@@ -273,7 +273,7 @@ by report and by responder, check-ins by `(responder, created_at DESC)`.
 
 ## Testing
 
-495 test functions, which parametrisation expands into over five hundred
+501 test functions, which parametrisation expands into over five hundred
 cases. Each gets a throwaway database
 via `tmp_path`, so order never matters and a failure can't poison the next
 test.
@@ -311,15 +311,16 @@ happens.
 
 | File | Lines | What it owns |
 | --- | --- | --- |
-| `app.py` | 1,696 | Routes, queries, the rules, CLI commands |
-| `transport.py` | 188 | The radio packet: layout, signing, verification |
+| `app.py` | 2,577 | Routes, queries, the rules, CLI commands |
+| `classify.py` | 805 | The classifier, its corpus, and the browser export |
+| `transport.py` | 204 | The radio packet: layout, signing, verification |
 | `eta.py` | 175 | Free-text ETA parsing behind a confidence gate |
 | `triage.py` | 85 | START triage, mapped onto report priority |
 | `tools/gateway.py` | 136 | Forwards packets from a pipe or a serial port |
-| `schema.sql` | 123 | Five tables, five indexes, all the constraints |
+| `schema.sql` | 177 | Five tables, six indexes, all the constraints |
 
 `app.py` is one file on purpose. Blueprints buy separation of concerns at the
-cost of indirection, and at 1,700 lines with 33 routes the concerns aren't
+cost of indirection, and at 2,600 lines with 33 routes the concerns aren't
 separable in a way that would help anyone reading it. The point at which to
 split it is when two people need to edit different parts of it at once, and
 that hasn't happened.

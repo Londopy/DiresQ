@@ -96,7 +96,7 @@ The fix was a lexicon of the categories a triage protocol calls immediate, writt
 
 It still gets one report in four wrong. That's survivable because it lands in a dropdown you control, next to the words that caused it — and it would be unacceptable if it were deciding anything.
 
-**474 tests**, including 31 adversarial ones, a WCAG 2.1 AA audit, and a suite that reads our own documentation and fails the build when the numbers in it go stale.
+**501 tests**, including 31 adversarial ones, a WCAG 2.1 AA audit, and a suite that reads our own documentation and fails the build when the numbers in it go stale.
 
 ## What we learned
 
@@ -141,7 +141,7 @@ github-actions, ruff, wcag, start-triage, ics-214
 
 ## Development tools
 
-Sublime Text 4, Git and GitHub, GitHub Actions for CI, pytest (474 tests),
+Sublime Text 4, Git and GitHub, GitHub Actions for CI, pytest (501 tests),
 ruff, bandit, pip-audit, gitleaks, Leaflet and OpenStreetMap, Astro for the
 documentation site, Adobe Premiere Pro for the demo video, Discord for team
 coordination.
