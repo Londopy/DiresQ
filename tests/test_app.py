@@ -2730,6 +2730,39 @@ class TestSecurityHeaders:
         assert "tile.openstreetmap.org" in policy
         assert "unpkg.com" in policy
 
+    def test_both_spellings_of_the_tile_host_are_allowed(self, client):
+        # OpenStreetMap is retiring the a/b/c subdomains. A redirect to the
+        # bare host is re-checked against the policy, so a wildcard on its
+        # own breaks on the day they throw the switch and not before.
+        policy = client.get("/map").headers["Content-Security-Policy"]
+        img = [p for p in policy.split("; ") if p.startswith("img-src")][0]
+        assert "https://tile.openstreetmap.org" in img
+        assert "https://*.tile.openstreetmap.org" in img
+
+    def test_the_worker_is_allowed_to_fetch_tiles(self, client):
+        # The bug this pins down: a worker inherits the policy on its own
+        # script, and every fetch() it makes is checked against connect-src,
+        # never img-src. Under the page policy the worker could not fetch a
+        # tile at all — so the map went grey the moment the worker took over,
+        # which is to say the moment after it looked like it was working.
+        policy = client.get("/sw.js").headers["Content-Security-Policy"]
+        connect = [p for p in policy.split("; ") if p.startswith("connect-src")][0]
+        assert "tile.openstreetmap.org" in connect
+
+    def test_the_worker_policy_is_not_the_page_policy(self, client):
+        # If these ever converge it means somebody deleted the override and
+        # the after_request default came back, which is the bug returning.
+        worker = client.get("/sw.js").headers["Content-Security-Policy"]
+        page = client.get("/map").headers["Content-Security-Policy"]
+        assert worker != page
+
+    def test_the_worker_is_not_given_more_than_it_needs(self, client):
+        # Narrower than the page, not wider. It fetches tiles; it has no
+        # business loading images, styles, fonts or anything else.
+        policy = client.get("/sw.js").headers["Content-Security-Policy"]
+        assert "default-src 'none'" in policy
+        assert "unpkg.com" not in policy
+
     def test_nothing_may_frame_us(self, client):
         assert "frame-ancestors 'none'" in \
             client.get("/").headers["Content-Security-Policy"]
@@ -3894,6 +3927,17 @@ class TestSayingWhereYouAreNeedsNothingDownloaded:
     def template(name):
         return (diresq.SCHEMA.parent / "templates" / name
                 ).read_text(encoding="utf-8")
+
+    def test_a_tile_that_cannot_be_read_is_still_kept(self):
+        # Tiles arrive opaque, because Leaflet's <img> sets no crossOrigin:
+        # status 0, ok false, contents unreadable by us. Keying the cache on
+        # response.ok alone stored nothing at all, and stored it quietly —
+        # online the opaque response is drawn anyway, so the only symptom was
+        # an empty cache on the one device that had no signal.
+        worker = (diresq.SCHEMA.parent / "static" / "scripts" / "sw.js"
+                  ).read_text(encoding="utf-8")
+        assert 'response.type === "opaque"' in worker
+        assert "response.ok || " in worker
 
     def test_the_pin_is_not_an_image(self):
         # L.marker() with no icon is Leaflet's default PNG, resolved against

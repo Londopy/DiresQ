@@ -586,6 +586,9 @@ def service_worker():
     response.headers["Content-Type"] = "application/javascript"
     # Don't let a browser hold on to an old worker for a year.
     response.headers["Cache-Control"] = "no-cache"
+    # Set here rather than left to the after_request default, because what a
+    # worker is allowed to fetch is decided by the headers on this response.
+    response.headers["Content-Security-Policy"] = WORKER_CONTENT_SECURITY_POLICY
     return response
 
 
@@ -1298,17 +1301,47 @@ SWEEP_ON = {"homepage", "board", "map_page", "api_reports", "api_responders"}
 # sets inline styles on every tile it positions and there is no way to run it
 # without that. Scripts do not get it, which is the half that stops injected
 # markup from executing.
+#
+# Both spellings of the tile host are listed. OpenStreetMap is retiring the
+# a/b/c subdomains, and a redirect from `a.tile.` to the bare `tile.` is
+# re-checked against the policy — so naming only the wildcard would fail the
+# day they switch it on, silently, and only for tiles that redirect.
 CONTENT_SECURITY_POLICY = "; ".join([
     "default-src 'self'",
     "script-src 'self' https://unpkg.com",
     "style-src 'self' 'unsafe-inline' https://unpkg.com",
-    "img-src 'self' data: https://*.tile.openstreetmap.org",
+    "img-src 'self' data: "
+        "https://tile.openstreetmap.org https://*.tile.openstreetmap.org",
     "connect-src 'self'",
     "font-src 'self'",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
     "frame-ancestors 'none'",
+])
+
+
+# The service worker gets its own policy, and it has to.
+#
+# A worker inherits its CSP from the headers on its own script, and every
+# fetch() a worker makes is checked against `connect-src` — not `img-src`,
+# even when the thing it is fetching is an image the page was allowed to load
+# directly. Serving sw.js with the page policy above therefore forbade the
+# worker from fetching tiles at all.
+#
+# The failure was invisible on first paint: until the worker claims the page,
+# tiles are fetched by the page itself and img-src lets them through. Panning
+# afterwards routed every new tile through the worker, where the fetch threw
+# and the handler turned it into a 504, so the map went grey in the middle of
+# somebody using it.
+#
+# Narrower than the page policy, not wider: a worker that only fetches tiles
+# should be allowed to fetch tiles and nothing else.
+WORKER_CONTENT_SECURITY_POLICY = "; ".join([
+    "default-src 'none'",
+    "script-src 'self'",
+    "connect-src 'self' "
+        "https://tile.openstreetmap.org https://*.tile.openstreetmap.org",
 ])
 
 

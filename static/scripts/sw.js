@@ -132,7 +132,19 @@ async function tile(request) {
 
     try {
         const response = await fetch(request);
-        if (response.ok) {
+
+        // A tile is an <img> with no crossOrigin attribute, so the request
+        // reaches us in no-cors mode and comes back *opaque*: readable by the
+        // browser, unreadable by us, and reporting status 0 with ok false.
+        //
+        // Testing `response.ok` alone therefore never stored a single tile.
+        // Nothing failed loudly — the map worked online, because the opaque
+        // response is returned and drawn either way — so the cache appeared
+        // to exist and was empty. The one moment it mattered, with no signal,
+        // was the one moment nobody was watching a console.
+        const usable = response.ok || response.type === "opaque";
+
+        if (usable) {
             await cache.put(request, response.clone());
             trim(cache);          // deliberately not awaited
         }
