@@ -2118,7 +2118,7 @@ class TestTheDocsAreNotOutOfDate:
     def test_the_table_count_is_true(self):
         sql = diresq.SCHEMA.read_text(encoding="utf-8")
         actual = len(re.findall(r"CREATE TABLE (\w+)", sql))
-        assert actual == 5, "docs say five tables in several places"
+        assert actual == 6, "docs say six tables in several places"
 
     def test_the_index_count_is_true(self):
         # The module map said five indexes while there were six. Written as a
@@ -4288,6 +4288,127 @@ class TestTheLaunchersInTheRelease:
         for name in ("diresq-macos-linux.sh", "diresq-windows.ps1"):
             text = self.script(name).lower()
             assert "there is nothing compiled" in text
+
+
+class TestTheCheckerSaysWhenItLastChecked:
+    """The silence sweep, made visible on the board.
+
+    The sweep has no scheduler — it rides along on reads, so it cannot be a
+    timer that dies quietly. But "it runs on every read" was a claim in a
+    comment, and this project does not ask anybody to take a claim about an
+    alarm on trust. The board now shows the timestamp, so it can be watched
+    instead of believed.
+    """
+
+    @staticmethod
+    def set_swept(value):
+        with diresq.app.app_context():
+            db = diresq.get_db()
+            db.execute("UPDATE system SET last_swept_at = ?", (value,))
+            db.commit()
+
+    @staticmethod
+    def read():
+        with diresq.app.app_context():
+            return diresq.last_swept()
+
+    def test_the_sweep_records_that_it_ran(self, client):
+        client.get("/board")
+        with diresq.app.app_context():
+            row = diresq.get_db().execute(
+                "SELECT last_swept_at FROM system").fetchone()
+        assert row["last_swept_at"] is not None
+
+    def test_a_fresh_sweep_is_not_stale(self, client):
+        client.get("/board")
+        swept = self.read()
+        assert swept["stale"] is False
+        assert swept["seconds"] is not None and swept["seconds"] < 60
+
+    def test_a_database_nobody_has_read_says_never(self, client):
+        # Honest about having no answer rather than reporting zero seconds,
+        # which would read as "just now".
+        self.set_swept(None)
+        swept = self.read()
+        assert swept["at"] is None
+        assert swept["seconds"] is None
+        assert swept["stale"] is True
+
+    def test_an_old_sweep_is_called_stale(self, client):
+        self.set_swept(
+            (datetime.now(timezone.utc) - timedelta(minutes=9)).isoformat())
+        swept = self.read()
+        assert swept["stale"] is True
+        assert swept["seconds"] > 300
+
+    def test_the_threshold_leaves_room_before_the_escalation(self, client):
+        # Stale at 5 minutes, escalation at 15. If these ever cross, the board
+        # would start filing reports about people before admitting the checker
+        # driving it had stopped.
+        self.set_swept(
+            (datetime.now(timezone.utc) - timedelta(minutes=4)).isoformat())
+        assert self.read()["stale"] is False
+
+    def test_the_board_shows_it_without_javascript(self, client):
+        # Server-rendered first, like every other number on this page.
+        body = client.get("/board").get_data(as_text=True)
+        assert 'id="swept"' in body
+        assert "checked" in body
+
+    def test_the_poll_carries_it_beside_the_rows(self, client):
+        # On the header of the very request that triggers the sweep, so the
+        # timestamp cannot drift from the rows rendered next to it.
+        response = client.get("/api/responders")
+        assert "X-Last-Swept" in response.headers
+        assert response.headers["X-Last-Swept"] != "never"
+
+    def test_the_list_shape_was_not_broken_to_add_it(self, client):
+        # The reason it is a header. board.js, map.js and a lot of these tests
+        # read this response as a bare list.
+        assert isinstance(client.get("/api/responders").get_json(), list)
+
+
+class TestOneFileIsNavigable:
+    """app.py is one file on purpose, and that costs orientation.
+
+    The fix is an index at the top rather than blueprints — see
+    docs/architecture.md for why. An index is only worth having if it is true,
+    so this checks it against the file.
+    """
+
+    @staticmethod
+    def source():
+        return (diresq.SCHEMA.parent / "app.py").read_text(encoding="utf-8")
+
+    def sections(self):
+        text = self.source()
+        head = text.split('"""')[1]
+        return re.findall(r"^\s*\d+\.\s+(.+)$", head, re.M)
+
+    def banners(self):
+        return re.findall(r"^# -{60,}\n# (.+)\n# -{60,}$",
+                          self.source(), re.M)
+
+    def test_the_index_is_not_empty(self):
+        assert len(self.sections()) >= 10
+
+    def test_every_heading_in_the_index_is_in_the_file(self):
+        missing = [s for s in self.sections() if s not in self.banners()]
+        assert not missing, f"index lists sections that do not exist: {missing}"
+
+    def test_every_banner_in_the_file_is_in_the_index(self):
+        extra = [b for b in self.banners() if b not in self.sections()]
+        assert not extra, f"file has sections the index never mentions: {extra}"
+
+    def test_they_are_in_the_same_order(self):
+        # An index that lists the right things in the wrong order sends
+        # somebody to the wrong end of a 2,600-line file.
+        assert self.sections() == self.banners()
+
+    def test_the_index_carries_no_line_numbers(self):
+        # They would be wrong by the next commit, and nothing would say so.
+        head = self.source().split('"""')[1]
+        assert not re.search(r"line \d+|:\d{3,}", head)
 
 
 class TestDuplicatesAreCountedAsOneIncident:

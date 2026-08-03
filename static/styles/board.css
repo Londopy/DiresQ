@@ -83,6 +83,21 @@ body{
 
 .live.stalled .dot{background:var(--red);animation:none;}
 
+/* The silence sweep. Deliberately quiet — it is a reassurance, not an alert,
+   and the board already has one thing that goes red for a reason. It only
+   raises its voice when the check itself has stopped. */
+.swept{
+    color:var(--subtext);
+    font-size:0.8rem;
+    letter-spacing:0.04em;
+    white-space:nowrap;
+}
+
+.swept-stale{
+    color:var(--peach);
+    font-weight:600;
+}
+
 @keyframes pulse{
     0%,100%{opacity:1;}
     50%{opacity:0.25;}

@@ -7,6 +7,7 @@ PRAGMA foreign_keys = ON;
 
 -- Children first, parents last. Every table below must appear here, or
 -- init-db half-runs and leaves the database in pieces.
+DROP TABLE IF EXISTS system;
 DROP TABLE IF EXISTS checkins;
 DROP TABLE IF EXISTS report_flags;
 DROP TABLE IF EXISTS assignments;
@@ -175,3 +176,17 @@ CREATE TABLE checkins (
 );
 
 CREATE INDEX idx_checkins_responder ON checkins(responder, created_at DESC);
+
+-- One row, forever. Somewhere for the app to record facts about itself.
+--
+-- Right now that is only the last time the silence sweep ran. The sweep has
+-- no scheduler — it rides along on reads, so it cannot be a timer that dies
+-- quietly — but "it runs on reads" is a claim, and a claim about an alarm is
+-- exactly the kind this project does not ask anybody to take on trust. The
+-- board shows the timestamp, so you can watch it move rather than believe it.
+CREATE TABLE system (
+    id             INTEGER PRIMARY KEY CHECK (id = 1),
+    last_swept_at  TEXT
+);
+
+INSERT INTO system (id, last_swept_at) VALUES (1, NULL);

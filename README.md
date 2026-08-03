@@ -9,7 +9,7 @@ DiresQ tracks the people going into it.**
 
 [![CI](https://github.com/Skythe7/DiresQ/actions/workflows/ci.yml/badge.svg)](https://github.com/Skythe7/DiresQ/actions/workflows/ci.yml)
 [![Security](https://github.com/Skythe7/DiresQ/actions/workflows/security.yml/badge.svg)](https://github.com/Skythe7/DiresQ/actions/workflows/security.yml)
-[![Tests](https://img.shields.io/badge/tests-537%20passing-brightgreen)](tests/test_app.py)
+[![Tests](https://img.shields.io/badge/tests-550%20passing-brightgreen)](tests/test_app.py)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 [![Accessibility](https://img.shields.io/badge/accessibility-WCAG_2.1_AA_audited-a6e3a1)](docs/accessibility.md)
@@ -67,8 +67,8 @@ board turns red; the report on the right filed itself.</sub>
 <!-- /frozen -->
 
 That table is the night itself and does not move. It has kept growing since:
-**24,447 lines written** — **18,658 lines of code** and 5,789 of
-documentation — across **537 test functions**, 682 cases after
+**24,801 lines written** — **18,998 lines of code** and 5,803 of
+documentation — across **550 test functions**, 695 cases after
 parametrisation.
 
 Every one of those is checked by a test, so unlike the snapshot they cannot
@@ -391,7 +391,7 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
-537 test functions, which parametrisation expands into 682 cases, covering
+550 test functions, which parametrisation expands into 695 cases, covering
 every route, the permission rules, feed ordering, staffing resolution, ETA
 parsing, overdue calculation, packet signing, the offline queues for both
 check-ins and reports, arrival-time duplicate detection, the auth guardrails
@@ -413,7 +413,7 @@ tools/queuecheck.mjs  runs the offline outbox against a fake browser
 tools/demo_state.py winds the clock so the board goes red on camera
 tools/make_og.py    draws the social preview card
 scripts/            the launchers attached to each release, one per platform
-schema.sql          accounts · reports · report_flags · assignments · checkins
+schema.sql          accounts · reports · report_flags · assignments · checkins · system
 templates/          Jinja pages
 static/             CSS, JS, images
 static/scripts/sw.js  caches map tiles you have already seen

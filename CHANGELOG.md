@@ -6,6 +6,8 @@ Disaster response tracker. Logs the volunteers going in, not just where the disa
 
 ### Added
 
+- The board now shows when the silence check last ran — "checked 2s ago" beside the live indicator, turning amber if it has not run for five minutes. The check that files a report about somebody who has gone quiet has no scheduler: it runs whenever anybody reads the board, so it cannot be a timer that dies without anyone noticing. But that was a claim in a comment, and this project does not ask anyone to take a claim about an alarm on trust. On a board somebody is watching the number always reads a few seconds, because the watching is what runs it — which is the point. You can watch it move instead of believing it.
+- `app.py` opens with an index of what is in it: fifteen sections in running order, each one a banner comment you can search for. It is one file on purpose, and the cost of that is knowing where anything is. There are no line numbers, because they would be wrong by the next commit, and a test checks the index and the file still agree — including the order.
 - The README now states the total amount of writing in the project — code and documentation together — and a test holds it to the truth, counting only what somebody actually typed. The first measurement was nine and a half thousand lines too high because it counted a package lockfile, a generated model and the documentation site's copy of the documentation; there is now a test that fails if any of those creep back into the total.
 
 ### Changed

@@ -134,7 +134,7 @@ Reports in the feed and on `/api/reports` carry `created_at`, `received_at`,
 
 | Method | Route | Body | |
 | --- | --- | --- | --- |
-| `GET` | `/api/responders` | | The board |
+| `GET` | `/api/responders` | | The board. Carries `X-Last-Swept` |
 | `GET` | `/api/me` | | Your own commitments, and nobody else's |
 | `POST` | `/api/assignments/<id>/status` | `status` | Your own assignment only |
 | `POST` | `/api/checkin` | `lat`, `lng`, `happened_at`, `client_id` *(all optional)* | Resets your timer |
@@ -144,6 +144,32 @@ Reports in the feed and on `/api/reports` carry `created_at`, `received_at`,
 else is a 400. Clearing retracts your staffing vote.
 
 ### `/api/me`, and why it exists separately
+
+### When the silence check last ran
+
+`/api/responders` answers with a bare JSON list and a header:
+
+```
+X-Last-Swept: 2026-08-03T04:12:07+00:00
+```
+
+`never` if it has not run since the database was built.
+
+The sweep that files a report about somebody who has gone quiet has no
+scheduler — it rides along on reads, so it cannot be a timer that dies
+quietly. This request is one of the reads that triggers it, so the header is
+exactly as fresh as the rows underneath it. The board shows it as *checked Ns
+ago* and turns it amber past five minutes, ten before the fifteen-minute
+escalation it drives.
+
+On a board somebody is watching this will always read a few seconds, because
+the watching is what runs it. That is the point: the mechanism is otherwise
+invisible, and "it runs on every read" is a claim about an alarm.
+
+It travels as a header rather than in the body because this response is a
+list, and every consumer treats it as one. Wrapping it in an object to add one
+field would be a breaking change to the most-read endpoint in the app for the
+sake of a timestamp.
 
 `/api/responders` is the board — everybody. `/api/me` is one person, and that
 person is you.

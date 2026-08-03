@@ -7,6 +7,36 @@
     flask --app app run --debug
 
 Set DIRESQ_DEV_USER=londo to skip the login wall while building.
+
+WHAT IS IN THIS FILE
+
+This is one file on purpose. Blueprints buy separation at the cost of
+indirection, and at 33 routes the concerns are not separable in a way that
+would help anyone reading it — see docs/architecture.md. What that costs is
+orientation, so here is the running order. Each heading below appears in the
+file as a banner comment; search for the words and you are there.
+
+   1. Sessions, the database, and the signed-in user
+   2. Staffing, deadlines, and what counts as overdue
+   3. Reading reports, grouping duplicates, counting coverage gaps
+   4. Pages
+   5. Signing in and signing up
+   6. Filing a report, and not filing it twice
+   7. One report: detail, joining, and who can help
+   8. Responders, the board, and the dead man's switch
+   9. On every request: the sweep hook and the security headers
+  10. Changing your own state: status, staffing, resolving, flagging
+  11. The classifier and the triage helper
+  12. ICS-214 activity log export
+  13. JSON reads, and standing down
+  14. Check-ins: from a browser and from a radio
+  15. Schema, demo data, and the command line
+
+Domain logic that does not need a request is already out of here:
+classify.py, triage.py, eta.py and transport.py.
+
+No line numbers, deliberately — they would be wrong by the next commit, and a
+test checks that this list and the banners in the file still agree.
 """
 
 from __future__ import annotations
@@ -98,6 +128,10 @@ app.config.update(
 # lockout that survives a restart is a lockout an attacker can make permanent.
 LOGIN_FAILURES: dict[str, tuple[int, datetime]] = {}
 
+
+# --------------------------------------------------------------------------
+# Sessions, the database, and the signed-in user
+# --------------------------------------------------------------------------
 
 def safe_next(target: str | None) -> str | None:
     """Only same-site paths. Anything else is somebody else's website.
@@ -206,6 +240,10 @@ def inject_overdue_count():
     return {"overdue_count": overdue_count}
 
 
+# --------------------------------------------------------------------------
+# Staffing, deadlines, and what counts as overdue
+# --------------------------------------------------------------------------
+
 def resolve_staffing(votes) -> str:
     """Most cautious vote from anyone on scene, or 'unstaffed' if nobody voted."""
     ranked = [v for v in votes if v in STAFFING_ORDER]
@@ -279,6 +317,10 @@ def age(item: dict) -> dict:
     )
     return item
 
+
+# --------------------------------------------------------------------------
+# Reading reports, grouping duplicates, counting coverage gaps
+# --------------------------------------------------------------------------
 
 def fetch_reports(include_resolved: bool = False) -> list[dict]:
     where = "" if include_resolved else "WHERE r.status NOT IN ('resolved', 'hidden')"
@@ -553,6 +595,10 @@ def fetch_report(report_id: int) -> dict | None:
     return item
 
 
+# --------------------------------------------------------------------------
+# Pages
+# --------------------------------------------------------------------------
+
 @app.get("/")
 @login_required
 def homepage():
@@ -603,8 +649,13 @@ def robots():
 def board():
     # Rendered server-side so the page works without JS; board.js then polls
     # /api/responders and re-renders on its own.
-    return render_template("board.html", responders=fetch_responders())
+    return render_template("board.html", responders=fetch_responders(),
+                           swept=last_swept())
 
+
+# --------------------------------------------------------------------------
+# Signing in and signing up
+# --------------------------------------------------------------------------
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -706,6 +757,10 @@ def logout():
     session.clear()
     return redirect(url_for("login"))
 
+
+# --------------------------------------------------------------------------
+# Filing a report, and not filing it twice
+# --------------------------------------------------------------------------
 
 def link_duplicate(report_id: int) -> dict | None:
     """Look for an open report describing the same incident, and link to it.
@@ -984,6 +1039,10 @@ def api_report_create():
     return jsonify(result), 200 if result["duplicate"] else 201
 
 
+# --------------------------------------------------------------------------
+# One report: detail, joining, and who can help
+# --------------------------------------------------------------------------
+
 @app.get("/report/<int:report_id>")
 @login_required
 def report_detail(report_id: int):
@@ -1090,6 +1149,10 @@ DUPLICATE_RADIUS_M = 500
 # in two hours" gets two hours plus this, not this.
 SILENT_ESCALATE_MINUTES = 15
 
+
+# --------------------------------------------------------------------------
+# Responders, the board, and the dead man's switch
+# --------------------------------------------------------------------------
 
 def metres_between(lat1, lng1, lat2, lng2) -> float | None:
     """Great-circle distance. Haversine, so no dependency for one sum."""
@@ -1295,6 +1358,10 @@ def sweep_silent_responders() -> list[int]:
     return filed
 
 
+# --------------------------------------------------------------------------
+# On every request: the sweep hook and the security headers
+# --------------------------------------------------------------------------
+
 # Pages where it's worth checking whether anyone has gone quiet. There is no
 # scheduler — deliberately, since a timer process that dies takes the alarm
 # with it — so the sweep rides along on reads instead. A GET that writes is
@@ -1398,7 +1465,48 @@ def escalate_silence():
             and request.endpoint in SWEEP_ON
             and current_user() is not None):
         sweep_silent_responders()
+        record_sweep()
 
+
+def record_sweep() -> None:
+    """Write down that the sweep just ran."""
+    db = get_db()
+    db.execute("UPDATE system SET last_swept_at = ?", (now_iso(),))
+    db.commit()
+
+
+def last_swept() -> dict:
+    """When the silence sweep last ran, and whether that is long enough ago
+    to be worth saying out loud.
+
+    The sweep has no scheduler. It rides along on reads, so on a board that
+    somebody is watching this will always read a few seconds — because the
+    watching is what runs it. That is the point of showing it: the mechanism
+    is otherwise invisible, and "it runs on every read" is a claim about an
+    alarm. A number that moves while you look at it is not a claim.
+
+    It goes stale on an instance nobody is loading, which is also an instance
+    where nobody is reading the red rows.
+    """
+    row = get_db().execute("SELECT last_swept_at FROM system").fetchone()
+    when = parse_iso(row["last_swept_at"]) if row else None
+
+    if when is None:
+        return {"at": None, "seconds": None, "stale": True}
+
+    seconds = int((datetime.now(timezone.utc) - when).total_seconds())
+    return {
+        "at": row["last_swept_at"],
+        "seconds": max(seconds, 0),
+        # Five minutes. The escalation itself is fifteen, so this leaves room
+        # to notice the checker has stopped before the thing it checks matters.
+        "stale": seconds > 300,
+    }
+
+
+# --------------------------------------------------------------------------
+# Changing your own state: status, staffing, resolving, flagging
+# --------------------------------------------------------------------------
 
 def claimed_time(raw: str) -> tuple[datetime, str | None]:
     """When something says it happened. Empty means now.
@@ -1654,6 +1762,10 @@ def report_flag(report_id: int):
                   200, "Flagged. Thanks.", report_id)
 
 
+# --------------------------------------------------------------------------
+# The classifier and the triage helper
+# --------------------------------------------------------------------------
+
 # No login wall. Someone should be able to read what this is and isn't before
 # they hand it any information, and a person who has just found the app in a
 # real emergency should reach "call 911" without making an account first.
@@ -1758,6 +1870,10 @@ def api_triage():
         "explanation": result.explanation,
     })
 
+
+# --------------------------------------------------------------------------
+# ICS-214 activity log export
+# --------------------------------------------------------------------------
 
 def stamp(value: str | None) -> str:
     """ICS forms want date and time in separate, human columns."""
@@ -1898,6 +2014,10 @@ def credits_page():
     return render_template("credits.html")
 
 
+# --------------------------------------------------------------------------
+# JSON reads, and standing down
+# --------------------------------------------------------------------------
+
 @app.get("/api/incidents")
 @login_required
 def api_incidents():
@@ -1924,7 +2044,18 @@ def api_reports():
 @app.get("/api/responders")
 @login_required
 def api_responders():
-    return jsonify(fetch_responders())
+    # The sweep time travels as a header rather than in the body.
+    #
+    # This response is a bare list, and board.js, map.js and a large number of
+    # tests all treat it as one. Wrapping it in an object to add one field
+    # would be a breaking change to the most-consumed endpoint in the app for
+    # the sake of a timestamp. The board polls this every three seconds and
+    # the sweep runs on this very request, so the header is as fresh as the
+    # rows beside it.
+    response = jsonify(fetch_responders())
+    swept = last_swept()
+    response.headers["X-Last-Swept"] = swept["at"] or "never"
+    return response
 
 
 @app.get("/api/me")
@@ -2058,6 +2189,10 @@ def api_stand_down_ack(assignment_id: int):
     db.commit()
     return answer({"ok": True, "id": assignment_id}, 200, "")
 
+
+# --------------------------------------------------------------------------
+# Check-ins: from a browser and from a radio
+# --------------------------------------------------------------------------
 
 @app.get("/offline")
 def offline_page():
@@ -2251,6 +2386,10 @@ def api_uplink():
     result["bytes"] = len(packet)
     return jsonify(result), 201
 
+
+# --------------------------------------------------------------------------
+# Schema, demo data, and the command line
+# --------------------------------------------------------------------------
 
 # Resolved against this file, not the working directory, so pytest can run
 # from anywhere.

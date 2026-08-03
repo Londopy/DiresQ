@@ -75,11 +75,40 @@ function render(responders) {
     responders.forEach(r => { lastStates[r.id] = r.state; });
 }
 
+// The silence sweep, shown rather than promised.
+//
+// It carries on the response header of the same poll that triggers it, so
+// this cannot drift from the rows beside it. Five minutes is the threshold:
+// the escalation it drives is fifteen, which leaves room to notice the
+// checker has stopped before the thing it checks starts mattering.
+const swept = document.getElementById("swept");
+const sweptAgo = document.getElementById("swept-ago");
+const STALE_AFTER = 300;
+
+function showSwept(header) {
+    if (!swept || !sweptAgo) return;
+
+    if (!header || header === "never") {
+        sweptAgo.textContent = "never";
+        swept.classList.add("swept-stale");
+        return;
+    }
+
+    const seconds = Math.max(0, Math.round((Date.now() - Date.parse(header)) / 1000));
+
+    sweptAgo.textContent = seconds < 60
+        ? `${seconds}s ago`
+        : `${Math.floor(seconds / 60)}m ago`;
+
+    swept.classList.toggle("swept-stale", seconds > STALE_AFTER);
+}
+
 async function poll() {
     try {
         const res = await fetch("/api/responders", { headers: { Accept: "application/json" } });
         if (!res.ok) throw new Error(res.status);
         render(await res.json());
+        showSwept(res.headers.get("X-Last-Swept"));
         live.classList.remove("stalled");
         live.title = "Refreshing every 3 seconds";
     } catch (err) {

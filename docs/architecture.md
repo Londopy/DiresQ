@@ -13,7 +13,7 @@ something in the code, or take it apart.
 
 Flask, SQLite through the `sqlite3` module, Jinja templates rendered on the
 server, and a small amount of JavaScript that layers on top. Roughly 4,000
-lines of Python across six modules, 33 routes, five tables, 537 test
+lines of Python across six modules, 33 routes, six tables, 550 test
 functions.
 
 ```
@@ -273,7 +273,7 @@ by report and by responder, check-ins by `(responder, created_at DESC)`.
 
 ## Testing
 
-537 test functions, which parametrisation expands into over six hundred
+550 test functions, which parametrisation expands into over six hundred
 cases. Each gets a throwaway database
 via `tmp_path`, so order never matters and a failure can't poison the next
 test.
@@ -311,13 +311,20 @@ happens.
 
 | File | Lines | What it owns |
 | --- | --- | --- |
-| `app.py` | 2,620 | Routes, queries, the rules, CLI commands |
+| `app.py` | 2,759 | Routes, queries, the rules, CLI commands |
 | `classify.py` | 805 | The classifier, its corpus, and the browser export |
 | `transport.py` | 204 | The radio packet: layout, signing, verification |
 | `eta.py` | 175 | Free-text ETA parsing behind a confidence gate |
 | `triage.py` | 85 | START triage, mapped onto report priority |
 | `tools/gateway.py` | 136 | Forwards packets from a pipe or a serial port |
-| `schema.sql` | 177 | Five tables, six indexes, all the constraints |
+| `schema.sql` | 191 | Six tables, six indexes, all the constraints |
+
+Reading `app.py` starts with the index in its docstring: fifteen sections in
+running order, each one a banner comment you can search for. No line numbers —
+they would be wrong by the next commit — and a test checks the index and the
+banners still list the same things in the same order, so it cannot quietly
+stop being true. That is the cheap half of the fix for a long file; the
+expensive half is below.
 
 `app.py` is one file on purpose. Blueprints buy separation of concerns at the
 cost of indirection, and at 2,600 lines with 33 routes the concerns aren't

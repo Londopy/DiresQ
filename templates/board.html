@@ -47,6 +47,21 @@
             <span class="live" id="live" title="Refreshing every 3 seconds">
                 <span class="dot"></span> live
             </span>
+
+            <!-- The silence sweep, made visible. It has no scheduler: it runs
+                 on reads, so on a board somebody is watching this stays at a
+                 few seconds because the watching is what runs it. Showing the
+                 number is the difference between that being a claim in a
+                 comment and something you can watch move. -->
+            <span class="swept{% if swept.stale %} swept-stale{% endif %}"
+                  id="swept"
+                  data-at="{{ swept.at or '' }}"
+                  title="The check that files a report when somebody stops answering">
+                checked
+                <span id="swept-ago">{% if swept.seconds is none %}never{%
+                    elif swept.seconds < 60 %}{{ swept.seconds }}s ago{%
+                    else %}{{ swept.seconds // 60 }}m ago{% endif %}</span>
+            </span>
             <a href="/" class="feed-btn">Reports</a>
             <a href="/map" class="map-btn">Map</a>
             <a href="/export/ics214" class="export-btn"
