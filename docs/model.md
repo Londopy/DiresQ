@@ -310,6 +310,52 @@ structural collapse.
 is worse than over-calling one, and nothing in the maths knows that. A version
 worth deploying would weight the classes asymmetrically.
 
+## It also runs on the phone
+
+The person this suggestion exists for — filing at 2am from a flooded house —
+is the person most likely to have no signal. A classifier that needs a round
+trip is missing at exactly the moment it was built for.
+
+So the trained model ships to the device. `flask --app app export-model`
+writes the word counts to `static/model/priority.json`, about 8 KB, and the
+service worker caches it alongside the stylesheet. `static/scripts/classify.js`
+reads those numbers.
+
+**That is one model in two runtimes, not two classifiers.** The corpus stays
+in `classify.py` and is the only place a training example is ever written. The
+JSON is generated, never edited, and the JavaScript evaluates it — it does not
+learn anything of its own.
+
+### The condition that makes it survivable
+
+Two implementations of the same maths drift. When they do, somebody offline
+gets a confidently different answer from the one they would get online, and
+nothing on screen says so — which is worse than having no offline suggestion
+at all.
+
+So there is a parity harness. `tools/parity.mjs` runs descriptions through the
+browser evaluator and prints what it decided; a test feeds it every line of
+the corpus plus a dozen deliberately awkward ones and fails on any
+disagreement in priority, confidence, equipment or the words shown. CI
+installs node specifically so this cannot skip, because a skip here reads as a
+pass.
+
+It found a real bug the first time it ran. The words behind a suggestion are
+ranked by how much more likely each is under the chosen class, and where two
+words tied, the order fell out of floating-point noise — CPython and V8 round
+`log` differently in the last bit. The explanation was unstable, and it was
+unstable *in the Python*, on every machine, before any of this. One
+implementation could never have shown it. Ties are now rounded flat and broken
+alphabetically.
+
+### What still does not work offline
+
+Duplicate detection. It needs every other open report, and that is precisely
+the thing the app refuses to keep on a device — see
+[docs/offline.md](offline.md). So offline the panel says it has not checked
+and why, rather than returning an empty list, which would read as *checked,
+found none*. The server runs it the moment the report arrives.
+
 ## Trying it
 
 ```bash
@@ -328,8 +374,15 @@ account.
 
 ## Tests
 
-Twenty-three, and they're exact rather than approximate, because the model is
+Exact rather than approximate, because the model is
 deterministic — there is no "usually" in a test suite. They cover each
 priority band, equipment detection, the confidence floor, refusing to guess at
 two words, junk and unicode input, duplicate detection in both directions, and
 one that fails if the corpus becomes lopsided enough to under-predict a class.
+
+Plus the two that hold this page to the code: one runs the worked example
+above and fails if the page and the software disagree, and one measures
+held-out accuracy and fails the build below 68%. Both exist because this file
+was wrong once — it quoted a confidence and a set of reasons belonging to a
+different sentence than the one printed above them, and that error had already
+been copied into a demo video before anybody typed it into the real thing.
