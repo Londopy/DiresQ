@@ -67,7 +67,7 @@ board turns red; the report on the right filed itself.</sub>
 <!-- /frozen -->
 
 That table is the night itself and does not move. It has kept growing since:
-**24,447 lines written** — **18,658 lines of code** and 5,789 of
+**24,470 lines written** — **18,665 lines of code** and 5,805 of
 documentation — across **537 test functions**, 682 cases after
 parametrisation.
 
