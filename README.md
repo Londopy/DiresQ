@@ -67,7 +67,7 @@ board turns red; the report on the right filed itself.</sub>
 <!-- /frozen -->
 
 That table is the night itself and does not move. It has kept growing since:
-**24,869 lines written** — **18,999 lines of code** and 5,870 of
+**25,096 lines written** — **18,999 lines of code** and 6,097 of
 documentation — across **550 test functions**, 695 cases after
 parametrisation.
 
@@ -517,6 +517,10 @@ fork, offline, or if Pages is down.
 - [The classifier](docs/model.md) — naive Bayes over 55 labelled reports,
   measured held-out at 75%, the measured duplicate threshold, and why it isn't
   a language model
+- [CONTRIBUTING.md](CONTRIBUTING.md) — how to run it, the four rules, and the
+  things this project will not accept
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — Contributor Covenant, plus one
+  rule specific to a tool that looks like an emergency service and is not one
 - [SECURITY.md](SECURITY.md) — disclosure policy, scope, and what we already
   know is wrong
 - [Security](docs/security.md) — the threat model, packet signing, and the
