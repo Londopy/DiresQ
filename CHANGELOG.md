@@ -4,6 +4,8 @@ Disaster response tracker. Logs the volunteers going in, not just where the disa
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-08-03
+
 ### Fixed
 
 - The pin that marks the spot you picked on a new report showed as a broken image. It was Leaflet's own marker graphic, served from the same CDN as its stylesheet, and the app's image policy does not allow that host. The pin is now drawn in CSS like the ones on the map, so there is nothing left to fetch and nothing left to block.
