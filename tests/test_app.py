@@ -3869,6 +3869,100 @@ class TestFilingOfflineIsHonestAboutIt:
             assert never not in pages, f"the worker keeps {never}"
 
 
+class TestSayingWhereYouAreNeedsNothingDownloaded:
+    """The location picker on /report/new.
+
+    This page is the one the app promises works with no signal, and the
+    picker is the part of it that quietly did not. Leaflet comes from a CDN,
+    and so does the PNG behind its default marker — so the pin was a broken
+    image online (our own image policy blocks that host) and the whole script
+    was dead offline, which left `lat` and `lng` empty on a form that requires
+    them. A report nobody can submit is not an offline feature.
+    """
+
+    @staticmethod
+    def script(name):
+        return (diresq.SCHEMA.parent / "static" / "scripts" / name
+                ).read_text(encoding="utf-8")
+
+    @staticmethod
+    def style(name):
+        return (diresq.SCHEMA.parent / "static" / "styles" / name
+                ).read_text(encoding="utf-8")
+
+    @staticmethod
+    def template(name):
+        return (diresq.SCHEMA.parent / "templates" / name
+                ).read_text(encoding="utf-8")
+
+    def test_the_pin_is_not_an_image(self):
+        # L.marker() with no icon is Leaflet's default PNG, resolved against
+        # wherever leaflet.css came from. That is the bug, so name it.
+        text = self.script("report_make.js")
+        assert "L.divIcon(" in text
+        assert "icon: locationPin()" in text
+        assert not re.search(r"L\.marker\(\[lat, ?lng\]\)\.addTo", text)
+
+    def test_the_pin_is_not_fetched_from_anywhere(self):
+        # Tiles are downloaded on purpose and end in .png, so this is about
+        # the pin only: what locationPin() hands to Leaflet is markup, and
+        # markup that names no file cannot 404.
+        text = self.script("report_make.js")
+        body = text.split("function locationPin()", 1)[1].split("}", 1)[0]
+        assert "class=" in body
+        assert "img" not in body
+        assert ".png" not in body
+        assert "marker-icon" not in text
+
+    def test_our_own_policy_blocks_that_host_s_images(self):
+        # Not a bug to fix — a deliberate line, recorded so that nobody
+        # "fixes" the pin later by widening the policy instead.
+        policy = diresq.CONTENT_SECURITY_POLICY
+        img = [d for d in policy.split("; ") if d.startswith("img-src")][0]
+        assert "unpkg.com" not in img
+
+    def test_the_pin_is_styled_by_a_sheet_this_page_loads(self):
+        # map.css has .pin too, and /report/new does not load map.css. The
+        # style has to live somewhere this page actually asks for.
+        page = self.template("report_make.html")
+        sheets = re.findall(r'styles/([\w.-]+\.css)', page)
+        assert sheets
+        assert any(".pin-picked" in self.style(s) for s in sheets)
+
+    def test_the_picker_survives_leaflet_being_absent(self):
+        # With no network there is no L at all. The button below it does not
+        # need one, and must still bind.
+        text = self.script("report_make.js")
+        assert 'typeof L !== "undefined"' in text
+        assert "if (!map)" in text
+
+    def test_the_picker_is_kept_on_the_device(self):
+        # Guarding against a missing Leaflet is pointless if the guard itself
+        # is only on the network.
+        worker = self.script("sw.js")
+        assert "/static/scripts/report_make.js" in worker
+
+    def test_a_refused_position_is_reported(self):
+        # The button had no error callback: a denied permission did nothing
+        # visible at all, which is the one answer somebody standing at an
+        # incident cannot act on.
+        text = self.script("report_make.js")
+        assert "PERMISSION_DENIED" in text
+        assert "Location permission is off" in text
+
+    def test_the_position_gets_time_to_arrive(self):
+        # GPS is a sensor, not a request — it is the path that still works
+        # with no signal, and a cold fix is not instant.
+        text = self.script("report_make.js")
+        assert "enableHighAccuracy: true" in text
+        assert "timeout:" in text
+
+    def test_the_chosen_spot_is_announced_not_only_shown(self):
+        page = self.template("report_make.html")
+        assert 'id="locationText" aria-live="polite"' in page
+
+
+
 class TestDuplicatesAreCountedAsOneIncident:
     """The point of detecting duplicates, finally spent.
 

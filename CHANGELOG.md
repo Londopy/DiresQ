@@ -4,6 +4,13 @@ Disaster response tracker. Logs the volunteers going in, not just where the disa
 
 ## [Unreleased]
 
+### Fixed
+
+- The pin that marks the spot you picked on a new report showed as a broken image. It was Leaflet's own marker graphic, served from the same CDN as its stylesheet, and the app's image policy does not allow that host. The pin is now drawn in CSS like the ones on the map, so there is nothing left to fetch and nothing left to block.
+- Filing a report with no signal could not set a location at all. The map library loads from a CDN, so with no network it was not there, and the script that fills in the coordinates stopped on its first line — leaving two required fields empty on a form that will not submit without them. The picker now expects the map to be missing, keeps working without it, and is stored on the device with the rest of the offline pages. Your position still comes from GPS, which is a sensor and does not need a network.
+- Pressing Use My Location and being refused, or waiting past a timeout, did nothing visible. It now says which happened, and gives the location a longer window to arrive, because a cold GPS fix outdoors is not instant.
+- The coordinates you picked are now announced to a screen reader rather than only shown.
+
 ## [1.0.0] - 2026-08-03
 
 ### Added

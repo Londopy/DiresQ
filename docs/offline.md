@@ -437,9 +437,11 @@ A tile we already have is always as good as one we would fetch — a road is in
 the same place next week — so the map keeps drawing with no connection, in
 the area you have already looked at.
 
-It is registered from the map page only, and only over HTTPS or localhost,
-because browsers refuse to register a worker anywhere else. During development
-over a LAN address it quietly does nothing.
+It is registered from every page, and only over HTTPS or localhost, because
+browsers refuse to register a worker anywhere else. During development over a
+LAN address it quietly does nothing. Registering from the map page alone —
+which is where it started — meant somebody who went straight to the report
+form never installed the worker at all, and so had none of this.
 
 **The cache is capped** at 1,200 tiles, roughly 20 MB, oldest evicted first.
 Somebody's phone is not ours to fill.
@@ -503,6 +505,8 @@ Sorted by that rule:
 | **Queued reports** | **Yes** | Yours, unsent, carrying the id that stops them arriving twice |
 | The trained classifier | Yes | A frozen table of word counts. It describes English, not Katy |
 | The blank report form | Yes | An empty form. Without it the queue has no door |
+| The location picker | Yes | Where you say you are is yours to state. It draws its own pin and expects the map library — which is on a CDN — to be missing |
+| The map library itself | **No** | It is on somebody else's CDN and we do not mirror it. The picker is written to work without it |
 | The report feed | **No** | A list of who needs help, and it is wrong within a minute |
 | The accountability board | **No** | Other people's safety, and a stale copy is reassuring in exactly the wrong way |
 | Which reports look like duplicates | **No** | It is a fact about everybody else's reports, so it cannot travel. The server checks on arrival |

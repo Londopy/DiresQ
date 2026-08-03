@@ -248,3 +248,26 @@ padding:20px;
     }
 
 }
+/* The picked spot.
+
+   Leaflet's own marker is a PNG served from the CDN its stylesheet came from.
+   That file is blocked by this app's image policy, and on a device with no
+   signal it is not there to block — either way the picker showed a broken
+   image at the exact moment somebody was trying to say where they were.
+
+   So the pin is a rotated square with one square corner: the same teardrop
+   the map draws for reports, built from a border-radius instead of a
+   download. Peach, because this is a spot you are choosing and not yet an
+   incident anybody has been sent to — the red, blue and green on the map all
+   already mean something about who is coming. */
+.pin{
+    display:block;
+    width:22px;
+    height:22px;
+    border-radius:50% 50% 50% 0;
+    transform:rotate(-45deg);
+    border:2px solid var(--mantle, #181825);
+    box-shadow:0 2px 6px rgba(0,0,0,.5);
+}
+
+.pin-picked{ background:var(--peach, #fab387); }

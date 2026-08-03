@@ -31,7 +31,7 @@
 // been, and the app keeps working for the job you already took.
 
 const TILES = "diresq-tiles-v1";
-const SHELL = "diresq-shell-v3";
+const SHELL = "diresq-shell-v4";
 const MINE = "diresq-mine-v1";
 
 // Tiles are about 15 KB each, so this is roughly 20 MB — a few hundred
@@ -65,6 +65,10 @@ const SHELL_FILES = [
     "/static/scripts/report_file.js",
     "/static/scripts/suggest.js",
     "/static/styles/report_make.css",
+
+    // The location picker. Leaflet itself is on a CDN and stays there — this
+    // file is written to survive its absence, but only if the file is here.
+    "/static/scripts/report_make.js",
 ];
 
 // Pages we keep a copy of once you have actually opened them, so they still
