@@ -2207,18 +2207,72 @@ class TestAccessibility:
         for tag in re.findall(r"<img\b[^>]*>", body):
             assert "alt=" in tag, f"{page}: {tag}"
 
-    @pytest.mark.parametrize("page", ["/login", "/signup", "/", "/map"])
+    # /report/new and /triage were missing from this list, which is how four
+    # unlabelled controls survived on the form the whole app is built around.
+    @pytest.mark.parametrize("page", ["/login", "/signup", "/", "/map",
+                                      "/report/new", "/triage"])
     def test_no_input_relies_on_a_placeholder_for_its_name(self, client, page):
         """Placeholders vanish as soon as you type and screen readers may not
         announce them at all."""
         body = client.get(page).get_data(as_text=True)
         labelled = set(re.findall(r'<label[^>]*\bfor="([^"]+)"', body))
-        for tag in re.findall(r"<input\b[^>]*>", body):
+        # select and textarea need a name every bit as much as input does.
+        for tag in re.findall(r"<(?:input|select|textarea)\b[^>]*>", body):
             if re.search(r'type="(hidden|checkbox|radio|submit)"', tag):
                 continue
             ident = re.search(r'id="([^"]+)"', tag)
             named = (ident and ident.group(1) in labelled) or "aria-label" in tag
-            assert named, f"{page}: unlabelled input {tag}"
+            assert named, f"{page}: unlabelled control {tag}"
+
+    @pytest.mark.parametrize("page", ["/report/new", "/triage", "/signup"])
+    def test_no_label_points_at_nothing(self, client, page):
+        # A <label> with no control is not a label — it is styled text that
+        # tells a screen reader a field is coming and then does not deliver
+        # one. Ours titled the location picker, which is a group, not a field.
+        body = client.get(page).get_data(as_text=True)
+        ids = set(re.findall(r'<(?:input|select|textarea)\b[^>]*id="([^"]+)"', body))
+        for target in re.findall(r'<label[^>]*\bfor="([^"]+)"', body):
+            assert target in ids, f"{page}: <label for={target}> matches no control"
+
+    def test_instructional_text_is_readable(self):
+        """The hardcoded pair list above tests the palette, not the
+        stylesheets — so a class using an off-palette grey was invisible to
+        it. `.hint` sat at #45475a for months: 1.4:1 on a surface card.
+
+        These two greys are readable on nothing we put behind them. They are
+        fine for borders. They are never text."""
+        unreadable = ("#45475a", "#6c7086")
+        styles = diresq.SCHEMA.parent / "static" / "styles"
+
+        # a11y.css loads last on every page and lifts a known list of
+        # selectors to the muted colour. Those are allowed to keep their
+        # original declaration; nothing else is.
+        override = styles / "a11y.css"
+        rescued = set()
+        for block in override.read_text(encoding="utf-8").split("}"):
+            if "#a6adc8 !important" not in block:
+                continue
+            head = re.sub(r"/\*.*?\*/", "", block.split("{")[0], flags=re.S)
+            rescued.update(sel.strip() for sel in head.split(",") if sel.strip())
+
+        for sheet in sorted(styles.glob("*.css")):
+            if sheet.name == "a11y.css":
+                continue
+            selector = ""
+            for number, line in enumerate(
+                    sheet.read_text(encoding="utf-8").split("\n"), 1):
+                if "{" in line:
+                    selector = line.split("{")[0].strip()
+                # `color:` only — border-left-color and friends are allowed.
+                found = re.search(r"(?<![-\w])color:\s*(#[0-9a-fA-F]{6})", line)
+                if not found or found.group(1).lower() not in unreadable:
+                    continue
+                if any(sel and sel in selector for sel in rescued):
+                    continue
+                raise AssertionError(
+                    f"{sheet.name}:{number} sets {selector!r} text to "
+                    f"{found.group(1)}, under 4.5:1 on every background we "
+                    f"use, and a11y.css does not lift it")
 
     def test_the_board_announces_changes_without_shouting(self, client):
         # It repaints every three seconds. assertive would interrupt a screen
@@ -4005,6 +4059,83 @@ class TestSayingWhereYouAreNeedsNothingDownloaded:
         page = self.template("report_make.html")
         assert 'id="locationText" aria-live="polite"' in page
 
+
+
+class TestAReportHasToBeSomewhereReal:
+    """Coordinates were checked for presence and never for range.
+
+    SQLite stores lat 999 without complaint and the API serves it without
+    complaint; Leaflet then projects it off the canvas. The result is a report
+    that is in the feed, counted in the totals, and permanently absent from
+    the map — the one view this whole project is an argument for. Nothing
+    anywhere says why, because as far as every layer is concerned it worked.
+    """
+
+    def file(self, client, lat, lng):
+        return client.post("/report/new", data={
+            "subject": "Somewhere", "description": "d", "priority": "HIGH",
+            "lat": lat, "lng": lng}, follow_redirects=False)
+
+    @pytest.mark.parametrize("lat,lng", [
+        ("999", "-500"), ("91", "0"), ("-90.1", "0"),
+        ("0", "181"), ("0", "-180.5"),
+    ])
+    def test_a_place_that_is_not_on_earth_is_refused(self, client, lat, lng):
+        assert self.file(client, lat, lng).status_code == 400
+
+    @pytest.mark.parametrize("lat,lng", [
+        ("90", "180"), ("-90", "-180"), ("29.78", "-95.83"), ("0", "0"),
+    ])
+    def test_the_edges_of_the_globe_still_work(self, client, lat, lng):
+        # -90/180 are real places. An over-eager check that rejects the poles
+        # or the antimeridian is its own bug.
+        assert self.file(client, lat, lng).status_code == 302
+
+    def test_the_refusal_says_what_to_do(self, client):
+        body = self.file(client, "999", "-500").get_data(as_text=True)
+        assert "not on Earth" in body
+
+
+class TestNothingTypedIsThrownAway:
+    """Every validation failure re-rendered a blank form.
+
+    Somebody standing at an incident who wrote three paragraphs and forgot to
+    tap the map lost the three paragraphs. That is the one failure mode where
+    the person does not try again.
+    """
+
+    def test_the_description_survives_a_rejected_location(self, client):
+        body = client.post("/report/new", data={
+            "subject": "Gas smell by the school",
+            "description": "Strong smell along the fence, kids in the yard",
+            "priority": "HIGH", "lat": "", "lng": "",
+        }).get_data(as_text=True)
+        assert "Strong smell along the fence, kids in the yard" in body
+        assert "Gas smell by the school" in body
+
+    def test_the_priority_stays_chosen(self, client):
+        body = client.post("/report/new", data={
+            "subject": "s", "description": "d", "priority": "HIGH",
+            "lat": "", "lng": "",
+        }).get_data(as_text=True)
+        assert re.search(r'value="HIGH"\s*\n?\s*selected', body) or \
+               'value="HIGH"\n                selected' in body
+
+    def test_a_good_location_is_not_lost_to_a_different_mistake(self, client):
+        # Priority is the problem here; the map pin should not be collateral.
+        body = client.post("/report/new", data={
+            "subject": "s", "description": "d", "priority": "NONSENSE",
+            "lat": "29.78", "lng": "-95.83",
+        }).get_data(as_text=True)
+        assert 'value="29.78"' in body
+        assert 'value="-95.83"' in body
+
+    def test_the_map_redraws_the_pin_it_was_given(self):
+        # Otherwise the page contradicts itself: coordinates are set and the
+        # readout still says to pick a location.
+        text = (diresq.SCHEMA.parent / "static" / "scripts" / "report_make.js"
+                ).read_text(encoding="utf-8")
+        assert "if (latInput.value && lngInput.value)" in text
 
 
 class TestDuplicatesAreCountedAsOneIncident:

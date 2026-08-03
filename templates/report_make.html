@@ -69,39 +69,44 @@
             <a href="/disclaimer">What else this can't do</a>
         </p>
 
-        <label>Subject</label>
+        <label for="subject">Subject</label>
         <input
+            id="subject"
             type="text"
             name="subject"
             placeholder="Ex: Flood in Location"
+            value="{{ form.subject if form else '' }}"
             required
         >
 
-        <label>Priority</label>
+        <label for="priority">Priority</label>
 
         <a href="/triage" class="triage-link">Not sure how bad it is?</a>
 
-        <select name="priority" required>
+        <select id="priority" name="priority" required>
 
             <option value="" disabled selected>
                 Select Priority
             </option>
 
-            <option value="HIGH">
+            <option value="HIGH"
+                {{ 'selected' if form and form.priority == 'HIGH' }}>
                 HIGH
             </option>
 
-            <option value="MEDIUM">
+            <option value="MEDIUM"
+                {{ 'selected' if form and form.priority == 'MEDIUM' }}>
                 MEDIUM
             </option>
 
-            <option value="LOW">
+            <option value="LOW"
+                {{ 'selected' if form and form.priority == 'LOW' }}>
                 LOW
             </option>
 
         </select>
 
-        <label>Location</label>
+        <p class="field-label">Location</p>
 
         <div class="location-tools">
 
@@ -126,22 +131,25 @@
             type="hidden"
             id="lat"
             name="lat"
+            value="{{ form.lat if form else '' }}"
             required>
 
         <input
             type="hidden"
             id="lng"
             name="lng"
+            value="{{ form.lng if form else '' }}"
             required>
 
-        <label>Description</label>
+        <label for="description">Description</label>
 
         <textarea
+            id="description"
             name="description"
             rows="10"
             placeholder="Describe the situation..."
             required
-        ></textarea>
+        >{{ form.description if form else '' }}</textarea>
 
         <button type="submit" class="submit-btn">
             Submit Report

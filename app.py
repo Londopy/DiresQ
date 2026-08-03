@@ -893,6 +893,13 @@ def report_fields(source) -> tuple[dict, str | None]:
         # The hidden lat/lng inputs carry `required`, but hidden inputs are
         # exempt from browser validation, so an untouched map still submits.
         return fields, "Click the map to set a location"
+    # A coordinate off the globe is stored happily by SQLite and served
+    # happily by the API, and then Leaflet projects it somewhere off the
+    # canvas — so the report exists, counts toward the totals, and is the one
+    # thing that never appears on the map. The feed and the map disagree and
+    # nothing anywhere says why.
+    if not (-90 <= fields["lat"] <= 90) or not (-180 <= fields["lng"] <= 180):
+        return fields, "That location is not on Earth. Pick it again."
     return fields, None
 
 
@@ -911,7 +918,8 @@ def report_new():
         if problem:
             flash(problem)
             return render_template("report_make.html",
-                                   client_id=new_client_id()), 400
+                                   client_id=new_client_id(),
+                                   form=request.form), 400
 
         # The form carries an id too, rendered into the page. Without
         # JavaScript there is no queue and nothing to retry, but a browser
@@ -922,7 +930,8 @@ def report_new():
         if when_problem:
             flash(when_problem)
             return render_template("report_make.html",
-                                   client_id=new_client_id()), 400
+                                   client_id=new_client_id(),
+                                   form=request.form), 400
 
         result = create_report(
             **fields, sender=current_user()["id"], written_at=written_at,
@@ -931,7 +940,8 @@ def report_new():
         if not result["ok"]:
             flash(result["error"])
             return render_template("report_make.html",
-                                   client_id=new_client_id()), 409
+                                   client_id=new_client_id(),
+                                   form=request.form), 409
 
         return redirect(url_for("report_detail", report_id=result["id"]))
 

@@ -95,6 +95,26 @@ function setLocation(lat, lng) {
 
 }
 
+// If the form came back with an error, the coordinates it already had are
+// rendered into the hidden inputs. Redraw them, or the page contradicts
+// itself: a location is set, and the text still asks you to set one.
+if (latInput.value && lngInput.value) {
+
+    const lat = parseFloat(latInput.value);
+    const lng = parseFloat(lngInput.value);
+
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+
+        if (map) {
+            map.setView([lat, lng], 15);
+        }
+
+        setLocation(lat, lng);
+
+    }
+
+}
+
 document
 .getElementById("myLocation")
 .addEventListener("click", () => {
