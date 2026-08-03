@@ -143,12 +143,17 @@ packet carries an age rather than a timestamp, because a node running off a
 battery in a flood is the last clock you want to trust.
 [The threat model →](docs/security.md)
 
-**The accessibility audit found thirteen issues and we fixed all thirteen.**
-Three were critical. Nine came from the first pass; four more from a second
-one over the offline report form, where contrast passed everywhere and the
-announcing didn't — a status region written to while still hidden, two live
-regions talking over each other. Every fix is held in place by a test, so they
-can't quietly come back. [The audit →](docs/accessibility.md)
+**The accessibility audit found nineteen issues and we fixed all nineteen.**
+Six were critical. Nine came from the first pass; four from a second over the
+offline report form, where contrast passed everywhere and the announcing
+didn't. Six more on the last day — and those six are the ones worth reading
+about, because each sat under a passing test written to catch exactly that
+kind of bug. The contrast test listed ten colour pairs by hand and never
+opened a stylesheet, so instructional text at 1.38:1 went unseen. The label
+test listed four pages, none of them the report form, so the form this whole
+app exists to submit had four controls a screen reader could not name. Both
+tests now check the rule instead of the page they were written for. Every fix
+is held in place by a test. [The audit →](docs/accessibility.md)
 
 **The offline classifier is the same classifier, and a test proves it rather
 than assuming it.** The browser gets the trained model, generated from
@@ -335,6 +340,8 @@ override the file, so your shell and CI always win.
 ## API
 
 Pages are server-rendered; everything under `/api` returns JSON.
+[docs/api.md](docs/api.md) is the full reference — payloads, status codes and
+the reasoning behind each one.
 
 | Method | Route | |
 | --- | --- | --- |
@@ -350,17 +357,23 @@ Pages are server-rendered; everything under `/api` returns JSON.
 | `GET` | `/report/<id>` | Report detail |
 | `POST` | `/report/<id>/rescue` | Join. Optional `eta_text` free-text ETA |
 | `POST` | `/report/<id>/resolve` | Close it. Reporter or on-scene only |
+| `POST` | `/report/<id>/flag` | Flag as fake. One per person; three hides it |
 | `GET` | `/api/reports` | Feed as JSON |
+| `POST` | `/api/reports` | File one. What the offline queue posts when it reconnects |
+| `GET` | `/api/incidents` | The feed with duplicates grouped — what the map and the gap banner count |
 | `GET` | `/api/responders` | The accountability board |
 | `GET` | `/api/me` | Your own commitments and nothing else. The one response kept on the device |
 | `POST` | `/api/reports/<id>/staffing` | `need_more` · `adequate` · `overstaffed` · `stood_down`. On-scene only |
 | `POST` | `/api/assignments/<id>/status` | `on_scene` then `cleared`. Forward only, your own only |
 | `POST` | `/api/checkin` | `{lat, lng}` — resets your timer |
+| `POST` | `/api/standdown/<id>/ack` | Acknowledge a report you were going to that somebody closed |
 | `POST` | `/api/uplink` | A check-in as a base64 22-byte signed packet. No session — see limits |
 | `POST` | `/api/suggest` | Description in, suggested priority, equipment and duplicates out |
 | `GET` | `/api/model` | What the classifier is and what it's bad at. No login |
+| `GET` | `/api/model/priority.json` | The trained model itself. What the phone evaluates offline |
 | `POST` | `/api/triage` | Four observations in, START category out |
 | `GET` | `/export/ics214` | Activity log as CSV |
+| `GET` | `/credits` | Who built it |
 
 Status codes: `200` ok · `201` created · `302` redirect · `400` bad input ·
 `401` not signed in · `403` not yours · `404` not found.
@@ -394,7 +407,7 @@ tools/queuecheck.mjs  runs the offline outbox against a fake browser
 tools/demo_state.py winds the clock so the board goes red on camera
 tools/make_og.py    draws the social preview card
 scripts/            the launchers attached to each release, one per platform
-schema.sql          accounts · reports · assignments · checkins
+schema.sql          accounts · reports · report_flags · assignments · checkins
 templates/          Jinja pages
 static/             CSS, JS, images
 static/scripts/sw.js  caches map tiles you have already seen
@@ -450,10 +463,24 @@ gitignored — edit `docs/`, never `site/src/pages/*.md`.
 ## Releasing
 
 ```bash
-patchnotes CHANGELOG.md bump 1.0.0
-git tag v1.0.0
+patchnotes CHANGELOG.md bump 1.0.2
+git add CHANGELOG.md CITATION.cff && git commit -m "Release 1.0.2"
+
+git push                      # push the commits FIRST
+git tag v1.0.2                # then tag what is actually on the remote
 git push --tags
 ```
+
+**Push before you tag.** A tag names one commit, and the release workflow
+builds from whatever that commit contains. Tag first and keep working, and the
+tag stays pointing at the old commit while `main` moves on — the release then
+ships without the files you added afterwards, and `git push --tags` reports
+"Everything up-to-date" because the tag itself has not changed. That is not a
+hypothetical; it is how v1.0.1 went out without the launcher scripts.
+
+`CITATION.cff` carries the version too, so it moves with the changelog.
+Tagging runs the whole test suite and the strict changelog check before
+publishing, so a failure means no release rather than a broken one.
 
 ## Read more
 
@@ -483,8 +510,8 @@ fork, offline, or if Pages is down.
   know is wrong
 - [Security](docs/security.md) — the threat model, packet signing, and the
   open redirect we shipped by accident
-- [Accessibility](docs/accessibility.md) — the WCAG 2.1 AA audit: thirteen
-  issues found across two passes, three critical, all fixed and held in place
+- [Accessibility](docs/accessibility.md) — the WCAG 2.1 AA audit: nineteen
+  issues found across three passes, six critical, all fixed and held in place
   by tests
 - [Limits](docs/limits.md) — what this doesn't do
 - [Disclaimer](docs/disclaimer.md) — it does not call for help, and the triage

@@ -6,8 +6,14 @@ rather than assumed.
 
 Nine issues, three of them critical. Then four more when reports learned to
 work offline and the form grew a status message somebody cannot afford to
-miss. Thirteen in total, all fixed, and all now held in place by tests that
-run in CI — because an audit nobody can repeat is a claim, not a result.
+miss. Then six more on the last day, when the audit finally read the
+stylesheets instead of the palette and the report form instead of the pages
+that already had tests.
+
+Nineteen in total, six of them critical, all fixed, and all now held in place
+by tests that run in CI — because an audit nobody can repeat is a claim, not a
+result. The last six are the interesting ones: every one of them sat under a
+passing test whose job was to catch exactly that.
 
 ---
 
@@ -141,8 +147,10 @@ the page. Colour was the easy part and it was already right.
 
 ### Found in the final audit, the day of submission
 
-A third pass, this time reading the stylesheets rather than the palette, and
-the report form rather than the pages that already had tests.
+A third pass, reading the stylesheets rather than the palette and the report
+form rather than the pages that already had tests. Six issues — three of text
+nobody could read, three of controls with no name — and three of the six are
+critical.
 
 | Element | Foreground | Background | Ratio | Needed |
 | --- | --- | --- | --- | --- |
