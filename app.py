@@ -1469,10 +1469,25 @@ def escalate_silence():
 
 
 def record_sweep() -> None:
-    """Write down that the sweep just ran."""
-    db = get_db()
-    db.execute("UPDATE system SET last_swept_at = ?", (now_iso(),))
-    db.commit()
+    """Write down that the sweep just ran.
+
+    This runs in `before_request` on the endpoints the board polls, which
+    means it turned a read-only hot path into one write every three seconds
+    per viewer. SQLite serialises writes, so a busy instance can raise here —
+    and a `before_request` that raises takes the whole page down.
+
+    A board that 500s because the thing telling you the alarm is healthy
+    could not write a timestamp is the exact failure this feature exists to
+    prevent, one level up. So a failed stamp is not fatal: it is left alone,
+    the timestamp goes stale, and the board says so in amber. That reading is
+    true — if we cannot write, we cannot honestly claim a recent check.
+    """
+    try:
+        db = get_db()
+        db.execute("UPDATE system SET last_swept_at = ?", (now_iso(),))
+        db.commit()
+    except sqlite3.Error:
+        pass
 
 
 def last_swept() -> dict:

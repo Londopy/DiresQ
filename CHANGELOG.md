@@ -16,6 +16,10 @@ Disaster response tracker. Logs the volunteers going in, not just where the disa
 
 - The tests that read the project's own files stopped walking into `node_modules` before discarding it. They were the slowest thing in the suite and are now roughly thirty times faster.
 
+### Fixed
+
+- The stamp that records when the silence check ran could take down the page it is displayed on. It runs before every read of the board, which polls every three seconds, so something that had been read-only started writing on every request — and a write that fails inside a before-request hook returns an error page instead of a board. It now fails quietly: the timestamp goes stale and the board reports that in amber, which is true, because a check we could not record is not a check we can claim.
+
 ## [1.0.2] - 2026-08-03
 
 ### Added

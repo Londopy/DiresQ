@@ -4349,6 +4349,25 @@ class TestTheCheckerSaysWhenItLastChecked:
             (datetime.now(timezone.utc) - timedelta(minutes=4)).isoformat())
         assert self.read()["stale"] is False
 
+    def test_a_stamp_that_cannot_be_written_does_not_take_the_page_down(
+            self, client, monkeypatch):
+        """The stamp runs in before_request on the endpoints the board polls.
+
+        A write that raises there would 500 the board — so the page that
+        exists to show the alarm is healthy would be taken down by the alarm's
+        own bookkeeping. It fails quietly instead, the timestamp goes stale,
+        and the board reports that in amber, which is true: if we could not
+        write, we cannot claim a recent check.
+        """
+        import sqlite3 as sqlite
+
+        def explode(*args, **kwargs):
+            raise sqlite.OperationalError("database is locked")
+
+        monkeypatch.setattr(diresq, "now_iso", explode)
+        assert client.get("/board").status_code == 200
+        assert client.get("/api/responders").status_code == 200
+
     def test_the_board_shows_it_without_javascript(self, client):
         # Server-rendered first, like every other number on this page.
         body = client.get("/board").get_data(as_text=True)
