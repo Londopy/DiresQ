@@ -406,6 +406,30 @@ saved claim has to still be true later. A resolved report does not un-resolve.
 So it qualifies, and it is the only thing on the offline page that can tell
 somebody to turn the car around.
 
+## The classifier had to be able to say "I can't read this"
+
+Naive Bayes cannot abstain. Hand it words it has never seen and every class
+falls back to its prior, and it still returns a label and a confidence.
+
+Typed in Spanish, *"mi madre no puede respirar"* — my mother cannot breathe —
+came back **LOW, at 51%, and was shown to the person filing it.** Katy is
+roughly a third Hispanic or Latino, so this was never a hypothetical.
+
+We could have added Spanish training data. Fifty-five examples in one language
+is already a demonstration rather than a dataset; making it a hundred and ten
+across two would have been worse at both. The honest move is not to widen what
+it claims to read, it is to make it admit the edge of what it can.
+
+So it abstains, and the form says why rather than going quiet — silence reads
+as *no opinion, carry on*, and this is exactly the report where the dropdown
+matters most.
+
+**We were careful not to call it language detection.** The rule is *the model
+has not seen these words*, which is also true of English full of unfamiliar
+street names, and that gets refused too. Claiming to detect Spanish would be a
+claim we cannot back; claiming not to recognise the vocabulary is just a fact
+about the model.
+
 ## Things we chose not to build
 
 - **The radio itself.** We built the packet and the endpoint that accepts it;

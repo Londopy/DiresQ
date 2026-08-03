@@ -468,6 +468,7 @@
   "evacuate now"
  ],
  "min_confidence": 0.45,
+ "min_known_share": 0.25,
  "min_tokens": 3,
  "priors": {
   "HIGH": 20,

@@ -118,6 +118,52 @@ function compare(a, b) {
     return a < b ? -1 : a > b ? 1 : 0;
 }
 
+/** Every word, stopwords included. `words()` drops them; here they are the
+ *  signal rather than the noise. */
+function allWords(text) {
+    return (String(text || "").toLowerCase().match(/[a-z']+/g) || [])
+        .map((raw) => raw.replace(/'/g, ""))
+        .filter((word) => word.length >= 2);
+}
+
+/** Every token the model was trained on. The union of the per-label counts is
+ *  the vocabulary, so this needs nothing extra in the exported model. */
+let vocabulary = null;
+function knownWords() {
+    if (!vocabulary) {
+        vocabulary = new Set();
+        for (const label of model.labels) {
+            for (const token of Object.keys(model.counts[label])) {
+                vocabulary.add(token);
+            }
+        }
+    }
+    return vocabulary;
+}
+
+/**
+ * Has the model seen enough of these words to have anything to say?
+ *
+ * Mirrors `readable` in classify.py, including why it takes two signals.
+ * Frightened people type telegraphically — "water rising fast two adults
+ * trapped upstairs" has no function words — so requiring those alone would
+ * refuse the corpus itself. And real reports are full of street names the
+ * model has never seen, so vocabulary alone would refuse "Kingsland Blvd at
+ * Peek Rd". Either is enough.
+ */
+function readable(text) {
+    const raw = allWords(text);
+    if (!raw.length) return false;
+
+    const stop = new Set(model.stopwords);
+    if (raw.some((word) => stop.has(word))) return true;
+
+    const tokens = tokenise(text);
+    if (!tokens.length) return false;
+    const known = tokens.filter((t) => knownWords().has(t)).length;
+    return known / tokens.length >= model.min_known_share;
+}
+
 /** log P(token | label), Laplace-smoothed. Same expression as the Python. */
 function weight(token, label) {
     const seen = model.counts[label][token] || 0;
@@ -242,17 +288,25 @@ export function suggest(text) {
         equipment_reasons: Object.fromEntries(pairs),
     });
 
-    if (tokenise(text).length < model.min_tokens) {
-        return {
-            priority: "MEDIUM",
-            confidence: 0.0,
-            capabilities: [],
-            equipment_reasons: {},
-            reasons: [],
-            confident: false,
-            offline: true,
-        };
-    }
+    const nothing = (unreadable) => ({
+        priority: "MEDIUM",
+        confidence: 0.0,
+        capabilities: [],
+        equipment_reasons: {},
+        reasons: [],
+        confident: false,
+        unreadable,
+        offline: true,
+    });
+
+    if (tokenise(text).length < model.min_tokens) return nothing(false);
+
+    // Nothing to go on. Naive Bayes cannot abstain — with every word unknown
+    // each class falls back to its prior and it still produces a label and a
+    // number that reads like knowledge. Typed in Spanish, "mi madre no puede
+    // respirar" came back LOW at 51% and was shown. So the abstaining happens
+    // here instead.
+    if (!readable(text)) return nothing(true);
 
     const stated = severityFor(text);
     if (stated) {
@@ -263,6 +317,7 @@ export function suggest(text) {
             ...capsOf(equipmentFor(text)),
             reasons: [phrase],
             confident: true,
+            unreadable: false,
             offline: true,
         };
     }
@@ -276,6 +331,7 @@ export function suggest(text) {
         ...capsOf(equipmentFor(text)),
         reasons: why(text, label).map((s) => forms.get(s) || s),
         confident: confidence >= model.min_confidence,
+        unreadable: false,
         offline: true,
     };
 }

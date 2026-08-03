@@ -200,6 +200,14 @@ without limitations — it's one nobody checked.
   the report page, and offline too — a resolved report stays resolved, so that
   claim survives being cached. It doesn't dismiss itself, because the person
   it's for is driving.
+- **It says when it can't read your report** — typed in Spanish, *"mi madre no
+  puede respirar"* (my mother cannot breathe) used to come back **LOW, 51%
+  confident, and shown**. Naive Bayes can't abstain: every word unknown, every
+  class falls back to its prior, and out comes a label that looks like
+  knowledge. Katy is roughly a third Hispanic or Latino — not a hypothetical
+  input. Wording the model has never seen now gets no suggestion and a
+  sentence saying why, and files exactly as written. Not language detection:
+  English full of unfamiliar street names is refused too, and correctly.
 - **Triage it properly** — if you can't judge how bad something is, four
   questions run START, the protocol used at real multiple-casualty scenes, and
   pick the severity for you.

@@ -202,6 +202,13 @@ a{color:#89b4fa;}
     line-height:1.45;
 }
 
+/* The model has never seen these words. Grey, like the offline "not checked
+   against other reports" notice, because both are the same kind of statement:
+   a gap in what we know, not a problem with the report. */
+.suggestion.cannot-read{
+    border-left-color:#6c7086;
+}
+
 /* ------------------------------------------------------------------
    What happened when you pressed Submit.
 

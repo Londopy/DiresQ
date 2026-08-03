@@ -91,6 +91,48 @@ The dropdown moves to HIGH. **The moment you touch it yourself, the model
 stops touching it** for the rest of the form. Somebody who has made a decision
 about their own emergency should not have software arguing with them.
 
+## When it says nothing at all
+
+There are two of these and they mean different things, so the form uses
+different words for them.
+
+**Below 45% confidence** the model has an opinion and isn't sure enough to
+offer it. It goes quiet.
+
+**Below 25% known vocabulary, with no English function words**, it has nothing
+at all — and this one it says out loud, because silence would read as *no
+opinion, carry on*.
+
+That second case exists because of the worst thing this model ever did. Typed
+in Spanish, *"mi madre no puede respirar"* — my mother cannot breathe — came
+back **LOW, at 51% confidence, and was displayed.** Naive Bayes has no way to
+abstain: with every word unknown each class falls back to its prior, and the
+arithmetic still produces a label and a number that reads like knowledge. Katy
+is roughly a third Hispanic or Latino. That is not a hypothetical input.
+
+The threshold is measured. Spanish, German, Vietnamese and romanised Mandarin
+samples score at most **12%** known vocabulary; English the model can read
+scores **100%**. 0.25 sits at double the margin over the worst false positive.
+
+Two signals, because either alone refuses real reports:
+
+| | Function words | Known vocabulary |
+| --- | --- | --- |
+| `"water rising fast two adults trapped upstairs"` | none — frightened people write telegraphically | 100% |
+| `"Kingsland Blvd at Peek Rd, Toyota Tundra stalled"` | yes | low — all proper nouns |
+| `"mi madre no puede respirar"` | none | 0% |
+
+Either one passing is enough.
+
+**It is not language detection and does not pretend to be.** *"Barker Cypress
+underpass impassable, two Silverados abandoned"* is English, and the model
+knows one word of it — so that is refused too. Correctly: any label there
+would be the prior talking. The claim is only ever *the model has not seen
+these words*, which is the honest thing it actually knows.
+
+The report files either way. A model that cannot read your emergency does not
+get to refuse it.
+
 ## Why not an LLM
 
 Three reasons, in the order they mattered.

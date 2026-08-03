@@ -4487,3 +4487,134 @@ class TestNobodyIsLeftDrivingToAClearedAddress:
         board = client.get("/api/responders").get_json()
         for name in [r["username"] for r in board if r["username"] != "londo"]:
             assert name not in body, f"/api/me leaks {name}"
+
+
+class TestTheClassifierSaysWhenItCannotRead:
+    """The worst thing this model ever did.
+
+    Typed in Spanish, *"mi madre no puede respirar"* — my mother cannot
+    breathe — came back **LOW, at 51% confidence, and was shown.** Naive Bayes
+    has no way to abstain: with every word unknown each class falls back to
+    its prior, and the arithmetic still produces a label and a number that
+    reads like knowledge.
+
+    Katy is roughly a third Hispanic or Latino. This is not a hypothetical
+    input.
+    """
+
+    SPANISH = "mi madre no puede respirar necesitamos ayuda ahora"
+
+    def test_the_case_that_started_it(self):
+        result = classify.suggest(self.SPANISH)
+        assert result.unreadable is True
+        assert result.confident is False, (
+            "a life-threatening report in Spanish was given a confident "
+            "English-trained label")
+
+    @pytest.mark.parametrize("text,language", [
+        ("el agua esta subiendo dos adultos atrapados arriba", "Spanish"),
+        ("hay un incendio en la casa de mi vecino ayuda", "Spanish"),
+        ("necesitamos un bote la calle esta inundada", "Spanish"),
+        ("nuoc dang len nhanh hai nguoi tren gac", "Vietnamese"),
+        ("wasser steigt schnell zwei erwachsene gefangen oben", "German"),
+    ])
+    def test_it_refuses_wording_it_has_never_seen(self, text, language):
+        assert classify.suggest(text).unreadable is True, language
+
+    @pytest.mark.parametrize("text", [
+        # The corpus itself. Frightened people write telegraphically, with no
+        # function words at all — requiring those would refuse this.
+        "water rising fast two adults trapped upstairs cannot get out",
+        "tree across the driveway cannot get the car out",
+        # Real reports are mostly nouns the model has never seen. Requiring
+        # vocabulary alone would refuse these.
+        "Kingsland Blvd at Peek Rd totally submerged, Toyota Tundra stalled",
+        "Grandmother at 22140 Provincial Blvd, oxygen concentrator, no power",
+        "my neighbour Ravi is stuck, water past the mailbox on Elm",
+    ])
+    def test_it_still_reads_real_english(self, text):
+        assert classify.suggest(text).unreadable is False
+
+    def test_english_it_genuinely_cannot_read_is_refused_too(self):
+        """This is not language detection and should not pretend to be.
+
+        "Barker Cypress underpass impassable, two Silverados abandoned" is
+        English and the model knows one word of it. Anything it said would be
+        the prior talking, so it says nothing — which is correct, not a false
+        positive.
+        """
+        assert classify.suggest(
+            "Barker Cypress underpass impassable, two Silverados abandoned"
+        ).unreadable is True
+
+    def test_the_margin_is_measured_not_guessed(self):
+        """Non-English samples top out at 12% known vocabulary; English the
+        model can read scores 100%. The threshold sits at double the margin."""
+        vocabulary = classify._PRIORITY.vocabulary
+
+        def coverage(text):
+            tokens = classify.tokenise(text)
+            return sum(t in vocabulary for t in tokens) / len(tokens)
+
+        foreign = [coverage(t) for t in [
+            self.SPANISH,
+            "el agua esta subiendo dos adultos atrapados arriba",
+            "nuoc dang len nhanh hai nguoi tren gac",
+            "wasser steigt schnell zwei erwachsene gefangen oben",
+        ]]
+        assert max(foreign) < classify.MIN_KNOWN_SHARE, (
+            f"the worst false positive is at {max(foreign):.0%} and the "
+            f"threshold is {classify.MIN_KNOWN_SHARE:.0%} — no margin left")
+        assert max(foreign) * 2 <= classify.MIN_KNOWN_SHARE
+
+    def test_unreadable_is_not_the_same_as_unsure(self):
+        """Below the floor it has an opinion and won't state it. Here it has
+        nothing. Those should lead somebody to do different things, so the
+        interface has to be able to tell them apart."""
+        unsure = classify.suggest("water in the garage not in the house yet")
+        assert unsure.unreadable is False
+
+        cannot = classify.suggest(self.SPANISH)
+        assert cannot.unreadable is True and cannot.confident is False
+
+    def test_the_form_says_so_rather_than_going_quiet(self):
+        # Silence reads as "no opinion, carry on". This is the report where
+        # the dropdown matters most, so it has to say why nothing is coming.
+        panel = (diresq.SCHEMA.parent / "static" / "scripts" / "suggest.js"
+                 ).read_text(encoding="utf-8")
+        assert "result.unreadable" in panel
+        assert "No suggestion for this one" in panel
+        assert "Pick the priority yourself" in panel
+
+    def test_it_never_blocks_filing(self, client):
+        """The description goes through exactly as written. A model that
+        cannot read your emergency does not get to refuse it."""
+        before = count_reports()
+        made = client.post("/api/reports", json={
+            "subject": "Agua subiendo en la calle",
+            "description": self.SPANISH,
+            "priority": "HIGH", "lat": 29.7858, "lng": -95.8244,
+            "client_id": "es-1",
+        })
+        assert made.status_code == 201
+        assert count_reports() == before + 1
+
+        with diresq.app.app_context():
+            stored = diresq.get_db().execute(
+                "SELECT description FROM reports WHERE client_id = 'es-1'"
+            ).fetchone()["description"]
+        assert stored == self.SPANISH
+
+    def test_the_endpoint_reports_it(self, client):
+        body = client.post("/api/suggest", json={"text": self.SPANISH}).get_json()
+        assert body["unreadable"] is True
+        assert body["confident"] is False
+
+    def test_the_model_card_admits_it(self, client):
+        limits = " ".join(client.get("/api/model").get_json()["limits"])
+        assert "English only" in limits
+        assert "says so instead of guessing" in limits
+
+    def test_the_browser_copy_gets_the_threshold(self):
+        model = json.loads(diresq.MODEL_FILE.read_text(encoding="utf-8"))
+        assert model["min_known_share"] == classify.MIN_KNOWN_SHARE

@@ -261,6 +261,19 @@ All notable changes to this project are documented here. Format follows
   does not dismiss itself on a timer, because the person it is for is driving
   with the phone in a pocket. Whoever pressed the button is not told to stand
   down — they were standing there, and they decided.
+- The classifier says when it cannot read a report instead of guessing. Typed
+  in Spanish, "mi madre no puede respirar" — my mother cannot breathe — came
+  back **LOW, at 51% confidence, and was shown**. Naive Bayes has no way to
+  abstain: with every word unknown each class falls back to its prior and the
+  arithmetic still produces a label and a number that reads like knowledge.
+  Katy is roughly a third Hispanic or Latino, so this was not a hypothetical
+  input. A report whose wording the model has never seen now gets no
+  suggestion and a sentence saying why, and the form still files it exactly as
+  written. The threshold is measured, not guessed — non-English samples score
+  at most 12% known vocabulary against 100% for English it can read. It is not
+  language detection and does not pretend to be: English full of street names
+  it has never seen is refused too, and correctly, because any label there
+  would be the prior talking.
 - Reports that describe one incident are counted as one in the feed. Two
   reports of a single flood with three responders on each used to render as
   two comfortably staffed rows — three plus three looks fine, and six people

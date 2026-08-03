@@ -364,6 +364,12 @@ and committed to `static/model/priority.json`, where the service worker keeps
 it. `static/scripts/classify.js` evaluates it in the browser, so somebody
 filing at 2am with the towers down still gets a suggested priority.
 
+Both copies also return **`unreadable`**: true when the model has never seen
+these words and is refusing to guess rather than falling back to its priors.
+Distinct from `confident: false`, which means it has an opinion it isn't sure
+enough to offer. The form says which, because they should lead somebody to do
+different things. See [model.md](model.md) for the measured threshold.
+
 It returns the same shape as `/api/suggest` with two differences:
 
 - `"offline": true`

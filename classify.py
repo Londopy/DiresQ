@@ -180,6 +180,27 @@ MIN_CONFIDENCE = 0.45
 # confident about anything, and being confidently wrong is worse than silence.
 MIN_TOKENS = 3
 
+# Share of a report's words the model must have seen before, when the wording
+# carries no English function words at all, for a suggestion to be offered.
+#
+# This exists because of the worst thing this file ever did. Typed in Spanish,
+# *"mi madre no puede respirar"* — my mother cannot breathe — came back **LOW,
+# at 51% confidence, and was shown**. Naive Bayes has no way to abstain: every
+# word is unknown, every class falls back to its prior, and the arithmetic
+# still produces a label and a number that looks like knowledge.
+#
+# Measured, not guessed. Across Spanish, German, Vietnamese and romanised
+# Mandarin samples the model recognised at most 12% of the words. English
+# reports it can actually read score 100%. 0.25 sits at double the margin over
+# the worst false positive.
+#
+# Note what this is *not*: it is not language detection. It is the model
+# saying it has never seen these words, which is true of "Barker Cypress
+# underpass impassable, two Silverados abandoned" as well — one known word out
+# of seven, and any label it produced there would be the prior talking. That
+# report is refused too, and correctly.
+MIN_KNOWN_SHARE = 0.25
+
 # Decimal places kept before ranking the words behind a suggestion. Two words
 # that are mathematically equally telling must come out equal, so the stated
 # tie-break decides instead of the last bit of a float. Twelve is far below
@@ -262,6 +283,12 @@ class Suggestion:
     equipment_reasons: dict[str, str] = field(default_factory=dict)
     reasons: list[str] = field(default_factory=list)
     confident: bool = True
+    # True when the model has never seen these words. Distinct from merely
+    # unconfident: below the confidence floor it has an opinion and is not
+    # sure enough to say it, whereas here it has nothing at all. The
+    # interface says which, because "I am unsure" and "I cannot read this"
+    # should lead somebody to do different things.
+    unreadable: bool = False
 
     def as_dict(self) -> dict:
         return {
@@ -271,6 +298,7 @@ class Suggestion:
             "equipment_reasons": self.equipment_reasons,
             "reasons": self.reasons,
             "confident": self.confident,
+            "unreadable": self.unreadable,
         }
 
 
@@ -583,6 +611,42 @@ def _train():
 _PRIORITY, _SIMILARITY = _train()
 
 
+def readable(text: str) -> bool:
+    """Has the model seen enough of these words to have anything to say?
+
+    Two ways to pass, because emergency English fails either one alone.
+
+    People type telegraphically when frightened — *"water rising fast two
+    adults trapped upstairs"* contains no function words at all — so requiring
+    them would refuse the corpus itself. And a real report is full of street
+    names and brands the model has never seen, so requiring vocabulary alone
+    would refuse *"Kingsland Blvd at Peek Rd, Toyota Tundra stalled midway"*.
+
+    Either signal is enough. Together they cleanly separate English the model
+    can work with from wording it cannot: see MIN_KNOWN_SHARE.
+    """
+    words = list(_all_words(text))
+    if not words:
+        return False
+    if any(word in STOPWORDS for word in words):
+        return True
+
+    tokens = tokenise(text)
+    if not tokens:
+        return False
+    known = sum(1 for token in tokens if token in _PRIORITY.vocabulary)
+    return known / len(tokens) >= MIN_KNOWN_SHARE
+
+
+def _all_words(text: str):
+    """Every word, stopwords included. `_words` drops them; this is the one
+    place they carry the signal rather than noise."""
+    for raw in re.findall(r"[a-z']+", (text or "").lower()):
+        word = raw.replace("'", "")
+        if len(word) >= 2:
+            yield word
+
+
 def suggest(text: str) -> Suggestion:
     """Read a description and suggest a priority and what's needed.
 
@@ -593,6 +657,14 @@ def suggest(text: str) -> Suggestion:
         # Two words is not enough to be confident about anything, and being
         # confidently wrong is worse than saying nothing.
         return Suggestion("MEDIUM", 0.0, [], {}, [], confident=False)
+
+    if not readable(text):
+        # Nothing to go on. Naive Bayes cannot abstain — with every word
+        # unknown each class falls back to its prior and it still emits a
+        # label and a confidence that reads like knowledge. So the abstaining
+        # happens here instead.
+        return Suggestion("MEDIUM", 0.0, [], {}, [], confident=False,
+                          unreadable=True)
 
     stated = severity_for(text)
     if stated is not None:
@@ -687,6 +759,7 @@ def export_model() -> dict:
         "suffixes": list(_SUFFIXES),
         "min_confidence": MIN_CONFIDENCE,
         "min_tokens": MIN_TOKENS,
+        "min_known_share": MIN_KNOWN_SHARE,
         "life_threat_phrases": list(LIFE_THREAT_PHRASES),
         "routine_phrases": list(ROUTINE_PHRASES),
         "stand_down_words": list(STAND_DOWN_WORDS),
@@ -720,6 +793,8 @@ def model_card() -> dict:
             "trained on flood and storm reports, weaker on anything else",
             "bag of words, so it cannot read 'no longer trapped' correctly",
             "sixty examples is a demonstration, not a dataset",
+            "English only — and it now says so instead of guessing: a report "
+            "whose words it has never seen gets no suggestion at all",
             "duplicate detection misses rewordings that share no vocabulary",
             "duplicate detection cannot run offline at all — it compares "
             "against other people's open reports, which this app refuses to "

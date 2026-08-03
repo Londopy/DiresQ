@@ -51,7 +51,38 @@ function esc(value) {
 }
 
 function render(result) {
-    if (!result || !result.confident) {
+    if (!result) {
+        panel.hidden = true;
+        return;
+    }
+
+    // "I cannot read this" and "I am not sure" are different facts and should
+    // lead somebody to do different things, so they get different words.
+    // Silence here would be read as "no opinion, carry on", when what happened
+    // is that every word was unknown — and this is exactly the report where
+    // the dropdown matters most, because nothing is going to help them fill it
+    // in. Typed in Spanish, "my mother cannot breathe" used to come back LOW.
+    if (result.unreadable) {
+        panel.className = "suggestion cannot-read";
+        const markup = `
+            <p class="unchecked">
+                <strong>No suggestion for this one.</strong>
+                These aren't words the model has seen &mdash; it is trained on
+                English flood and storm reports, so it has nothing to go on
+                here and is not going to guess.
+                <strong>Pick the priority yourself</strong>, and file it either
+                way: the description goes through exactly as you wrote it.
+            </p>`;
+        if (panel.hidden || panel.innerHTML !== markup) {
+            panel.hidden = false;
+            panel.innerHTML = markup;
+        }
+        return;
+    }
+
+    panel.className = "suggestion";
+
+    if (!result.confident) {
         // Below the confidence floor it says nothing rather than guessing at
         // somebody in the middle of an emergency.
         panel.hidden = true;
