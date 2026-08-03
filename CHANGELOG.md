@@ -4,11 +4,13 @@ Disaster response tracker. Logs the volunteers going in, not just where the disa
 
 ## [Unreleased]
 
-## [1.0.1] - 2026-08-03
+## [1.0.2] - 2026-08-03
 
 ### Added
 
 - Every tagged release now carries a launcher for macOS and Linux and one for Windows. Download the one file, run it, and it fetches the source for that version, builds an isolated environment, seeds the demo database and opens the browser. Everything lands in a folder beside the script, so deleting the folder leaves nothing behind. Published with a `SHA256SUMS.txt` so a download can be checked before it is run.
+
+## [1.0.1] - 2026-08-03
 
 ### Fixed
 
