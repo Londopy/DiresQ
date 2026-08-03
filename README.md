@@ -9,7 +9,7 @@ DiresQ tracks the people going into it.**
 
 [![CI](https://github.com/Skythe7/DiresQ/actions/workflows/ci.yml/badge.svg)](https://github.com/Skythe7/DiresQ/actions/workflows/ci.yml)
 [![Security](https://github.com/Skythe7/DiresQ/actions/workflows/security.yml/badge.svg)](https://github.com/Skythe7/DiresQ/actions/workflows/security.yml)
-[![Tests](https://img.shields.io/badge/tests-535%20passing-brightgreen)](tests/test_app.py)
+[![Tests](https://img.shields.io/badge/tests-537%20passing-brightgreen)](tests/test_app.py)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 [![Accessibility](https://img.shields.io/badge/accessibility-WCAG_2.1_AA_audited-a6e3a1)](docs/accessibility.md)
@@ -67,9 +67,15 @@ board turns red; the report on the right filed itself.</sub>
 <!-- /frozen -->
 
 That table is the night itself and does not move. It has kept growing since:
-**18,125 lines of code** and **535 test functions**, 680 cases after
-parametrisation. Those two are checked by a test, so unlike the snapshot they
-cannot quietly go stale.
+**24,447 lines written** — **18,658 lines of code** and 5,789 of
+documentation — across **537 test functions**, 682 cases after
+parametrisation.
+
+Every one of those is checked by a test, so unlike the snapshot they cannot
+quietly go stale. The written total counts only what somebody typed: npm's
+lockfile, the generated model and the docs site's copy of `docs/` are all
+excluded, and a test fails if any of them creep back in. The first time it was
+measured they hadn't been, and the number was 9,500 too high.
 
 Everything in this README is running, tested and deployed. The parts that
 aren't have their own page saying so.
@@ -385,7 +391,7 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
-535 test functions, which parametrisation expands into 680 cases, covering
+537 test functions, which parametrisation expands into 682 cases, covering
 every route, the permission rules, feed ordering, staffing resolution, ETA
 parsing, overdue calculation, packet signing, the offline queues for both
 check-ins and reports, arrival-time duplicate detection, the auth guardrails

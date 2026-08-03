@@ -4,6 +4,14 @@ Disaster response tracker. Logs the volunteers going in, not just where the disa
 
 ## [Unreleased]
 
+### Added
+
+- The README now states the total amount of writing in the project — code and documentation together — and a test holds it to the truth, counting only what somebody actually typed. The first measurement was nine and a half thousand lines too high because it counted a package lockfile, a generated model and the documentation site's copy of the documentation; there is now a test that fails if any of those creep back into the total.
+
+### Changed
+
+- The tests that read the project's own files stopped walking into `node_modules` before discarding it. They were the slowest thing in the suite and are now roughly thirty times faster.
+
 ## [1.0.2] - 2026-08-03
 
 ### Added
