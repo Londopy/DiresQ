@@ -70,7 +70,8 @@ margin-bottom:10px;
 
 }
 
-label{
+label,
+.field-label{
 
 font-weight:600;
 

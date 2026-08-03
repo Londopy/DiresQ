@@ -26,7 +26,10 @@
 
 .hint{
     display:block;
-    color:#45475a;
+    /* Was #45475a: 1.38:1 on a surface card, 1.92:1 on mantle. Invisible.
+       These are the lines that tell somebody how the form works, so they
+       were the worst possible text to lose. */
+    color:#a6adc8;
     font-size:0.78rem;
     margin-top:8px;
     line-height:1.45;
@@ -226,5 +229,8 @@
 .match-block .hint{
     margin:12px 0 0;
     font-size:0.75rem;
-    color:#6c7086;
+    /* More specific than .hint, so it kept #6c7086 (3.0:1 on a surface card)
+       after the base rule was fixed. Specificity is how a contrast fix gets
+       quietly undone. */
+    color:#a6adc8;
 }
