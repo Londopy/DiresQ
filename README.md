@@ -9,7 +9,7 @@ DiresQ tracks the people going into it.**
 
 [![CI](https://github.com/Skythe7/DiresQ/actions/workflows/ci.yml/badge.svg)](https://github.com/Skythe7/DiresQ/actions/workflows/ci.yml)
 [![Security](https://github.com/Skythe7/DiresQ/actions/workflows/security.yml/badge.svg)](https://github.com/Skythe7/DiresQ/actions/workflows/security.yml)
-[![Tests](https://img.shields.io/badge/tests-524%20passing-brightgreen)](tests/test_app.py)
+[![Tests](https://img.shields.io/badge/tests-532%20passing-brightgreen)](tests/test_app.py)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 [![Accessibility](https://img.shields.io/badge/accessibility-WCAG_2.1_AA_audited-a6e3a1)](docs/accessibility.md)
@@ -67,7 +67,7 @@ board turns red; the report on the right filed itself.</sub>
 <!-- /frozen -->
 
 That table is the night itself and does not move. It has kept growing since:
-**18,125 lines of code** and **524 test functions**, 666 cases after
+**18,125 lines of code** and **532 test functions**, 677 cases after
 parametrisation. Those two are checked by a test, so unlike the snapshot they
 cannot quietly go stale.
 
@@ -254,6 +254,16 @@ without limitations — it's one nobody checked.
 
 ## Quickstart
 
+The fastest route is the launcher attached to any
+[release](https://github.com/Skythe7/DiresQ/releases): one file, run it, and
+it fetches the source, sets up an isolated environment, seeds the demo and
+opens the browser. `diresq-macos-linux.sh` or `diresq-windows.ps1`, with
+`SHA256SUMS.txt` to check them against. They are scripts rather than binaries
+because nothing here is compiled — see
+[docs/install.md](docs/install.md).
+
+By hand:
+
 ```bash
 git clone https://github.com/Skythe7/DiresQ.git
 cd DiresQ
@@ -362,7 +372,7 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
-524 test functions, which parametrisation expands into 666 cases, covering
+532 test functions, which parametrisation expands into 677 cases, covering
 every route, the permission rules, feed ordering, staffing resolution, ETA
 parsing, overdue calculation, packet signing, the offline queues for both
 check-ins and reports, arrival-time duplicate detection, the auth guardrails

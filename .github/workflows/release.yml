@@ -71,9 +71,58 @@ jobs:
           PY
           echo "Built notes for $VERSION"
 
+      # One-file launchers, attached to the release so somebody can run this
+      # without cloning anything. They are shell scripts, not binaries: there
+      # is nothing compiled in this project, so there is nothing to
+      # cross-compile and no macOS or Windows runner in this workflow. The
+      # whole step is a few seconds on the ubuntu runner that is already here,
+      # which is also why it cannot sit in a queue waiting for a macOS box.
+      - name: Stamp the launchers with this version
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          mkdir -p dist
+          for f in diresq-macos-linux.sh diresq-windows.ps1; do
+            sed "s/__VERSION__/${TAG}/g" "scripts/$f" > "dist/$f"
+          done
+          chmod +x dist/diresq-macos-linux.sh
+
+          # Prove the stamp landed. A launcher that still says __VERSION__
+          # silently falls back to main, which is not what a release means.
+          for f in dist/*; do
+            if grep -q "__VERSION__" "$f"; then
+              echo "::error::$f still contains __VERSION__"
+              exit 1
+            fi
+          done
+
+      - name: Check the launchers are syntactically valid
+        run: |
+          bash -n dist/diresq-macos-linux.sh
+          sudo apt-get update -qq && sudo apt-get install -y -qq powershell 2>/dev/null || true
+          if command -v pwsh >/dev/null; then
+            pwsh -NoProfile -Command "
+              \$e = \$null
+              [System.Management.Automation.Language.Parser]::ParseFile(
+                'dist/diresq-windows.ps1', [ref]\$null, [ref]\$e) > \$null
+              if (\$e) { \$e | ForEach-Object { Write-Host \$_ }; exit 1 }
+              Write-Host 'diresq-windows.ps1 parses'"
+          else
+            echo "pwsh unavailable on this runner; skipping the PowerShell parse check"
+          fi
+
+      - name: Checksums
+        run: |
+          cd dist
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
       - name: Publish
         uses: softprops/action-gh-release@v2
         with:
           body_path: release-notes.md
           generate_release_notes: false
           draft: false
+          files: |
+            dist/diresq-macos-linux.sh
+            dist/diresq-windows.ps1
+            dist/SHA256SUMS.txt

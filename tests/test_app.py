@@ -4138,6 +4138,80 @@ class TestNothingTypedIsThrownAway:
         assert "if (latInput.value && lngInput.value)" in text
 
 
+class TestTheLaunchersInTheRelease:
+    """The two scripts attached to every tagged release.
+
+    They are shell scripts on purpose. Nothing in this project is compiled,
+    so there is no architecture to build for and nothing to cross-compile —
+    which is also why the release workflow needs no macOS or Windows runner
+    and cannot sit in a queue waiting for one.
+    """
+
+    ROOT = None
+
+    @staticmethod
+    def script(name):
+        return (diresq.SCHEMA.parent / "scripts" / name).read_text(encoding="utf-8")
+
+    @staticmethod
+    def workflow():
+        return (diresq.SCHEMA.parent / ".github" / "workflows" / "release.yml"
+                ).read_text(encoding="utf-8")
+
+    @pytest.mark.parametrize("name", ["diresq-macos-linux.sh", "diresq-windows.ps1"])
+    def test_the_launcher_exists(self, name):
+        assert (diresq.SCHEMA.parent / "scripts" / name).is_file()
+
+    @pytest.mark.parametrize("name", ["diresq-macos-linux.sh", "diresq-windows.ps1"])
+    def test_the_launcher_has_a_version_to_stamp(self, name):
+        # The workflow rewrites this marker per release. No marker means a
+        # downloaded launcher silently falls back to main, which is not what
+        # somebody downloading a tagged release asked for.
+        assert "__VERSION__" in self.script(name)
+
+    @pytest.mark.parametrize("name", ["diresq-macos-linux.sh", "diresq-windows.ps1"])
+    def test_the_release_attaches_it(self, name):
+        assert f"dist/{name}" in self.workflow()
+
+    def test_the_checksums_are_published(self):
+        flow = self.workflow()
+        assert "sha256sum" in flow
+        assert "dist/SHA256SUMS.txt" in flow
+
+    def test_the_release_needs_only_one_runner(self):
+        # The whole point of shipping scripts rather than binaries. A macOS
+        # runner is the slowest and least reliable thing in Actions, and this
+        # workflow must never need to wait for one.
+        flow = self.workflow()
+        assert "macos-latest" not in flow
+        assert "windows-latest" not in flow
+        assert "ubuntu-latest" in flow
+
+    def test_the_stamp_is_verified_before_publishing(self):
+        # A launcher that still says __VERSION__ would publish happily and
+        # then install the wrong thing.
+        assert "still contains __VERSION__" in self.workflow()
+
+    def test_the_shell_launcher_is_valid_shell(self):
+        # Cheap to check here, and the alternative is finding out from
+        # somebody who downloaded it.
+        import shutil, subprocess
+        bash = shutil.which("bash")
+        if not bash:
+            pytest.skip("no bash on this runner")
+        path = diresq.SCHEMA.parent / "scripts" / "diresq-macos-linux.sh"
+        done = subprocess.run([bash, "-n", str(path)],
+                              capture_output=True, text=True)
+        assert done.returncode == 0, done.stderr
+
+    def test_neither_launcher_claims_an_architecture(self):
+        # If anybody ever adds a "-x64" or "-arm64" variant, it will be a file
+        # that differs from its sibling only in the name.
+        for name in ("diresq-macos-linux.sh", "diresq-windows.ps1"):
+            text = self.script(name).lower()
+            assert "there is nothing compiled" in text
+
+
 class TestDuplicatesAreCountedAsOneIncident:
     """The point of detecting duplicates, finally spent.
 

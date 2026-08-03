@@ -19,7 +19,44 @@ python --version
 
 If that says 3.9 or lower, install a newer Python before going further.
 
-## Get it running
+## The short way: one file from the Releases page
+
+Every tagged release carries two launcher scripts. Download the one for your
+system, run it, and it does the rest — fetches the source for that version,
+builds an isolated environment, seeds the demo database, starts the server and
+opens the browser.
+
+```bash
+# macOS and Linux
+chmod +x diresq-macos-linux.sh && ./diresq-macos-linux.sh
+```
+
+```powershell
+# Windows
+powershell -ExecutionPolicy Bypass -File diresq-windows.ps1
+```
+
+Everything lands in a folder beside the script. Delete the folder and nothing
+is left on the machine.
+
+**These are scripts, not installers, and there is deliberately no binary.**
+Nothing in this project is compiled, so there is no 32-bit download and no
+64-bit download, no Intel build and no Apple Silicon build — Python source has
+no architecture. A page of downloads that differed only in their filenames
+would look more professional and tell you less.
+
+`SHA256SUMS.txt` is published alongside them. Verify before running anything
+you downloaded:
+
+```bash
+sha256sum -c SHA256SUMS.txt --ignore-missing
+```
+
+```powershell
+Get-FileHash diresq-windows.ps1 -Algorithm SHA256
+```
+
+## Get it running from a clone
 
 ```bash
 git clone https://github.com/Skythe7/DiresQ.git
