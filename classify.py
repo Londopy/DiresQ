@@ -792,7 +792,7 @@ def model_card() -> dict:
             "English only",
             "trained on flood and storm reports, weaker on anything else",
             "bag of words, so it cannot read 'no longer trapped' correctly",
-            "sixty examples is a demonstration, not a dataset",
+            "fifty-five examples is a demonstration, not a dataset",
             "English only — and it now says so instead of guessing: a report "
             "whose words it has never seen gets no suggestion at all",
             "duplicate detection misses rewordings that share no vocabulary",
