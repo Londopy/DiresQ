@@ -29,8 +29,8 @@ to prevent, and a preprint is permanent.
 
 | Section | State |
 | --- | --- |
-| 1. Introduction | drafted — Harvey source **found and open** (Smith et al. 2018, NSF-PAR); write the paragraph |
-| 2. Background and related work | **not started — blocked** on 3 unread papers |
+| 1. Introduction | **drafted and sourced** — Harvey paragraph written from Smith et al. (2018) |
+| 2. Background and related work | **not started** — 2 papers still closed (Kankanamge, Auferbauer); everything else in hand |
 | 3. Design | drafted; scheduler overstatement fixed |
 | 4. What building it taught us | drafted |
 | 5. Limitations | drafted |
