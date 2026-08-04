@@ -5362,6 +5362,79 @@ class TestTheBoardSurvivesADatabaseUnderLoad:
             "the sweep runs too rarely to notice silence on time")
 
 
+class TestASeededResponderCanActuallyBeSeen:
+    """The demo seeds responder positions. Two things stopped them showing.
+
+    The offset was at most ninety metres, and Leaflet draws markers in a pane
+    above circles — so the responder circle sat under the report teardrop and
+    was invisible. Nothing was missing from the data, which is why it looked
+    like nothing was wrong with the data.
+
+    And the offset came from `hash(username)`, which Python salts per process,
+    so the positions moved on every boot of a seed built to be identical for
+    every visitor.
+    """
+
+    REPORT = (29.7834, -95.8321)
+
+    @staticmethod
+    def metres(a, b):
+        import math
+        d_lat = (a[0] - b[0]) * 111_320
+        d_lng = (a[1] - b[1]) * 111_320 * math.cos(math.radians(a[0]))
+        return math.hypot(d_lat, d_lng)
+
+    def test_the_same_name_always_lands_in_the_same_place(self):
+        # `hash()` on a str is salted per process. A demo that claims every
+        # visitor sees the same incident cannot be built on it.
+        first = diresq.responder_position("londo", *self.REPORT)
+        assert first == diresq.responder_position("londo", *self.REPORT)
+        assert first == (29.784012, -95.830353), (
+            "the seeded position moved — is this still crc32?")
+
+    def test_the_source_does_not_use_pythons_salted_hash(self):
+        # Strip comments first. The docstring above the fix names the old
+        # call to explain it, and a check that matches its own explanation
+        # is the bug it is trying to prevent, one level up.
+        source = (diresq.SCHEMA.parent / "app.py").read_text(encoding="utf-8")
+        code = "\n".join(line for line in source.split("\n")
+                         if not line.lstrip().startswith("#"))
+        assert "= hash(" not in code
+        assert "hash(username) %" not in code
+
+    def test_a_responder_stands_clear_of_the_report(self):
+        # Under about a hundred metres it disappears beneath the teardrop.
+        for name in ("londo", "s.reyes", "j.okafor", "m.torres", "d.nguyen"):
+            away = self.metres(
+                diresq.responder_position(name, *self.REPORT), self.REPORT)
+            assert 120 <= away <= 300, f"{name} is {away:.0f} m from the report"
+
+    def test_two_responders_on_one_report_do_not_stack(self):
+        names = ("londo", "s.reyes", "j.okafor", "m.torres", "d.nguyen")
+        spots = [diresq.responder_position(n, *self.REPORT) for n in names]
+        for i in range(len(spots)):
+            for j in range(i + 1, len(spots)):
+                apart = self.metres(spots[i], spots[j])
+                assert apart > 40, (
+                    f"{names[i]} and {names[j]} are {apart:.0f} m apart")
+
+    def test_the_ring_is_round_rather_than_an_ellipse(self):
+        # Longitude degrees narrow with latitude. Without the correction the
+        # ring stretches east-west and the spacing stops being what it says.
+        near = self.metres(
+            diresq.responder_position("londo", 0.0, 0.0), (0.0, 0.0))
+        far = self.metres(
+            diresq.responder_position("londo", 60.0, 0.0), (60.0, 0.0))
+        assert abs(near - far) < 5, "the offset changes with latitude"
+
+    def test_the_seed_gives_somebody_a_position_to_show(self, client):
+        with diresq.app.app_context():
+            diresq.seed_data()
+            placed = [r for r in diresq.fetch_responders()
+                      if r.get("last_position")]
+        assert len(placed) >= 3, "the map has no responder circles to draw"
+
+
 class TestTheLegendDistinguishesAPersonFromAPlace:
     """A responder marker is coloured by *their* status, out of the same
     red/blue/green the report pins use. So colour cannot separate the two, and

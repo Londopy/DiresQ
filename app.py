@@ -44,6 +44,8 @@ from __future__ import annotations
 import base64
 import binascii
 import csv
+import math
+import zlib
 import io
 import os
 import re
@@ -2653,6 +2655,36 @@ def seed_minimal() -> tuple[int, int]:
     return len(accounts), len(reports)
 
 
+def responder_position(username: str, lat: float,
+                       lng: float) -> tuple[float, float]:
+    """Where to put a seeded responder relative to the report they joined.
+
+    Two bugs lived in the one line this replaces.
+
+    It used `hash(username)`, and Python salts string hashing per process —
+    so the demo moved every time the server booted. A seed whose whole point
+    is that every visitor arrives at the same incident cannot be built on a
+    number that changes at import. crc32 is stable across runs and versions.
+
+    And it offset by at most ninety metres, which put the responder under the
+    report. Leaflet draws markers in a pane above circles, so the responder
+    was not missing from the map — it was painted underneath the teardrop and
+    invisible at any useful zoom. Standing them off on a ring is what makes
+    "six people on one street" a thing you can see rather than infer.
+    """
+    n = zlib.crc32(username.encode())
+
+    bearing = math.radians(n % 360)
+    metres = 150 + (n // 360) % 120
+
+    # Degrees per metre. Longitude narrows with latitude, so the correction
+    # keeps the ring circular rather than an ellipse.
+    d_lat = metres * math.cos(bearing) / 111_320
+    d_lng = metres * math.sin(bearing) / (111_320 * math.cos(math.radians(lat)))
+
+    return round(lat + d_lat, 6), round(lng + d_lng, 6)
+
+
 def seed_data() -> tuple[int, int]:
     """Load a disaster already in progress.
 
@@ -2731,17 +2763,16 @@ def seed_data() -> tuple[int, int]:
                 "AND status = 'unassigned'", (report_id,))
 
             if checkin is not None:
-                # Scatter positions near the report so the map has something.
                 report = db.execute(
                     "SELECT lat, lng FROM reports WHERE id = ?", (report_id,)
                 ).fetchone()
-                jitter = (hash(username) % 9 - 4) / 5000
+                lat, lng = responder_position(username, report["lat"],
+                                              report["lng"])
                 db.execute("""
                     INSERT INTO checkins
                         (responder, lat, lng, created_at, received_at)
                     VALUES (?, ?, ?, ?, ?)
-                """, (who[username], report["lat"] + jitter,
-                      report["lng"] - jitter, ago(checkin), ago(checkin)))
+                """, (who[username], lat, lng, ago(checkin), ago(checkin)))
 
         db.commit()
     return len(SEED_ACCOUNTS), len(SEED_REPORTS)
