@@ -1,4 +1,45 @@
-# Paper outline — ISCRAM Work in Progress track
+# Paper outline — preprint first, reviewed venue second
+
+## Plan
+
+**1. SocArXiv preprint.** Free, no endorsement system (unlike arXiv), no
+institutional affiliation required — an OSF account and a working email is the
+whole gate. Moderation is a five-point check that the work is scholarly and
+correctly categorised; it is explicitly not peer review. Disciplinary fit is
+good: this paper cites disaster sociology and crisis informatics, which is where
+SocArXiv lives. Gives a citable, timestamped, permanent record with a DOI.
+
+*Note: the **generalist** OSF Preprints server was suspended indefinitely in
+October 2025. Community servers including SocArXiv are unaffected and open.
+Submit to SocArXiv specifically, not to "OSF Preprints".*
+
+**2. A reviewed venue afterwards.** A preprint is not peer review and does not
+give us the thing we actually want. JORS states outright that preprinting is not
+previous publication, and conference venues generally agree — so posting first
+costs nothing. Candidates, in order: ISCRAM WiP (pending the attendance and
+cost question), a CHI/CSCW/ICT4D workshop, JORS with an APC waiver requested in
+the cover letter.
+
+**Do not post to SocArXiv until §2 is written.** The entire point of the
+literature review was to avoid claiming novelty that is not there. Posting
+publicly with that claim unverified is the specific failure we have been working
+to prevent, and a preprint is permanent.
+
+## Status
+
+| Section | State |
+| --- | --- |
+| 1. Introduction | drafted — **blocked** on the Harvey source |
+| 2. Background and related work | **not started — blocked** on 3 unread papers |
+| 3. Design | drafted; scheduler overstatement fixed |
+| 4. What building it taught us | drafted |
+| 5. Limitations | drafted |
+| 6. Future work | drafted |
+| Abstract | write last |
+
+---
+
+## Target venue notes — ISCRAM Work in Progress track
 
 Target: **ISCRAM 2027, WiP track.** The 2026 deadlines were 9 Jan (CoRe) and
 23 Feb (WiP/PiP); the 2027 call is not published yet, so assume

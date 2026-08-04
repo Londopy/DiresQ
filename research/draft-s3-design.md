@@ -57,12 +57,15 @@ gone home without saying so. The system cannot tell these apart and does not
 claim to. It reports *contact lost*, never *safe* or *unsafe*, and the interface
 language was rewritten twice to stop implying otherwise.
 
-**The switch has no scheduler.** Our first design ran the silence check as a
-background job. We removed it. A scheduled task can die without anyone
-noticing, and an alarm that has silently stopped is worse than no alarm, because
-a green screen is read as a positive result rather than an absent one. The check
-now runs on read: whenever anyone loads the accountability board, the sweep runs
-first, rate-limited to once every thirty seconds.
+**No in-process timer.** Our first design ran the silence check on a background
+thread inside the application. We removed it. A thread that dies takes the alarm
+with it and leaves the interface showing green, and a green screen is read as a
+positive result rather than an absent one. The check now runs on read: whenever
+anyone loads the accountability board, the sweep runs first, rate-limited to
+once every thirty seconds. An *external* scheduler is supported and optional
+(`flask --app app sweep` from cron or Task Scheduler) — deliberately external,
+because an external scheduler that fails is at least visible to the machine
+running it, which an in-process timer is not.
 
 This trades one dependency for another. A timer that might die becomes a check
 that depends on being watched. We consider that the better failure — an

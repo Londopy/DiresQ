@@ -4,13 +4,13 @@ Status: **first draft, unreviewed.** Same conventions as `draft-s3-design.md`:
 `[CHECK]` = true but I cannot tell how it reads from outside; `[CUT?]` = suspect
 it is too much for a WiP paper.
 
-> **Correction to §3, found while writing this.** `draft-s3-design.md` says the
-> switch "has no scheduler." That overstates it. There is no *internal
-> background thread*, but `flask --app app sweep` runs the same check from cron
-> or Task Scheduler — it is supported and optional, not absent. The honest claim
-> is: *no in-process timer; an external scheduler is available and unrequired.*
-> Fix §3 before either section is shown to anyone. This is exactly the kind of
-> overstatement a reviewer catches and it would cost more than it gains.
+> **Correction to §3 — now applied.** `draft-s3-design.md` originally said the
+> switch "has no scheduler," which overstated it: there is no *in-process
+> thread*, but `flask --app app sweep` runs the same check from cron or Task
+> Scheduler, supported and optional. §3 now says *no in-process timer; an
+> external scheduler is available and unrequired.* Left recorded here because
+> the near-miss is instructive: the overstatement was more quotable than the
+> truth, which is how overstatements survive drafting.
 
 ---
 
