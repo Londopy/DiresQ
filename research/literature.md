@@ -191,6 +191,56 @@ resolved.**
 
 Until one of those happens, §2's taxonomy paragraph stays marked `[UNREAD]`.
 
+## Leads from Liu's citation list (99 citing papers, via EUSSET)
+
+EUSSET's record for Liu is metadata-only — no full text — but it exposes every
+paper that cites her. That list turned out to be worth more than the paper. Read
+in this order:
+
+**1. Kankanamge, Yigitcanlar, Goonetilleke & Kamruzzaman (2019), "Can volunteer
+crowdsourcing reduce disaster risk? A systematic review of the literature,"
+*IJDRR*.** `doi:10.1016/j.ijdrr.2019.101097`
+A systematic review reads the field so we do not have to. Highest value per
+hour of anything remaining on this list. If a system like ours exists, a
+systematic review is where it will be named. **Read this before the Starbird
+dissertation.**
+
+**2. Auferbauer & Tellioğlu (2017), "Centralized Crowdsourcing in Disaster
+Management," C&T.** `doi:10.1145/3083671.3083689`
+The title addresses our exact axis. Either it argues centralisation is
+necessary — in which case we have a named position to argue against, which is
+better than arguing into a vacuum — or it has already explored the
+decentralised alternative, in which case we need to know now. **This is the
+remaining novelty risk, more than Liu herself.**
+
+**3. Baker & Deham (2019), "For a short time, we were the best version of
+ourselves: Hurricane Harvey and the ideal of community," *Int. J. Emergency
+Services*.** `doi:10.1108/ijes-12-2018-0066`
+Harvey is our motivating case and the outline flags every Harvey claim as
+needing a source. This is that source, and it is peer-reviewed rather than
+journalism.
+
+**Also noted, lower priority:**
+
+- Middelhoff et al. (2016), crowdsourcing field experiment simulating a flood in
+  The Hague — `doi:10.1109/ict-dm.2016.7857212`. Relevant as *evaluation
+  methodology*: a simulated event is how you evaluate a system like ours without
+  waiting for a disaster. Read when we get serious about moving to CoRe.
+- Park & Johnston (2017), framework for analysing digital volunteer
+  contributions — `doi:10.1177/1461444817706877`.
+- Alswailim, Hassanein & Zulkernine (2017), "A Participant Contribution Trust
+  Scheme for Crisis Response Systems" — `doi:10.1109/glocom.2017.8253927`.
+  Trust without a central authority. Adjacent to our problem from the security
+  direction.
+- dos Santos Rocha et al. (2017), "Improving the Involvement of Digital
+  Volunteers in Disaster Management" — `doi:10.1007/978-3-319-68486-4_17`.
+- Song, Zhang & Dolan (2020), self-organising processes of crowdsourcing,
+  *Sustainability* — `doi:10.3390/su12051862`. MDPI, so open access.
+
+**Note on strategy:** chasing Liu's PDF has become the wrong priority. Her
+framework is a design checklist we can apply from the abstract. Items 1 and 2
+above are where an actual collision with prior work would show up.
+
 ## Searches still to run
 
 - [ ] ISCRAM proceedings: "spontaneous volunteer", "convergence",
