@@ -182,7 +182,9 @@ aspiration.
 
 ## Before submission — checklist
 
-- [ ] Read Liu (2014); fill §2 taxonomy paragraph; find out which box we are in
+- [ ] **Get Liu (2014) full text — paywalled, abstract read, framework tables unseen.**
+      Email `sophialiu@usgs.gov` for a copy, or interlibrary loan. This is the
+      last real novelty risk; §2 stays `[UNREAD]` until it is closed.
 - [ ] Read Starbird dissertation convergence chapters
 - [ ] Prior-art check on the two accountability patents
 - [ ] Verify every Harvey factual claim against a source

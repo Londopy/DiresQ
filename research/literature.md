@@ -149,7 +149,7 @@ generalise its security findings to a hurricane.
 | --- | --- | --- | --- |
 | Starbird & Palen, *Voluntweeters* (CHI 2011) | Digital volunteers self-organise after disaster with no prior structure. Fits Kreps & Bosworth's D/A/R/T model in an R→A→T→D order: Twitter itself is the *resource* that lets a stranger start. | 339 twitterers, 292,928 tweets (Haiti, Jan 10–Feb 1 2010); hand-coded 2,911 syntax tweets; 19 completed email interviews of 74 identified translators. | **Everyone in it is remote.** The population is defined as people helping from other continents. Nobody is in the hazard, so nobody needs accounting for. No safety mechanism, no check-in, no escalation — the problem does not arise. Organising runs on Twitter affordances (hashtags, @-addressivity) and interpersonal trust built over days, not on anything built for the purpose. |
 | Starbird, *Crowdwork, Crisis and Convergence* (2012 diss.) | | | |
-| Liu, *Crisis Crowdsourcing Framework* (CSCW 2014) | | | |
+| Liu, *Crisis Crowdsourcing Framework* (CSCW 2014), 23(4):389–443 — **ABSTRACT ONLY. Paywalled at Springer (`meta-access: No`); no open-access copy found.** | A *design* framework for crowdsourcing systems: determine the why / who / what / when / where / how, then design the **STOP interfaces** — social, technological, organizational, policy — that manage the "articulation work" of coordinating across them. Built from vignettes tracing Haiti 2010 onward. | Vignettes plus synthesis of crisis informatics, disaster sociology and CSCW literature. Cannot assess the evidence properly without the body. | **Unknown — this is the open risk.** The framework tables (Table 3 and after) are behind the paywall and are exactly where a box that pre-empts us would live. What the abstract *does* show is directional: the arc described runs from spontaneous emergence toward "more established forms of public engagement" and being "integrated into official products and services." The organizational and policy interfaces presuppose an institution doing the crowdsourcing. Liu is USGS. That is the opposite direction from ours. |
 | FEMA, *Managing Spontaneous Volunteers in Times of Disaster* | | | |
 | ASPR TRACIE, Volunteer Management topic collection | | | |
 | ERHMS framework (responder health monitoring) | | | |
@@ -157,6 +157,39 @@ generalise its security findings to a hurricane.
 | US 8995946 / 9497610 (personnel accountability patents) | | | |
 | Kendra & Wachtendorf, *Rebel Food… Renegade Supplies* (DRC Preliminary Paper 316, 2001/02) — **read this, not the 2003 chapter.** Same authors, same fieldwork, adjacent argument; the 2003 book chapter is paywalled at Emerald. | Convergence at the WTC follows Fritz & Mathewson's types, plus a sixth (fans/supporters). Access to the *response milieu* is **negotiated legitimacy**, not a right. The volunteers who got in were those who could work unsupervised. | 750+ collective hours of field observation beginning within 48h of the attack; EOC, Javits Center, Family Assistance Center, command posts, staging areas; 500+ photographs. | **No technology of any kind.** Accountability appears only as *credentialing by an authority* — badge systems that 'evolved and intensified on almost a twice-daily basis.' The volunteer never accounts for themselves. And the volunteer's own safety is essentially absent: the hazard discussion concludes *keep untrained people out*, never *track the ones who go in*. Presupposes gatekeepers exist. |
 | Kreps & Bosworth, *Organizing, Role Enactment, and Disaster* (1994) | | | *Found via Voluntweeters ref [9]. The D/A/R/T structural theory. Candidate theoretical frame.* |
+
+## Liu 2014: what the abstract settles, and what it does not
+
+**Settled.** Liu's contribution is a *framework for designing* crowdsourcing
+systems, not a survey of systems that exist. That distinction matters more than
+it sounds: a design framework cannot pre-empt a system's novelty the way a
+catalogue could. It is a checklist to be applied, and applying it to DiresQ is a
+thing we could do in the paper rather than a threat to be defended against.
+
+**Also settled, and useful.** The trajectory Liu describes runs *toward*
+formalisation — spontaneous emergence after Haiti, then "more established forms
+of public engagement," then integration "into official products and services."
+Two of the four STOP interfaces are *organizational* and *policy*. Both
+presuppose an institution running the crowdsourcing effort. Liu writes from
+USGS. This is the same assumption Kendra & Wachtendorf make from the other
+direction, and it is now the second independent source pointing at it. Our
+position — the interval before any institution exists — is the one place this
+literature consistently does not reach.
+
+**Not settled, and it is the live risk.** The framework's own tables are behind
+the paywall. If a box exists that already describes self-service accountability
+with no coordinator, it is in there. **Do not write §2 as though this is
+resolved.**
+
+**Two ways to close it, in order of speed:**
+
+1. Email the author. Liu's address is on the paper: `sophialiu@usgs.gov`. She is
+   a US government scientist; authors routinely send copies on request, and a
+   high-school team saying plainly what they are building is a reasonable ask.
+   Cost: one email, a few days.
+2. Interlibrary loan through a school or public library.
+
+Until one of those happens, §2's taxonomy paragraph stays marked `[UNREAD]`.
 
 ## Searches still to run
 
