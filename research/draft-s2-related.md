@@ -18,12 +18,20 @@ Status: **first draft, unreviewed.**
 ### 2.1 Convergence
 
 People moving toward a disaster is one of the field's oldest documented
-behaviours. Fritz and Mathewson (1957) named it *convergence* and separated
-*external* convergence — movement toward the affected area from outside — from
-*internal* convergence, movement toward particular points within it. They
-further distinguished personal, informational, and materiel convergence, and
-catalogued five kinds of personal converger: returnees, the anxious, helpers,
-the curious, and exploiters. `[SECONDARY]`
+behaviours. Fritz and Mathewson (1957) named it *convergence behavior* —
+*"the informal, spontaneous movement of people, messages, and supplies toward
+the disaster area"* — and observed that it *"brings needed aid to many victims,
+but at the same time the resultant congestion makes organization and control of
+the rescue and relief efforts more difficult."* They separate movement *"toward
+the struck area from the outside — external convergence"* from *"movement toward
+specific points within a given disaster-related area or zone — internal
+convergence"*, distinguish three forms (personal, informational, materiel), and
+catalogue five types of personal converger: the returnees, the anxious, the
+helpers, the curious, and the exploiters. `[FULL]`
+
+It is worth noting that the founding treatment frames convergence as a control
+problem — its subtitle is *A Problem in Social Control* — and that this framing
+has been remarkably durable. The paper's own position is stated in §5.
 
 Kendra and Wachtendorf (2003), studying the response to the World Trade Center
 attack across more than 750 collective hours of field observation, added a sixth
@@ -155,13 +163,13 @@ That interval is this paper's subject, and the design in §3 is one attempt at i
 
 ## Citation debts to clear before submission
 
-**`[SECONDARY]` — Fritz & Mathewson (1957).** Cited through Kendra &
-Wachtendorf's summary and FEMA's. The five types and the external/internal and
-personal/informational/materiel distinctions are consistent across both
-secondary sources, which is reassuring but is not the same as having read the
-original. It is a 1957 National Academy of Sciences / National Research Council
-committee report; try the National Academies Press and HathiTrust. **Either read
-it or attribute it explicitly as reported by Kendra & Wachtendorf.**
+**`[FULL]` — Fritz & Mathewson (1957). DEBT CLEARED.** Obtained via the Internet
+Archive (`archive.org/details/convergencebehav00fritrich`); the 1957 National
+Academy of Sciences / National Research Council report carries no copyright
+notice and the scan is openly readable. Every claim we make about it — the three
+forms, the five types, the external/internal distinction, the definition — is
+now verified against the original text rather than against two secondary
+summaries. Both summaries were, for the record, accurate.
 
 **`[ABSTRACT]` — Liu (2014).** Paywalled at Springer; abstract read, framework
 tables unseen. Every sentence citing Liu above is a restatement of her abstract.

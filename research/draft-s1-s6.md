@@ -15,10 +15,15 @@ Status: **first draft, unreviewed.**
 
 ## 1. Introduction
 
-When a disaster is large enough, people go toward it. This is among the
-oldest findings in disaster sociology: Fritz and Mathewson named the behaviour
-*convergence* in 1957 and catalogued five kinds of person who arrive —
-returnees, the anxious, helpers, the curious, and exploiters. Kendra and
+When a disaster is large enough, people go toward it. This is among the oldest
+findings in disaster sociology. Fritz and Mathewson named it in 1957 —
+*"the informal, spontaneous movement of people, messages, and supplies toward
+the disaster area"* — and catalogued five kinds of person who arrive: the
+returnees, the anxious, the helpers, the curious, and the exploiters. Their
+report is subtitled *A Problem in Social Control*, and the observation it opens
+with has not dated: convergence *"brings needed aid to many victims, but at the
+same time the resultant congestion makes organization and control of the rescue
+and relief efforts more difficult."* Kendra and
 Wachtendorf, studying the response to the World Trade Center attack, added a
 sixth and reframed the central question. Access to what they call the *response
 milieu* is not granted; it is negotiated. A volunteer's admission depends on
