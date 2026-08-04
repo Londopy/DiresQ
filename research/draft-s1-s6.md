@@ -24,8 +24,8 @@ report is subtitled *A Problem in Social Control*, and the observation it opens
 with has not dated: convergence *"brings needed aid to many victims, but at the
 same time the resultant congestion makes organization and control of the rescue
 and relief efforts more difficult."* Kendra and
-Wachtendorf, studying the response to the World Trade Center attack, added a
-sixth and reframed the central question. Access to what they call the *response
+Wachtendorf (2002), studying the response to the World Trade Center attack,
+added a sixth and reframed the central question. Access to what they call the *response
 milieu* is not granted; it is negotiated. A volunteer's admission depends on
 whether the people already inside can afford them.
 

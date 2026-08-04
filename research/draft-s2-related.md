@@ -33,7 +33,7 @@ It is worth noting that the founding treatment frames convergence as a control
 problem — its subtitle is *A Problem in Social Control* — and that this framing
 has been remarkably durable. The paper's own position is stated in §5.
 
-Kendra and Wachtendorf (2003), studying the response to the World Trade Center
+Kendra and Wachtendorf (2002), studying the response to the World Trade Center
 attack across more than 750 collective hours of field observation, added a sixth
 — supporters or fans — and, more importantly for us, reframed the question.
 Access to what they term the *response milieu* is not a status a volunteer
@@ -50,7 +50,10 @@ DiresQ's users are helpers, converging externally and then internally.
 
 ### 2.2 Legitimacy, credentialing, and what both presuppose
 
-Kendra and Wachtendorf's central finding concerns who gets in. At the World
+Kendra and Wachtendorf's central finding concerns who gets in. (We cite their
+Disaster Research Center preliminary paper throughout, because it is the text
+we read; the 2003 book chapter develops the same fieldwork and is listed in the
+references for completeness.) At the World
 Trade Center, identification requirements *"evolved and intensified on almost a
 twice-daily basis"*, and volunteers became *"another group that needed to be
 accounted for, and therefore potentially a distraction that outweighed their
@@ -137,9 +140,9 @@ therefore make no claim about its findings; it is listed here because a reader
 working in this area will expect to see it and should know we are aware of it.
 
 Technical work on the classification side is considerably more advanced than
-ours. Zhou et al. (2022) fine-tune BERT variants over 3,191 hand-labelled tweets
-from Hurricane Harvey to identify rescue requests, reporting an F1 of 0.919 for
-their best model. `[ABSTRACT]` Our own priority suggestion (§3.3) is a naive
+ours. Zhou et al. (2022) fine-tune BERT variants over a hand-labelled corpus of
+Hurricane Harvey tweets to identify rescue requests, and substantially outperform
+the earlier baselines they compare against. `[ABSTRACT]` Our own priority suggestion (§3.3) is a naive
 Bayes classifier over a small hand-labelled corpus, and is not competitive with
 this work, nor intended to be: it exists to run in a browser with no network,
 which is a different constraint rather than a weaker attempt at the same one.
@@ -187,13 +190,12 @@ statement that we make no claim about its findings. This is honest but weak; a
 systematic review in our exact area that we have not read is the most likely
 place for a reviewer to find something we missed.
 
-**`[ABSTRACT]` — Zhou et al. (2022). Readable, so clear this one.** Semantic
-Scholar reports `isOpenAccess: true`, status **BRONZE** — free to read on
-Elsevier's site but under no open licence, which is why the PDF cannot be
-fetched programmatically. Open `doi.org/10.1016/j.compenvurbsys.2022.101824` in
-a browser and verify the F1 of 0.919 and the 3,191-tweet corpus. **These are
-specific numbers about somebody else's work that we would be printing**; an
-abstract is not good enough for that.
+**`[ABSTRACT]` — Zhou et al. (2022). Resolved by removing the numbers.** The
+F1 of 0.919 and the 3,191-tweet corpus were taken from the abstract, and an
+abstract is not good enough to print somebody else's results from. The sentence
+now makes only the qualitative claim the abstract clearly supports. If you read
+the paper (Bronze OA — `doi.org/10.1016/j.compenvurbsys.2022.101824` opens free
+in a browser), put the figures back; they are more persuasive than the prose.
 
 ## Notes for revision
 

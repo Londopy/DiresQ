@@ -40,8 +40,8 @@ report is subtitled *A Problem in Social Control*, and the observation it opens
 with has not dated: convergence *"brings needed aid to many victims, but at the
 same time the resultant congestion makes organization and control of the rescue
 and relief efforts more difficult."* Kendra and
-Wachtendorf, studying the response to the World Trade Center attack, added a
-sixth and reframed the central question. Access to what they call the *response
+Wachtendorf (2002), studying the response to the World Trade Center attack,
+added a sixth and reframed the central question. Access to what they call the *response
 milieu* is not granted; it is negotiated. A volunteer's admission depends on
 whether the people already inside can afford them.
 
@@ -162,7 +162,7 @@ It is worth noting that the founding treatment frames convergence as a control
 problem — its subtitle is *A Problem in Social Control* — and that this framing
 has been remarkably durable. The paper's own position is stated in §5.
 
-Kendra and Wachtendorf (2003), studying the response to the World Trade Center
+Kendra and Wachtendorf (2002), studying the response to the World Trade Center
 attack across more than 750 collective hours of field observation, added a sixth
 — supporters or fans — and, more importantly for us, reframed the question.
 Access to what they term the *response milieu* is not a status a volunteer
@@ -179,7 +179,10 @@ DiresQ's users are helpers, converging externally and then internally.
 
 ### 2.2 Legitimacy, credentialing, and what both presuppose
 
-Kendra and Wachtendorf's central finding concerns who gets in. At the World
+Kendra and Wachtendorf's central finding concerns who gets in. (We cite their
+Disaster Research Center preliminary paper throughout, because it is the text
+we read; the 2003 book chapter develops the same fieldwork and is listed in the
+references for completeness.) At the World
 Trade Center, identification requirements *"evolved and intensified on almost a
 twice-daily basis"*, and volunteers became *"another group that needed to be
 accounted for, and therefore potentially a distraction that outweighed their
@@ -266,9 +269,9 @@ therefore make no claim about its findings; it is listed here because a reader
 working in this area will expect to see it and should know we are aware of it.
 
 Technical work on the classification side is considerably more advanced than
-ours. Zhou et al. (2022) fine-tune BERT variants over 3,191 hand-labelled tweets
-from Hurricane Harvey to identify rescue requests, reporting an F1 of 0.919 for
-their best model. Our own priority suggestion (§3.3) is a naive
+ours. Zhou et al. (2022) fine-tune BERT variants over a hand-labelled corpus of
+Hurricane Harvey tweets to identify rescue requests, and substantially outperform
+the earlier baselines they compare against. Our own priority suggestion (§3.3) is a naive
 Bayes classifier over a small hand-labelled corpus, and is not competitive with
 this work, nor intended to be: it exists to run in a browser with no network,
 which is a different constraint rather than a weaker attempt at the same one.
@@ -605,6 +608,19 @@ We are aware that all of this describes work requiring access to a professional
 community that two secondary-school students do not have. We would welcome
 collaboration, and we mention it here rather than in an acknowledgement because
 it is a limitation on the research, not a courtesy.
+
+## Statement on the use of generative AI
+
+*Draft. See `research/draft-disclosure.md` — several clauses are marked as not
+yet true and must be corrected before submission.*
+
+The prose of this paper was drafted with substantial assistance from Claude
+(Anthropic). The authors set the research question, selected or approved the
+sources, directed the structure and argument of every section, and made all
+design decisions described in §3. Three sources — Liu (2014), Auferbauer &
+Tellioğlu (2017) and Kankanamge et al. (2019) — are cited only for positions
+stated in their abstracts, which is marked in the text. The authors have
+reviewed and verified the content and take responsibility for it.
 
 ## References
 
