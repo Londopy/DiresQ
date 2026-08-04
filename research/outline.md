@@ -30,12 +30,12 @@ to prevent, and a preprint is permanent.
 | Section | State |
 | --- | --- |
 | 1. Introduction | **drafted and sourced** — Harvey paragraph written from Smith et al. (2018) |
-| 2. Background and related work | **not started** — 2 papers still closed (Kankanamge, Auferbauer); everything else in hand |
+| 2. Background and related work | **drafted** — 4 citation debts marked `[ABSTRACT]`/`[SECONDARY]`, listed in the draft |
 | 3. Design | drafted; scheduler overstatement fixed |
 | 4. What building it taught us | drafted |
 | 5. Limitations | drafted |
 | 6. Future work | drafted |
-| Abstract | write last |
+| Abstract | **the only section not drafted** — write it, then assemble |
 
 ---
 
