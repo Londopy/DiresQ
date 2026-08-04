@@ -2,12 +2,14 @@
 
 Status: **first draft, unreviewed.**
 
-> **`[SOURCE NEEDED]` marks a factual claim about the world that I have not
-> verified.** Every one must be sourced or cut before this is posted anywhere.
-> The outline's rule stands: no number about Harvey that we have not read in a
-> source. Baker & Deham (2019), *"For a short time, we were the best version of
-> ourselves: Hurricane Harvey and the ideal of community"*, is the intended
-> source and is unread.
+> **Harvey material is now sourced.** Every figure and quotation in §1 comes from
+> Smith, Robertson, Murthy, Stephens & Li (2018), *"Social Media in Citizen-Led
+> Disaster Response: Rescuer Roles, Coordination Challenges, and Untapped
+> Potential"*, Proceedings of the 15th ISCRAM Conference, pp. 639–648. Open
+> access via NSF-PAR 10076203. Nothing here is written from memory.
+>
+> Baker & Deham (2019) was the intended source and turned out to be critical
+> theory with no Harvey specifics to cite. It is still useful — see §5.
 
 ---
 

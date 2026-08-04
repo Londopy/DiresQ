@@ -153,6 +153,21 @@ over-reporting need. We prefer that direction and note that we chose it.
 
 **Lockouts live in memory** and do not survive a restart.
 
+**The volunteers we claim to serve asked for the opposite.** Smith et al. (2018)
+interviewed twenty Harvey rescuers and dispatchers, and the structural complaint
+that came back was a wish for *more* coordination, not less. One dispatcher, on
+being unable to prioritise calls: *"people that are trained to do that need to be
+in charge of prioritizing calls and assigning."* Another described sending boats
+away because too many had converged on one neighbourhood.
+
+This is the strongest available argument against our design, and it comes from
+the population the design is for. We do not think it defeats the argument — the
+wish for a trained coordinator does not summon one, and the interval before one
+exists is exactly our subject — but a reader should weigh it. A system that
+makes self-deployment easier and better-accounted-for may also make it more
+attractive, and Smith et al. document a response that suffered from too many
+boats as well as too little information.
+
 ### A position rather than a finding
 
 The literature we build on treats converging volunteers as a population to be
