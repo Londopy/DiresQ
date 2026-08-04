@@ -14,7 +14,7 @@ and changing venue does not mean copying the paper.
 
 ## Read before submitting
 
-This bundle is a **draft**. Three things are outstanding; a fourth was fixed on
+This bundle is a **draft**. Four things are outstanding; another was fixed on
 4 August 2026 and is recorded below so the change is visible.
 
 **Verified to build.** pdfLaTeX + BibTeX + pdfLaTeX x2 completes with no errors,
@@ -55,17 +55,41 @@ If the venue supplies a class file, use theirs instead of `article` — and chec
 whether it already loads a citation package, since loading `natbib` twice will
 error.
 
-## 2. Kendra & Wachtendorf — cite 2002, not 2003
+## 2. Author block — two things left open (added 4 Aug 2026)
+
+The title block now uses `authblk`. London's affiliation, email and ORCID are
+filled in. Two gaps:
+
+**Jesslyn's affiliation is a visible placeholder** — `[AFFILIATION TO BE
+SUPPLIED]` prints in bold on the title page. It is deliberately impossible to
+miss rather than silently blank.
+
+**Section 6 says "two secondary-school students."** The title page now claims a
+university affiliation. Those two statements cannot both be right, and
+SocArXiv's red-flag list includes "enterprise misrepresentation (e.g., false or
+misleading description of the research project)." Fix one of them:
+
+- if the work was done in secondary school and London has since started at Cal
+  Poly, say that — e.g. "this work was carried out while the authors were
+  secondary-school students"; it is accurate and it is not a weakness
+- if that sentence is simply out of date, rewrite it
+
+The sentence is `content.tex`, in Section 6, last paragraph.
+
+## 3. Kendra & Wachtendorf — cite 2002, not 2003
 
 Every quotation attributed to them was read in **Preliminary Paper 316 (2002)**
 (`kendra2002`), not the 2003 book chapter (`kendra2003`), which is paywalled and
 unread. Both are in the .bib. **Quote `kendra2002`.** `kendra2003` is there so a
 reader can find the published version, and its `note` field says so.
 
-## 3. Three sources cited from abstracts only
+## 4. Three sources cited from abstracts only
 
 `liu2014`, `auferbauer2017`, `kankanamge2019` — each cited only for a position
-its abstract states outright, never for a finding. `kankanamge2019` is a
+its abstract states outright, never for a finding. **A Cal Poly login very
+likely clears all three**: Springer (Liu), the ACM Digital Library (Auferbauer)
+and Elsevier/ScienceDirect (Kankanamge, Zhou) are standard university
+subscriptions. Try the library proxy before anything else. `kankanamge2019` is a
 systematic review in this exact area; if a competing system exists, that is
 where it would be named.
 
@@ -73,7 +97,7 @@ where it would be named.
 figures were removed from the text because they could not be verified; put them
 back if you read it, they are more persuasive than the prose.
 
-## 4. Statement on the use of generative AI
+## 5. Statement on the use of generative AI
 
 `content.tex` ends with two versions before the bibliography. **Use one, delete
 the other.**
