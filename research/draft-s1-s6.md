@@ -41,12 +41,41 @@ appear to assist in the emergency response are, virtually by definition,
 strangers to the response milieu."* The literature names the problem and, so far
 as we have found, proposes no mechanism for the interval before command exists.
 
-`[SOURCE NEEDED — the Harvey paragraph. Intended shape: private boat owners
-self-deploying into flooded Houston neighbourhoods, organising through social
-media, with no roster and nobody counting them out. Every specific in this
-paragraph — how many, how organised, what went wrong — must come from Baker &
-Deham (2019) or an equally citable source. Do not write it from memory or from
-news recollection.]`
+Hurricane Harvey makes the interval concrete. In August 2017 flooding in the
+Greater Houston area affected an estimated 30,000–40,000 homes, and city
+officials and FEMA publicly asked citizens with boats to help reach people
+trapped inside them (Smith et al., 2018). Thousands came. They organised through
+Zello, a push-to-talk application, along with Facebook groups, NextDoor, ad hoc
+Google spreadsheets, and applications written during the event itself.
+Interviewing twenty of these volunteers, Smith et al. found at least twenty
+distinct groups with, between them, *"no way to seamlessly share information and
+coordinate activity."* Affiliation was nominal: membership of the loose "Cajun
+Navy" was *"fleeting"*, leadership *"fluid and dispersed"*, boundaries unclear.
+
+What went wrong is documented in the volunteers' own words. One dispatcher
+described the coordination problem exactly:
+
+> "it became overwhelming just trying to keep track of who was going out who was
+> coming back who was out on a boat, **can we account for everyone**, and who's
+> in their house and it was a mess." — Gary, in Smith et al. (2018)
+
+The gap this paper addresses is not one we inferred. It was stated by a person
+who was in it.
+
+Smith et al. name three coordination failures — incomplete feedback loops,
+unclear prioritisation, and communication overload — and close by calling for
+*"the design of intuitive systems that can quickly be mastered by the novice
+social media user."* This paper is an attempt at one narrow part of that.
+
+Two details from that study bear directly on the design that follows. First, the
+accountability function was being performed — badly — by *families*: rescuers
+reported phones "constantly blowing up" with relatives asking *"are you okay,
+are you okay, are you okay."* Somebody was always going to ask the question; the
+question simply had nowhere to be answered. Second, volunteers' phones were
+destroyed by rain and floodwater in numbers large enough that many replaced them
+afterwards — which is direct evidence that silence and danger are genuinely
+different things, and that any system escalating on silence will produce false
+alarms.
 
 This paper reports the design of **DiresQ**, a system that attempts
 accountability for such volunteers without a coordinator. Its central move is to
@@ -95,8 +124,16 @@ it is a limitation on the research, not a courtesy.
 
 ## Notes for revision
 
-- The Harvey paragraph is the single blocking item in §1. Read Baker & Deham
-  first, then write it, then check every specific against the paper.
+- Harvey paragraph **written from Smith et al. (2018)**, ISCRAM 15, NSF-PAR
+  10076203. Every figure and quotation above is from that paper. Re-verify the
+  30,000–40,000 homes figure against their wording before submission — they
+  attribute it loosely and we should not sharpen it.
+- **A complication we must not hide, for §5.** The volunteers in Smith et al.
+  wanted *more* structure, not less. Harriett: *"people that are trained to do
+  that need to be in charge of prioritizing calls and assigning."* That is an
+  argument against a coordinator-free design, made by the population we claim to
+  serve. It must appear in the limitations, stated as plainly as this, or a
+  reviewer who has read Smith et al. will conclude we read it selectively.
 - §1 currently quotes Kendra & Wachtendorf twice. One quotation is stronger than
   two; consider paraphrasing the credentialing one and keeping the Weick/Perrow
   sentence verbatim, since that one is doing structural work.
