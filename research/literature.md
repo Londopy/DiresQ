@@ -241,6 +241,84 @@ journalism.
 framework is a design checklist we can apply from the abstract. Items 1 and 2
 above are where an actual collision with prior work would show up.
 
+## Accessibility check — where the remaining papers actually are
+
+### Open, full text, free
+
+**Smith, Stephens, Robertson, Li & Murthy (2018), "Social Media in Citizen-Led
+Disaster Response: Rescuer Roles, Coordination Challenges, and Untapped
+Potential."** ISCRAM proceedings. NSF-PAR 10076203 →
+`https://par.nsf.gov/servlets/purl/10076203`
+
+**This is the §1 Harvey source, not Baker & Deham.** Semi-structured interviews
+and photo elicitation on how wide-scale rescues actually happened in Greater
+Houston in 2017. Citizens took one of three roles — **rescuer, dispatcher,
+information compiler** — and the three coordination problems they hit were
+**incomplete feedback loops**, unclear prioritisation, and communication
+overload.
+
+"Incomplete feedback loops" is our gap, named empirically, by people who
+interviewed the volunteers. It is a stronger opening than anything we could
+assert ourselves.
+
+Two bonuses: it is an ISCRAM paper, so it is *also* a template for the venue we
+are targeting; and it is a **Work in Progress** paper, so it shows what that
+track accepts.
+
+**Baker & Deham (2019).** NSF-PAR 10126439 →
+`https://par.nsf.gov/servlets/purl/10126439`
+
+Open, but **not what we assumed.** It is co-autoethnographic critical theory —
+"ephemeral utopia", modernity as domination, institutions appropriating the
+public's response. Its own limitations section says: *"This work produces theory
+rather than engage in testing theory."* Do not mine it for Harvey facts or
+numbers; there are none to mine. It is useful for one thing only, and it is a
+good thing: it argues that institutions should *defer to the potentials of
+publics rather than disdain and appropriate them*, which is a citable ally for
+our §5 moral position against Kendra & Wachtendorf's framing.
+
+### Metadata only — body still behind a paywall
+
+**Auferbauer & Tellioğlu (2017).** EUSSET and TU Wien both hold metadata with an
+empty fulltext field; ACM DL is canonical. TU Wien points at
+`comtech.community/papers-full-and-short/` as a public copy, which did not
+render for me — **worth trying by hand.**
+
+**But the risk has dropped.** The full abstract is now in hand: crowdtasking is
+described as *"a **centralized** form of crowdsourcing for crisis and disaster
+management"*, with a prototype and a first field trial. Centralised by
+declaration. That is the opposite pole from ours, which makes it a named
+position to argue against rather than a claim that pre-empts us. Still read it —
+their field trial is the evaluation method we want — but it is no longer the
+thing most likely to sink the paper.
+
+**Kankanamge et al. (2019).** QUT ePrints record exists at
+`eprints.qut.edu.au/127136` and is indexed as having full text; the page would
+not render for me. Try it directly.
+
+### The finding that matters more than any single paper
+
+**NSF-PAR is an open corpus for exactly this field.** US-funded crisis
+informatics work is deposited there free, and browsing outward from one record
+surfaced four more relevant papers in one page. **ISCRAM's own proceedings are
+open access** on `ojs.iscram.org` as well. Between them, most of what §2 needs
+is probably free and we have been assuming otherwise.
+
+Also surfaced, all free on NSF-PAR, worth knowing:
+
+- **Zhou et al. (2022), "VictimFinder: Harvesting rescue requests in disaster
+  response from social media with BERT"** — 3,191 hand-labelled Harvey tweets,
+  best model F1 0.919. This is the closest thing to a comparable for our
+  classifier, and it is *far* stronger than ours. **Cite it in the classifier
+  paragraph and be modest.** A reviewer who knows this paper and reads an
+  immodest claim about our naive Bayes will not be gentle.
+- Stephens et al. (2018), citizens sharing health information during a flood
+  (ISCRAM).
+- Mittal, Jahanian & Ramakrishnan (2020), ONSIDE — routing social media posts to
+  the right first responders.
+- Johnson et al. (2019), deep learning for hurricane image classification
+  (ISCRAM).
+
 ## Searches still to run
 
 - [ ] ISCRAM proceedings: "spontaneous volunteer", "convergence",
