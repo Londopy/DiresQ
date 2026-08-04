@@ -53,3 +53,6 @@ site/.astro/
 # Committing them would give every page two copies, and someone would edit
 # the wrong one.
 site/src/pages/*.md
+
+# Overleaf upload bundle is built from paper/ -- see paper/README.md
+diresq-overleaf.zip

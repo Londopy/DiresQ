@@ -1,0 +1,61 @@
+% Workshop / conference build.
+%
+% STUB. Replace \documentclass and the preamble with the venue's own class file
+% when the CfP publishes one (ISCRAM, CHI, CSCW all supply templates). The point
+% of this file is that content.tex does not change when the venue does.
+%
+% Likely differences from arxiv.tex: two-column layout, a hard page limit, an
+% ACM/IEEE reference style, and anonymisation for review.
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{csquotes}
+\usepackage{parskip}
+\usepackage[round,authoryear]{natbib}
+\usepackage[hidelinks]{hyperref}
+\usepackage{graphicx}
+\graphicspath{{figures/}}
+
+% pandoc emits \tightlist for compact lists
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+
+\title{``Can We Account for Everyone?''\\[0.3em]
+       \large Silence-Triggered Escalation for Volunteers Who Self-Deploy}
+\author{London Chowdhury \and Jesslyn Caroline}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Convergence, the spontaneous movement of people toward a disaster, has
+been documented since Fritz and Mathewson (1957). Practice manages
+converging volunteers through credentialing: reception centres, badge
+systems, and pre-disaster affiliation. Each presupposes an institution
+that has either already arrived or reached the volunteer months
+beforehand. In the interval before either holds, people are already
+going in, and no accountability mechanism covers them. Interviewing
+Hurricane Harvey rescuers, Smith et al. (2018) record a dispatcher
+asking whether ``we {[}can{]} account for everyone.''
+
+We report the design of DiresQ, an open-source system attempting
+accountability for unaffiliated volunteers with no coordinator. It
+escalates on silence rather than supervision: a responder states an
+expected arrival time and checks in periodically, and if they stop, the
+system files a report about them without anyone deciding to.
+
+DiresQ has no users, no field deployment, and no evaluation. We
+contribute a design rationale, five design trade-offs stated with their
+costs, and five failure modes encountered during construction.
+\end{abstract}
+
+\input{content}
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+\end{document}
