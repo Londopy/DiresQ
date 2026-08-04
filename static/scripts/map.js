@@ -193,6 +193,63 @@ function applyFilters(){
     });
 }
 
+// --- finding your way back -----------------------------------------------
+//
+// The map opens wherever it opens, and one stray scroll puts you over an
+// ocean with no way back except reloading. Reports are the only thing on
+// here worth looking at, so both buttons are about getting you to them:
+// one shows all of them, the other walks through them one at a time.
+
+const fitBtn = document.getElementById("fit-all");
+const nextBtn = document.getElementById("next-incident");
+let cursor = -1;
+
+function shown(){
+    return markers.filter(m => map.hasLayer(m));
+}
+
+function fitAll(){
+    const visible = shown();
+    if(!visible.length) return;
+
+    map.fitBounds(
+        L.latLngBounds(visible.map(m => m.getLatLng())),
+        { padding: [50, 50], maxZoom: 15 }
+    );
+    cursor = -1;
+    announce(`Showing all ${visible.length} reports.`);
+}
+
+function nextIncident(){
+    const visible = shown();
+    if(!visible.length) return;
+
+    cursor = (cursor + 1) % visible.length;
+    const marker = visible[cursor];
+
+    map.setView(marker.getLatLng(), 16);
+    marker.openPopup();
+    announce(`Report ${cursor + 1} of ${visible.length}.`);
+}
+
+// Moving the map is invisible to somebody using a screen reader, so say
+// where we went. Polite: it must not interrupt anything being read.
+function announce(message){
+    let region = document.getElementById("map-said");
+    if(!region){
+        region = document.createElement("p");
+        region.id = "map-said";
+        region.className = "visually-hidden";
+        region.setAttribute("role", "status");
+        region.setAttribute("aria-live", "polite");
+        document.body.appendChild(region);
+    }
+    region.textContent = message;
+}
+
+if(fitBtn) fitBtn.addEventListener("click", fitAll);
+if(nextBtn) nextBtn.addEventListener("click", nextIncident);
+
 document.getElementById("search")
 .addEventListener("input",e=>{
     search = e.target.value.toLowerCase();
@@ -302,12 +359,18 @@ fetch("/api/responders")
 
             const { lat, lng } = responder.last_position;
 
+            // A hollow ring, because the legend says so and because colour
+            // is already spoken for. Red, blue and green on a teardrop mean
+            // whether anyone is coming to a place; the same three on a filled
+            // circle meant a person, and the two were indistinguishable at a
+            // glance. Shape carries person-or-place, colour carries state,
+            // and neither has to do both.
             const marker = L.circleMarker([lat, lng], {
-                radius: 8,
+                radius: 9,
                 color: getResponderColor(responder.state),
                 fillColor: getResponderColor(responder.state),
-                fillOpacity: 1,
-                weight: 2
+                fillOpacity: 0.15,
+                weight: 3
             }).addTo(map);
 
             marker.bindPopup(responderPopup(responder));

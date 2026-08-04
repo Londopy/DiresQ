@@ -401,3 +401,27 @@ border-left:6px solid var(--green);
 @media (prefers-reduced-motion: reduce){
     .pin-nobody{ animation:none; }
 }
+
+
+/* Getting back to the reports.
+   Sized to the 44px touch target the rest of the app holds to, because the
+   person most likely to be lost on this map is on a phone. */
+.map-nav{
+    min-height:44px;
+    padding:0 14px;
+    border:1px solid var(--overlay, #45475a);
+    border-radius:8px;
+    background:var(--surface, #313244);
+    color:var(--text, #cdd6f4);
+    font-size:0.85rem;
+    font-weight:600;
+    cursor:pointer;
+    white-space:nowrap;
+}
+
+.map-nav:hover{ border-color:var(--blue, #89b4fa); }
+
+.map-nav:focus-visible{
+    outline:3px solid var(--blue, #89b4fa);
+    outline-offset:2px;
+}

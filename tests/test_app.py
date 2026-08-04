@@ -5435,6 +5435,84 @@ class TestAReportPageSaysWhoStoppedAnswering:
             "/report/1").get_data(as_text=True)
 
 
+class TestTheMapDrawsWhatTheLegendPromises:
+    """The legend was fixed and the map was not.
+
+    The legend key for a responder became a hollow ring, because colour was
+    already carrying whether anyone is coming to a place. But `map.js` kept
+    drawing responders as solid circles in those same three colours — so the
+    symbol somebody was told to look for did not exist, and the ones that did
+    exist looked like reports. Fixing the label without fixing the thing it
+    labels is worse than leaving both wrong, because now the page lies twice.
+    """
+
+    @staticmethod
+    def script():
+        return (diresq.SCHEMA.parent / "static" / "scripts" / "map.js"
+                ).read_text(encoding="utf-8")
+
+    def test_a_responder_is_drawn_hollow(self):
+        block = self.script().split("L.circleMarker(")[1].split("}")[0]
+        assert "fillOpacity: 0.15" in block, (
+            "responders are solid again — the legend says they are rings")
+
+    def test_the_legend_and_the_map_agree_on_the_shape(self):
+        css = (diresq.SCHEMA.parent / "static" / "styles" / "map.css"
+               ).read_text(encoding="utf-8")
+        swatch = css.split(".legend-marker.responder{")[1].split("}")[0]
+        assert "background:transparent" in swatch
+        # And the map must not be filling them in.
+        block = self.script().split("L.circleMarker(")[1].split("}")[0]
+        assert "fillOpacity: 1" not in block
+
+
+class TestTheMapCanFindItsWayBack:
+    """One stray scroll puts you over an ocean with no way home but reload."""
+
+    @staticmethod
+    def script():
+        return (diresq.SCHEMA.parent / "static" / "scripts" / "map.js"
+                ).read_text(encoding="utf-8")
+
+    def test_both_buttons_are_on_the_page(self, client):
+        body = client.get("/map").get_data(as_text=True)
+        assert 'id="fit-all"' in body
+        assert 'id="next-incident"' in body
+
+    def test_they_are_real_buttons(self, client):
+        # Not links, not divs. They act on the page rather than navigating.
+        body = client.get("/map").get_data(as_text=True)
+        for name in ("fit-all", "next-incident"):
+            tag = body.split(f'id="{name}"')[0].split("<")[-1]
+            assert tag.startswith("button"), f"{name} is a <{tag.split()[0]}>"
+
+    def test_fitting_only_counts_what_is_on_screen(self):
+        # With the gaps filter on, "fit all" must frame what is left rather
+        # than the reports it just hid.
+        source = self.script()
+        assert "map.hasLayer(m)" in source
+
+    def test_moving_the_map_is_announced(self):
+        # A pan is invisible to a screen reader. Politely, so it does not
+        # interrupt whatever is being read.
+        source = self.script()
+        assert 'aria-live", "polite"' in source
+        assert "Report ${cursor + 1} of" in source
+
+    def test_the_buttons_are_a_touch_target(self):
+        css = (diresq.SCHEMA.parent / "static" / "styles" / "map.css"
+               ).read_text(encoding="utf-8")
+        block = css.split(".map-nav{")[1].split("}")[0]
+        assert "min-height:44px" in block
+
+    def test_an_empty_map_does_not_crash(self):
+        # fitBounds on nothing throws. Both paths return early.
+        source = self.script()
+        for fn in ("function fitAll(){", "function nextIncident(){"):
+            body = source.split(fn)[1].split("\n}")[0]
+            assert "if(!visible.length) return;" in body
+
+
 class TestFilingAReportIsReachableOnAPhone:
     """The one action this app exists for, on the device it is for.
 
