@@ -284,7 +284,16 @@ function responderPopup(responder) {
 }
 
 fetch("/api/responders")
-    .then(res => res.json())
+    .then(res => {
+        // fetch only rejects on a network failure. A 500 or a redirect to the
+        // login page resolves normally, and .json() then throws a parse error
+        // on the HTML — same banner, but nothing anywhere says which of the
+        // three happened. Reading the status is the difference between "no
+        // signal" and "the server is broken", and only one of those is fixed
+        // by moving somewhere with bars.
+        if (!res.ok) throw new Error(`/api/responders returned ${res.status}`);
+        return res.json();
+    })
     .then(responders => {
 
         responders.forEach(responder => {
@@ -311,11 +320,23 @@ fetch("/api/responders")
     // when the network is bad — which is when somebody is most likely to
     // be staring at this screen. Failing quietly leaves a map that looks
     // complete and is missing every responder on it, so say so.
-    .catch(() => {
+    .catch(err => {
+        console.warn("responder positions unavailable:", err);
+
         const warning = document.createElement("div");
         warning.className = "map-warning";
         warning.setAttribute("role", "status");
         warning.textContent =
             "Could not load responder positions. Reports are still shown.";
-        document.body.appendChild(warning);
+
+        // Above the map, not at the end of the document. Appending to body put
+        // it below the statistics cards, off the bottom of a phone screen —
+        // the map looked complete, was missing every responder, and the notice
+        // saying so was somewhere you had to scroll to find.
+        const canvas = document.getElementById("map");
+        if (canvas && canvas.parentNode) {
+            canvas.parentNode.insertBefore(warning, canvas);
+        } else {
+            document.body.appendChild(warning);
+        }
     });

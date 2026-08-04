@@ -5288,3 +5288,139 @@ class TestTheClassifierSaysWhenItCannotRead:
     def test_the_browser_copy_gets_the_threshold(self):
         model = json.loads(diresq.MODEL_FILE.read_text(encoding="utf-8"))
         assert model["min_known_share"] == classify.MIN_KNOWN_SHARE
+
+
+class TestTheBoardSurvivesADatabaseUnderLoad:
+    """The board polls /api/responders every three seconds, per viewer, and
+    that request writes. Everything here is about the same failure: a write
+    that cannot get the lock must not take down the screens the writing exists
+    to make trustworthy.
+    """
+
+    def test_the_database_is_in_wal_mode(self, client):
+        # The default rollback journal has a writer lock out every reader.
+        # This app writes on its busiest read, so that mode makes contention
+        # between two viewers, which is not a load level worth failing at.
+        with diresq.app.app_context():
+            mode = diresq.get_db().execute(
+                "PRAGMA journal_mode").fetchone()[0]
+        assert mode.lower() == "wal", f"journal_mode is {mode!r}, not WAL"
+
+    def test_a_locked_database_does_not_take_down_the_board(
+            self, client, monkeypatch):
+        import sqlite3
+
+        def jammed():
+            raise sqlite3.OperationalError("database is locked")
+
+        monkeypatch.setattr(diresq, "sweep_silent_responders", jammed)
+
+        # Every page the sweep hook is attached to. A 500 on any of these is
+        # the alarm's plumbing breaking the thing it was protecting.
+        for path in ("/", "/board", "/map", "/api/reports", "/api/responders"):
+            assert client.get(path).status_code == 200, path
+
+    def test_a_sweep_that_failed_does_not_claim_it_ran(
+            self, client, monkeypatch):
+        import sqlite3
+
+        with diresq.app.app_context():
+            diresq.get_db().execute("UPDATE system SET last_swept_at = NULL")
+            diresq.get_db().commit()
+
+        monkeypatch.setattr(diresq, "sweep_silent_responders",
+                            lambda: (_ for _ in ()).throw(
+                                sqlite3.OperationalError("database is locked")))
+
+        client.get("/board")
+
+        with diresq.app.app_context():
+            stamp = diresq.get_db().execute(
+                "SELECT last_swept_at FROM system").fetchone()[0]
+        assert stamp is None, (
+            "the stamp was written for a sweep that never finished — the board "
+            "would show green while nothing was checking")
+
+    def test_the_sweep_does_not_run_on_every_poll(self, client, monkeypatch):
+        runs = []
+        real = diresq.sweep_silent_responders
+        monkeypatch.setattr(diresq, "sweep_silent_responders",
+                            lambda: (runs.append(1), real())[1])
+
+        for _ in range(10):
+            client.get("/api/responders")
+
+        # Ten polls is about thirty seconds of one viewer watching the board.
+        # Before the throttle this was ten sweeps and ten writes.
+        assert len(runs) == 1, (
+            f"{len(runs)} sweeps for 10 polls; the cost of the alarm is "
+            "scaling with the number of people watching it")
+
+    def test_the_throttle_is_well_inside_the_escalation_it_guards(self):
+        assert diresq.SWEEP_EVERY_SECONDS * 4 < \
+            diresq.SILENT_ESCALATE_MINUTES * 60, (
+            "the sweep runs too rarely to notice silence on time")
+
+
+class TestTheLegendDistinguishesAPersonFromAPlace:
+    """A responder marker is coloured by *their* status, out of the same
+    red/blue/green the report pins use. So colour cannot separate the two, and
+    a legend that tries reads as two identical swatches.
+    """
+
+    CSS = Path(__file__).resolve().parents[1] / "static/styles/map.css"
+
+    def swatch(self, name):
+        """Every declaration that lands on .legend-marker.<name>.
+
+        Rules are collected across grouped selectors, not just the one that
+        names the state on its own — the shape is set for all three report
+        states in a single rule, and a helper that only read the individual
+        ones would report a teardrop as a circle.
+        """
+        css = re.sub(r"/\*.*?\*/", "", self.CSS.read_text(encoding="utf-8"),
+                     flags=re.S)
+        # `[^{}]` on both sides keeps the match inside one rule, so an @media
+        # wrapper cannot swallow the block after it.
+        blocks = re.findall(
+            r"([^{}]*\.legend-marker\.%s\b[^{}]*)\{([^{}]*)\}" % name, css)
+        assert blocks, f"no rule targets .legend-marker.{name}"
+        return " ".join(body for _, body in blocks)
+
+    def colour(self, name):
+        """The colour a swatch actually paints, normalised.
+
+        `var(--red)` and `var(--red, #f38ba8)` are the same colour written two
+        ways, and comparing the raw text would call them different — which is
+        exactly how two identical red dots shipped.
+        """
+        decls = self.swatch(name)
+        tokens = re.findall(r"var\(\s*(--[\w-]+)|#[0-9a-fA-F]{3,8}", decls)
+        return {t for t in tokens if t} or set(
+            re.findall(r"#[0-9a-fA-F]{3,8}", decls))
+
+    def test_nobody_going_and_responder_are_not_the_same_swatch(self):
+        assert self.colour("nobody") != self.colour("responder"), (
+            "'Nobody going' and 'Responder' paint the same colour — on the "
+            "map they are a report nobody is going to and an overdue person")
+
+    def test_the_responder_swatch_is_not_one_of_the_report_colours(self):
+        responder = self.swatch("responder")
+        for state, colour in (("nobody", "--red"), ("coming", "--blue"),
+                              ("there", "--green")):
+            assert colour not in responder, (
+                f"the responder swatch reuses {colour}, which already means "
+                f"{state!r} on a report pin")
+
+    def test_reports_are_teardrops_and_responders_are_circles(self):
+        # The shape is what carries it, here and on the map itself.
+        for state in ("nobody", "coming", "there"):
+            assert "50% 50% 50% 0" in self.swatch(state), (
+                f"the {state!r} swatch is not the teardrop the pin is")
+        assert "50% 50% 50% 0" not in self.swatch("responder")
+
+    def test_every_legend_item_in_the_template_has_a_rule(self):
+        html = (Path(__file__).resolve().parents[1]
+                / "templates/map.html").read_text(encoding="utf-8")
+        for name in re.findall(r'legend-marker (\w+)"', html):
+            self.swatch(name)

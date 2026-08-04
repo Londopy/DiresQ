@@ -172,17 +172,9 @@ border-left:6px solid var(--green);
 
     border-radius:50%;
 
-}
-
-.legend-marker.report{
-
-    background:var(--blue);
-
-}
-
-.legend-marker.responder{
-
-    background:var(--red);
+    /* Four items that wrap. Without this the swatches squash before the
+       labels do, and a legend of ovals explains nothing. */
+    flex:none;
 
 }
 
@@ -335,9 +327,42 @@ border-left:6px solid var(--green);
     100% { box-shadow:0 2px 6px rgba(0,0,0,.5), 0 0 0 0 rgba(243,139,168,0); }
 }
 
+/* The legend has to carry the same distinction the map does, and colour
+   cannot carry it. A responder's dot is coloured by *their* status, out of
+   the same red / blue / green the report pins use — an overdue responder is
+   red and so is a report nobody is going to. Two swatches that were both
+   --red made "Nobody going" and "Responder" indistinguishable, which is not a
+   palette mistake so much as the legend admitting the colour axis is already
+   full.
+   So the legend says it in shape, as the map already does: reports are
+   teardrops, responders are circles. Colour then means one thing per shape —
+   on a teardrop, whether anybody is going; on a circle, what that person is
+   doing. */
+
+.legend-marker.nobody,
+.legend-marker.coming,
+.legend-marker.there{
+
+    /* Same geometry as .pin, at legend size. */
+    border-radius:50% 50% 50% 0;
+    transform:rotate(-45deg);
+
+}
+
 .legend-marker.nobody   { background:var(--red, #f38ba8); }
 .legend-marker.coming   { background:var(--blue, #89b4fa); }
 .legend-marker.there    { background:var(--green, #a6e3a1); }
+
+/* The neutral "available" grey getResponderColor() uses, deliberately not one
+   of the three above: no single swatch is honest about a marker whose colour
+   is read off the person. The ring is what makes it a circle at 12px, where
+   a bare dot and a rotated teardrop are hard to tell apart. */
+.legend-marker.responder{
+
+    background:transparent;
+    border:3px solid #a6adc8;
+
+}
 
 .gaps-toggle{
     /* 48px tall: this gets pressed on a phone, in the rain. */

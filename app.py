@@ -75,6 +75,13 @@ load_dotenv(Path(__file__).with_name(".env"))
 
 DATABASE = os.environ.get("DIRESQ_DB", "diresq.db")
 
+# How long a statement waits for a lock before giving up. SQLite's own default
+# is zero — it returns "database is locked" on the first attempt — and Python's
+# driver default is five seconds. Named here because it is a real deadline: two
+# gunicorn workers of four threads each are eight things contending, and this
+# is how long the eighth is willing to queue.
+SQLITE_BUSY_SECONDS = 5.0
+
 # How long a responder has to check in when they didn't give an ETA.
 DEFAULT_CHECKIN_MINUTES = 30
 
@@ -165,8 +172,32 @@ def note_login_failure(username: str) -> None:
 
 def get_db() -> sqlite3.Connection:
     if "db" not in g:
-        g.db = sqlite3.connect(DATABASE, detect_types=sqlite3.PARSE_DECLTYPES)
+        g.db = sqlite3.connect(DATABASE, detect_types=sqlite3.PARSE_DECLTYPES,
+                               timeout=SQLITE_BUSY_SECONDS)
         g.db.row_factory = sqlite3.Row
+
+        # busy_timeout first, so the journal_mode switch below waits its turn
+        # rather than failing outright on a database somebody else is using.
+        g.db.execute(f"PRAGMA busy_timeout = {int(SQLITE_BUSY_SECONDS * 1000)}")
+
+        # WAL, because this app writes on reads. The board polls
+        # /api/responders every three seconds and that request runs the
+        # silence sweep and stamps the clock, so a read endpoint is also the
+        # busiest writer. In the default rollback journal a writer locks out
+        # every reader and a reader locks out the writer, so two people with
+        # the board open is enough to start returning "database is locked" —
+        # which Flask serves as a 500 on the exact endpoint the map needs.
+        #
+        # In WAL readers never block the writer and the writer never blocks
+        # readers, which is the shape of this workload. It is a property of
+        # the file, not the connection, so this is a no-op after the first.
+        g.db.execute("PRAGMA journal_mode = WAL")
+
+        # Don't fsync on every commit. The durability being traded away is
+        # "the last few commits survive an OS crash"; on an instance whose
+        # whole filesystem is discarded when it sleeps, that was never true.
+        g.db.execute("PRAGMA synchronous = NORMAL")
+
         g.db.execute("PRAGMA foreign_keys = ON")
     return g.db
 
@@ -1459,13 +1490,46 @@ def security_headers(response):
     return response
 
 
+# How often the sweep is actually worth running. The board polls
+# /api/responders every three seconds *per viewer*, and the sweep is a join
+# across every open assignment plus a write. Running it on each poll made the
+# cost of the alarm scale with the number of people watching it, which is
+# backwards: the sweep is about elapsed time, and elapsed time does not care
+# how many browsers are open.
+#
+# Thirty seconds is thirty times inside the fifteen-minute escalation it
+# guards, so nothing is ever noticed late, and it takes roughly nine writes
+# in ten off the hot path.
+SWEEP_EVERY_SECONDS = 30
+
+
 @app.before_request
 def escalate_silence():
-    if (request.method == "GET"
-            and request.endpoint in SWEEP_ON
-            and current_user() is not None):
+    if (request.method != "GET"
+            or request.endpoint not in SWEEP_ON
+            or current_user() is None):
+        return
+
+    since = last_swept()["seconds"]
+    if since is not None and since < SWEEP_EVERY_SECONDS:
+        return
+
+    try:
         sweep_silent_responders()
-        record_sweep()
+    except sqlite3.Error:
+        # Same reasoning as record_sweep below, and higher stakes. This runs in
+        # before_request, so an exception here does not fail the sweep — it
+        # fails the whole response, and the endpoints it is attached to are the
+        # board, the map and the feed. A lock contention blanking the three
+        # screens somebody uses during a flood is a far worse outcome than a
+        # sweep that runs thirty seconds later instead.
+        #
+        # Deliberately does not stamp: a sweep that did not finish must not
+        # claim it did, or the board shows green while nothing is checking.
+        get_db().rollback()
+        return
+
+    record_sweep()
 
 
 def record_sweep() -> None:
