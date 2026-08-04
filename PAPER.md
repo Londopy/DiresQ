@@ -609,19 +609,6 @@ community that two secondary-school students do not have. We would welcome
 collaboration, and we mention it here rather than in an acknowledgement because
 it is a limitation on the research, not a courtesy.
 
-## Statement on the use of generative AI
-
-*Draft. See `research/draft-disclosure.md` — several clauses are marked as not
-yet true and must be corrected before submission.*
-
-The prose of this paper was drafted with substantial assistance from Claude
-(Anthropic). The authors set the research question, selected or approved the
-sources, directed the structure and argument of every section, and made all
-design decisions described in §3. Three sources — Liu (2014), Auferbauer &
-Tellioğlu (2017) and Kankanamge et al. (2019) — are cited only for positions
-stated in their abstracts, which is marked in the text. The authors have
-reviewed and verified the content and take responsibility for it.
-
 ## References
 
 *Format to the venue's template when it is known. Alphabetical for now.*
@@ -697,13 +684,7 @@ Kankanamge et al. (2019) are cited only for positions their abstracts state
 outright. Zhou et al. (2022) is Bronze open access and readable in a browser —
 verify the F1 of 0.919 and the 3,191-tweet corpus there before printing them.
 
-**3. AI usage disclosure.** The prose of this document was drafted with
-substantial assistance from a large language model, working from sources
-selected by the authors and to a structure the authors specified. This must be
-stated explicitly in the submitted version, in whatever form the venue requires.
-**The authors must be able to say truthfully that they have read every source
-cited and made every design decision described** — a further reason item 2
-matters.
+**3. AI usage disclosure.** To be written by the authors in Overleaf.
 
 **4. Second author review.** At assembly, only the first author had read this
 document.
