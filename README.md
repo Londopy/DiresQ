@@ -9,7 +9,7 @@ DiresQ tracks the people going into it.**
 
 [![CI](https://github.com/Skythe7/DiresQ/actions/workflows/ci.yml/badge.svg)](https://github.com/Skythe7/DiresQ/actions/workflows/ci.yml)
 [![Security](https://github.com/Skythe7/DiresQ/actions/workflows/security.yml/badge.svg)](https://github.com/Skythe7/DiresQ/actions/workflows/security.yml)
-[![Tests](https://img.shields.io/badge/tests-566%20passing-brightgreen)](tests/test_app.py)
+[![Tests](https://img.shields.io/badge/tests-575%20passing-brightgreen)](tests/test_app.py)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 [![Limitations](https://img.shields.io/badge/limitations-written_down-f38ba8)](docs/limits.md)
@@ -67,8 +67,8 @@ board turns red; the report on the right filed itself.</sub>
 <!-- /frozen -->
 
 That table is the night itself and does not move. It has kept growing since:
-**25,506 lines written** — **19,383 lines of code** and 6,123 of
-documentation — across **566 test functions**, 711 cases after
+**25,702 lines written** — **19,577 lines of code** and 6,125 of
+documentation — across **575 test functions**, 720 cases after
 parametrisation.
 
 Every one of those is checked by a test, so unlike the snapshot they cannot
@@ -396,7 +396,7 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
-566 test functions, which parametrisation expands into 711 cases, covering
+575 test functions, which parametrisation expands into 720 cases, covering
 every route, the permission rules, feed ordering, staffing resolution, ETA
 parsing, overdue calculation, packet signing, the offline queues for both
 check-ins and reports, arrival-time duplicate detection, the auth guardrails

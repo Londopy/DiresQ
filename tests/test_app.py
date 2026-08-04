@@ -5362,6 +5362,112 @@ class TestTheBoardSurvivesADatabaseUnderLoad:
             "the sweep runs too rarely to notice silence on time")
 
 
+class TestAReportPageSaysWhoStoppedAnswering:
+    """The report page listed status and called it coverage.
+
+    Status is what a responder last *told* us. Whether they are still there
+    to tell us anything is a different fact, and the board knew it while this
+    page did not — so somebody could read "on scene" here for a person the
+    board had forty-five minutes overdue, and decide the address was covered.
+
+    That is the project's own argument failing on its own page. The feed
+    groups duplicates so six people on one incident cannot read as two
+    comfortable rows. One person who has gone silent is the same error.
+
+    Asserted through the rendered page rather than the dict, because what
+    matters is whether the coordinator is told.
+    """
+
+    @staticmethod
+    def join(username, *, quiet_for=None, status="on_scene", report_id=1):
+        """Put somebody on a report. `quiet_for` minutes since any check-in."""
+        with diresq.app.app_context():
+            db = diresq.get_db()
+            who = db.execute("SELECT id FROM accounts WHERE username = ?",
+                             (username,)).fetchone()["id"]
+            now = datetime.now(timezone.utc)
+            joined = (now - timedelta(minutes=quiet_for or 5)).isoformat()
+            db.execute("""
+                INSERT INTO assignments (report_id, responder, status,
+                                         joined_at, status_changed_at)
+                VALUES (?, ?, ?, ?, ?)
+            """, (report_id, who, status, joined, joined))
+            db.execute("DELETE FROM checkins WHERE responder = ?", (who,))
+            if quiet_for is None:
+                db.execute("""
+                    INSERT INTO checkins (responder, lat, lng,
+                                          created_at, received_at)
+                    VALUES (?, 29.78, -95.83, ?, ?)
+                """, (who, now.isoformat(), now.isoformat()))
+            db.commit()
+
+    def test_a_silent_responder_is_flagged(self, client):
+        self.join("skythe", quiet_for=90)
+        body = client.get("/report/1").get_data(as_text=True)
+        assert "NO CONTACT" in body
+
+    def test_the_page_says_so_out_loud(self, client):
+        self.join("skythe", quiet_for=90)
+        body = client.get("/report/1").get_data(as_text=True)
+        assert "stopped answering" in body
+
+    def test_it_says_not_to_count_them(self, client):
+        # The number matters less than the instruction. Somebody deciding
+        # whether to send help needs to be told the count is wrong.
+        self.join("skythe", quiet_for=90)
+        assert "Do not count" in client.get("/report/1").get_data(as_text=True)
+
+    def test_somebody_answering_is_not_flagged(self, client):
+        # A false alarm here would teach people to ignore the real one.
+        self.join("skythe")
+        body = client.get("/report/1").get_data(as_text=True)
+        assert "NO CONTACT" not in body
+        assert "stopped answering" not in body
+
+    def test_somebody_who_cleared_is_not_chased(self, client):
+        # Cleared means they went home. Silence after that is expected.
+        self.join("skythe", quiet_for=300, status="cleared")
+        body = client.get("/report/1").get_data(as_text=True)
+        assert "NO CONTACT" not in body
+
+    def test_a_report_with_nobody_on_it_says_nothing(self, client):
+        assert "stopped answering" not in client.get(
+            "/report/1").get_data(as_text=True)
+
+
+class TestFilingAReportIsReachableOnAPhone:
+    """The one action this app exists for, on the device it is for.
+
+    The Create Report link lived inside the sidebar, which slides off-screen
+    below 768px behind a button labelled "Filter". Somebody standing in water
+    is not going to look for it there.
+    """
+
+    @staticmethod
+    def css():
+        return (diresq.SCHEMA.parent / "static" / "styles" / "homepage.css"
+                ).read_text(encoding="utf-8")
+
+    def test_the_page_carries_a_button_outside_the_drawer(self, client):
+        body = client.get("/").get_data(as_text=True)
+        before_aside = body.split("<aside")[0]
+        assert 'href="/report/new"' in before_aside, (
+            "the only way to file a report is inside the off-canvas drawer")
+
+    def test_exactly_one_of_the_two_is_shown(self):
+        # Both in the tree at once would read the link twice to a screen
+        # reader. display:none removes it, which is why it is used here.
+        css = self.css()
+        assert ".create-btn-mobile{ display:none; }" in css
+        assert "aside .create-btn{ display:none; }" in css
+
+    def test_the_phone_copy_is_shown_on_a_phone(self):
+        css = self.css()
+        mobile = css.split("@media(max-width:768px){")[1]
+        assert ".create-btn-mobile{" in mobile
+        assert "display:block" in mobile.split(".create-btn-mobile{")[1][:120]
+
+
 class TestASeededResponderCanActuallyBeSeen:
     """The demo seeds responder positions. Two things stopped them showing.
 

@@ -591,12 +591,34 @@ def fetch_report(report_id: int) -> dict | None:
     item["responders"] = [dict(x) for x in get_db().execute("""
         SELECT asg.id, asg.status, asg.eta, asg.staffing_vote, asg.joined_at,
                asg.position_mismatch,
-               acc.username, acc.capabilities, acc.id AS account_id
+               acc.username, acc.capabilities, acc.id AS account_id,
+               (SELECT MAX(created_at) FROM checkins c
+                 WHERE c.responder = asg.responder) AS last_checkin
         FROM assignments asg
         JOIN accounts acc ON acc.id = asg.responder
         WHERE asg.report_id = ?
         ORDER BY asg.joined_at
     """, (report_id,)).fetchall()]
+
+    # Whether each of them is still answering.
+    #
+    # This page listed status and nothing else, and status is what somebody
+    # last *told* us — not whether they are still there to tell us anything.
+    # So a responder could read "on scene" here while the board had them
+    # forty-five minutes overdue, and a coordinator deciding whether this
+    # address needs more help would count them as coverage.
+    #
+    # That is this project's own argument failing on its own page. The feed
+    # groups duplicates so that six people on one incident cannot read as two
+    # comfortable rows; the same honesty has to apply to one person who has
+    # stopped answering. An unresponsive responder is not coverage.
+    for responder in item["responders"]:
+        responder["overdue"] = (
+            responder["status"] != "cleared"
+            and is_overdue(responder["joined_at"], responder["eta"],
+                           responder["last_checkin"]))
+
+    item["overdue_here"] = sum(1 for r in item["responders"] if r["overdue"])
 
     # What the person looking at this page is allowed to press. Working it out
     # here keeps the permission rules in one place instead of scattered
