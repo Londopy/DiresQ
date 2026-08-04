@@ -30,11 +30,39 @@ organisation: these convert an unknown arrival into an accountable one. They
 work. At the World Trade Center, identification requirements *"evolved and
 intensified on almost a twice-daily basis"* as the response matured.
 
-Credentialing presupposes a credentialer. Somebody must be present with the
-authority to issue the badge, the roster to record it in, and the attention to
-spare. In the first hours of a sudden-onset event — and in events where formal
-response never fully arrives — none of those exist, and people are already
-going in.
+Practitioner doctrine is more explicit still, and defines our population for us.
+FEMA's guidance on managing spontaneous volunteers describes unaffiliated
+volunteers as those who are *"no part of a recognized voluntary agency"*, who
+*"often have no formal training in emergency response"*, and who — the phrase is
+theirs — are *"not officially invited to become involved."* It adopts the
+academic taxonomy directly, noting that *"researchers have identified six
+different groups of people that tend to converge"*, and identifies the
+operational task: *"the helpers must be identified from among the larger
+population of convergent individuals."*
+
+The doctrine offers two mechanisms for doing that identification, and both
+presuppose an institution. The first is the Volunteer Reception Centre, which
+processes arrivals — and must therefore have been established. The second, and
+the one the guidance treats as primary, is prevention:
+
+> "Turn spontaneous unaffiliated volunteers into affiliated ones **before a
+> disaster occurs.** People who make a pre-disaster decision to become disaster
+> volunteers and take training to prepare themselves will NOT become
+> spontaneous, unaffiliated volunteers after a disaster."
+
+The same materials pose, as a training exercise, the question of how a community
+can *"keep your community members from self-deploying"*, and describe organised
+national service volunteers approvingly as members who *"never self-deploy, but
+wait to be called."*
+
+We take this seriously rather than dismissively: pre-affiliation plainly works,
+and a trained volunteer who arrives when called is better for everyone than one
+who does not. But both mechanisms require an institution — one that reached the
+volunteer months beforehand, or one that has arrived and opened a reception
+centre. Neither covers the person who decides at two in the morning, on the
+night, that they have a boat. Doctrine's answer to that person is that they
+should not exist. They do exist, in thousands, and the events that produce them
+are the events where the institution is least able to arrive.
 
 Kendra and Wachtendorf state the resulting tension directly, summarising Weick
 and Perrow on decentralised coordination: effective decentralisation presupposes

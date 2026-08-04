@@ -319,6 +319,53 @@ Also surfaced, all free on NSF-PAR, worth knowing:
 - Johnson et al. (2019), deep learning for hurricane image classification
   (ISCRAM).
 
+## FEMA doctrine — read, and it underwrites the whole argument
+
+*Managing Spontaneous Volunteers in Times of Disaster* (FEMA / Points of Light /
+CNCS), participant materials. Open PDF via the Humanitarian Library.
+
+This was the leg of the argument we had been **assuming rather than reading**.
+§1 claimed "the field's answer is credentialing" on the strength of Kendra &
+Wachtendorf watching badge systems appear at Ground Zero. That is an
+observation. The doctrine is a prescription, and it says something sharper.
+
+**It defines our user, in its own words:** unaffiliated volunteers are *"no part
+of a recognized voluntary agency"*, *"often have no formal training in emergency
+response"*, and are *"not officially invited to become involved."*
+
+**It has absorbed the academic taxonomy.** *"Researchers have identified six
+different groups of people that tend to converge"* — Fritz & Mathewson's five
+plus the sixth Kendra & Wachtendorf added. Theory and doctrine are one lineage
+here, which is useful connective tissue for §2.
+
+**It names the operational task:** *"the helpers must be identified from among
+the larger population of convergent individuals."*
+
+**And its two mechanisms both presuppose an institution.** The Volunteer
+Reception Centre processes arrivals, so it must first have been established. And
+the primary mechanism is *prevention*:
+
+> "Turn spontaneous unaffiliated volunteers into affiliated ones **before a
+> disaster occurs.** People who make a pre-disaster decision to become disaster
+> volunteers and take training to prepare themselves will NOT become
+> spontaneous, unaffiliated volunteers after a disaster."
+
+A training exercise asks how a community can *"keep your community members from
+self-deploying"*. National service volunteers are described approvingly as
+*"never self-deploy[ing], but wait[ing] to be called."*
+
+**This is the strongest version of our gap and it is doctrinal, not inferred.**
+Doctrine's answer to the person who decides at 2am that they have a boat is that
+they should not exist. Handle it with respect — pre-affiliation genuinely works
+— but the argument now stands on what the field prescribes rather than on what
+we observed it doing.
+
+**Still to read on the doctrine leg:** ASPR TRACIE's volunteer management topic
+collection (their site did not render; try by hand). Barsky et al. (2007),
+*"Managing volunteers: FEMA's Urban Search and Rescue programme and interactions
+with unaffiliated responders"*, Disasters — surfaced in the same search, sounds
+directly on point, not yet checked for access.
+
 ## Searches still to run
 
 - [ ] ISCRAM proceedings: "spontaneous volunteer", "convergence",
