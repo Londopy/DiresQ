@@ -90,6 +90,59 @@ writes it down as fact.
 
 ---
 
+## What Kendra & Wachtendorf actually changes
+
+It does not close the gap. It does something more useful: it tells us the gap
+has a name in the literature, and that the field noticed it and moved on.
+
+**Stop saying "nobody tracks the people who go in."** That is not defensible and
+a reviewer will know it. The accurate version is:
+
+> Convergence is well theorised — Fritz & Mathewson (1957) name the five
+> personal converger types; Kendra & Wachtendorf add a sixth and reframe access
+> as negotiated legitimacy. The established mechanism for handling converging
+> helpers is **credentialing by an authority**. Credentialing presupposes an
+> authority. Where none has arrived, no mechanism exists, and the literature
+> does not propose one.
+
+**The sentence that hands us the problem.** Kendra & Wachtendorf, summarising
+Weick (1987) and Perrow (1977):
+
+> "He also argues that experience with centralized direction, as in prior
+> training or other socialization such as military service, is first required
+> before decentralization can be effective. Yet the volunteers who appear to
+> assist in the emergency response are, **virtually by definition, strangers to
+> the response milieu**."
+
+That is our problem statement, written by the field in 2001, with no technical
+answer offered then or found since. A paper that opens on that sentence is
+standing on the literature rather than around it.
+
+**The finding that gives the design its argument:**
+
+> "The most 'successful' volunteers — those who negotiated access and got past
+> gatekeepers — were those who were able to work with minimal supervision by
+> official emergency workers… the incorporation of these volunteers into the
+> response required little or no effort on the part of emergency managers."
+
+The scarce resource is *emergency-manager attention*. A volunteer who accounts
+for themselves spends none of it. That reframes DiresQ from "a tool for
+volunteers" to "a way for an unaffiliated helper to become legible without
+costing the response anything" — which is the currency this paper says
+determines who gets in.
+
+**Vocabulary to adopt, because it is theirs:** response milieu, converger,
+personal / informational / materiel convergence, ad hoc vs. affiliated
+volunteer, negotiated legitimacy, emergent group (Stallings & Quarantelli 1985).
+
+**Two caveats, recorded so they are not forgotten.** (1) The paper frames
+volunteers as a *problem to be managed* — a security and liability risk to the
+response. Our framing treats the volunteer as someone owed an accounting. Those
+are different moral positions and the paper does not agree with ours; the
+difference has to be argued, not assumed. (2) This is 2001 fieldwork at an
+atypical event — crime scene and battlefield as well as disaster. Do not
+generalise its security findings to a hurricane.
+
 ## Sources read
 
 | Source | Claim | Evidence | Does not cover |
@@ -102,7 +155,7 @@ writes it down as fact.
 | ERHMS framework (responder health monitoring) | | | |
 | Fire service PAR / accountability software | | | |
 | US 8995946 / 9497610 (personnel accountability patents) | | | |
-| Kendra & Wachtendorf, *Reconsidering Convergence and Converger* (2003) | | | *Found via Voluntweeters ref [8]. On physical convergers and legitimacy at the WTC. Not yet read — likely the closest prior work to our problem.* |
+| Kendra & Wachtendorf, *Rebel Food… Renegade Supplies* (DRC Preliminary Paper 316, 2001/02) — **read this, not the 2003 chapter.** Same authors, same fieldwork, adjacent argument; the 2003 book chapter is paywalled at Emerald. | Convergence at the WTC follows Fritz & Mathewson's types, plus a sixth (fans/supporters). Access to the *response milieu* is **negotiated legitimacy**, not a right. The volunteers who got in were those who could work unsupervised. | 750+ collective hours of field observation beginning within 48h of the attack; EOC, Javits Center, Family Assistance Center, command posts, staging areas; 500+ photographs. | **No technology of any kind.** Accountability appears only as *credentialing by an authority* — badge systems that 'evolved and intensified on almost a twice-daily basis.' The volunteer never accounts for themselves. And the volunteer's own safety is essentially absent: the hazard discussion concludes *keep untrained people out*, never *track the ones who go in*. Presupposes gatekeepers exist. |
 | Kreps & Bosworth, *Organizing, Role Enactment, and Disaster* (1994) | | | *Found via Voluntweeters ref [9]. The D/A/R/T structural theory. Candidate theoretical frame.* |
 
 ## Searches still to run
