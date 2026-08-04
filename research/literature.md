@@ -12,7 +12,40 @@ already make our argument, we change the argument rather than the wording.**
 
 ---
 
-## Status: two searches in, the claim has narrowed twice
+## Status: one paper read, and it widened the gap rather than closing it
+
+**Starbird & Palen is read.** It is the foundational paper on volunteers
+self-organising after a disaster, and it contains nothing about keeping track
+of anybody — because every person in it is safe at a desk on another continent.
+That is not an oversight in the paper. It is the paper's scope: "digital
+volunteers," remote by definition.
+
+So the sharper version of our question is not *"has anyone done peer-to-peer
+accountability?"* It is:
+
+> The self-organising sequence Starbird & Palen document — resource, then
+> activity, then task, then domain — was observed among volunteers who were
+> never in danger. What changes when the same sequence runs among people who
+> are physically inside the hazard? Accountability becomes a requirement rather
+> than a nicety, and there is no coordinator to provide it.
+
+That framing has a theoretical home (Kreps & Bosworth's D/A/R/T), a documented
+empirical precursor, and a gap the precursor cannot cover by construction.
+DiresQ is a *resource* in exactly Kreps & Bosworth's sense — the thing a
+stranger picks up to start organising — aimed at the population the existing
+work excludes.
+
+**Two useful things fell out of its reference list**, both added to the table
+below: Kendra & Wachtendorf on *physical* convergers and legitimacy at the WTC
+(ref 8), which is the nearest prior work found so far, and Fritz & Mathewson
+1957 (ref 4), which was already on the search list and is now confirmed as the
+origin citation everyone routes through.
+
+**Still unverified**, and the reason the searches below are not yet ticked:
+one paper cannot establish that a gap exists. It can only establish that this
+paper does not fill it.
+
+## Earlier status: two searches in, the claim had narrowed twice
 
 The Devpost story says *"we couldn't find one that keeps a list of the people
 walking into it."* That is not going to survive review. Two rounds of
@@ -61,7 +94,7 @@ writes it down as fact.
 
 | Source | Claim | Evidence | Does not cover |
 | --- | --- | --- | --- |
-| Starbird & Palen, *Voluntweeters* (CHI 2011) | | | |
+| Starbird & Palen, *Voluntweeters* (CHI 2011) | Digital volunteers self-organise after disaster with no prior structure. Fits Kreps & Bosworth's D/A/R/T model in an R→A→T→D order: Twitter itself is the *resource* that lets a stranger start. | 339 twitterers, 292,928 tweets (Haiti, Jan 10–Feb 1 2010); hand-coded 2,911 syntax tweets; 19 completed email interviews of 74 identified translators. | **Everyone in it is remote.** The population is defined as people helping from other continents. Nobody is in the hazard, so nobody needs accounting for. No safety mechanism, no check-in, no escalation — the problem does not arise. Organising runs on Twitter affordances (hashtags, @-addressivity) and interpersonal trust built over days, not on anything built for the purpose. |
 | Starbird, *Crowdwork, Crisis and Convergence* (2012 diss.) | | | |
 | Liu, *Crisis Crowdsourcing Framework* (CSCW 2014) | | | |
 | FEMA, *Managing Spontaneous Volunteers in Times of Disaster* | | | |
@@ -69,6 +102,8 @@ writes it down as fact.
 | ERHMS framework (responder health monitoring) | | | |
 | Fire service PAR / accountability software | | | |
 | US 8995946 / 9497610 (personnel accountability patents) | | | |
+| Kendra & Wachtendorf, *Reconsidering Convergence and Converger* (2003) | | | *Found via Voluntweeters ref [8]. On physical convergers and legitimacy at the WTC. Not yet read — likely the closest prior work to our problem.* |
+| Kreps & Bosworth, *Organizing, Role Enactment, and Disaster* (1994) | | | *Found via Voluntweeters ref [9]. The D/A/R/T structural theory. Candidate theoretical frame.* |
 
 ## Searches still to run
 
