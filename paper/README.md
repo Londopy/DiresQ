@@ -55,14 +55,15 @@ If the venue supplies a class file, use theirs instead of `article` — and chec
 whether it already loads a citation package, since loading `natbib` twice will
 error.
 
-## 2. Author block — two things left open (added 4 Aug 2026)
+## 2. Author block (added 4 Aug 2026)
 
-The title block now uses `authblk`. London's affiliation, email and ORCID are
-filled in. Two gaps:
+London's affiliation, email and ORCID are on the title page. Jesslyn is listed
+as an author with no affiliation, by her choice.
 
-**Jesslyn's affiliation is a visible placeholder** — `[AFFILIATION TO BE
-SUPPLIED]` prints in bold on the title page. It is deliberately impossible to
-miss rather than silently blank.
+The title block is built by hand rather than with `authblk`. `authblk` was tried
+first and is wrong for this paper: given an author with no affiliation marker it
+silently attaches them to the previous `\affil`, which put Jesslyn at Cal Poly.
+If a venue class requires `authblk`, give every author an explicit marker.
 
 **Section 6 says "two secondary-school students."** The title page now claims a
 university affiliation. Those two statements cannot both be right, and
