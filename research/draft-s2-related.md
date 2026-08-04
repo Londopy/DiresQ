@@ -187,8 +187,13 @@ statement that we make no claim about its findings. This is honest but weak; a
 systematic review in our exact area that we have not read is the most likely
 place for a reviewer to find something we missed.
 
-**`[ABSTRACT]` — Zhou et al. (2022).** The F1 figure and corpus size are from
-the abstract. Verify both against the paper before printing them.
+**`[ABSTRACT]` — Zhou et al. (2022). Readable, so clear this one.** Semantic
+Scholar reports `isOpenAccess: true`, status **BRONZE** — free to read on
+Elsevier's site but under no open licence, which is why the PDF cannot be
+fetched programmatically. Open `doi.org/10.1016/j.compenvurbsys.2022.101824` in
+a browser and verify the F1 of 0.919 and the 3,191-tweet corpus. **These are
+specific numbers about somebody else's work that we would be printing**; an
+abstract is not good enough for that.
 
 ## Notes for revision
 

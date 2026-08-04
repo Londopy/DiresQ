@@ -20,7 +20,9 @@ costs nothing. Candidates, in order: ISCRAM WiP (pending the attendance and
 cost question), a CHI/CSCW/ICT4D workshop, JORS with an APC waiver requested in
 the cover letter.
 
-**Do not post to SocArXiv until §2 is written.** The entire point of the
+**All six sections and the abstract are now drafted.** The remaining gate is the four `[ABSTRACT]` citation debts in §2 — Liu, Auferbauer, Kankanamge, Zhou. Zhou is readable in a browser (Bronze OA). The other three need an email or an interlibrary loan. **Do not post until they are cleared or their sentences weakened.**
+
+**Original rule, still standing:** The entire point of the
 literature review was to avoid claiming novelty that is not there. Posting
 publicly with that claim unverified is the specific failure we have been working
 to prevent, and a preprint is permanent.
@@ -30,12 +32,12 @@ to prevent, and a preprint is permanent.
 | Section | State |
 | --- | --- |
 | 1. Introduction | **drafted and sourced** — Harvey paragraph written from Smith et al. (2018) |
-| 2. Background and related work | **drafted** — 4 citation debts marked `[ABSTRACT]`/`[SECONDARY]`, listed in the draft |
+| 2. Background and related work | **drafted** — Fritz & Mathewson debt cleared; 4 `[ABSTRACT]` debts remain, listed in the draft |
 | 3. Design | drafted; scheduler overstatement fixed |
 | 4. What building it taught us | drafted |
 | 5. Limitations | drafted |
 | 6. Future work | drafted |
-| Abstract | **the only section not drafted** — write it, then assemble |
+| Abstract | **drafted** — plus title and keywords |
 
 ---
 
