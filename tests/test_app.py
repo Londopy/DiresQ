@@ -5802,3 +5802,48 @@ class TestTheClockCanBeScaled:
         body = body[:body.index("\ndef ")]
         assert "datetime.now(timezone.utc)" in body
         assert "now()" not in body.replace("datetime.now(", "")
+
+
+class TestTheCountdownSurvivesTheRepaint:
+    """The board is server-rendered and then replaced by JavaScript every
+    three seconds. A field added to only one of those exists for exactly one
+    render, which looks like a flicker and is nearly impossible to spot by
+    hand — the countdown shipped that way for one commit.
+    """
+
+    @staticmethod
+    def source(relative):
+        return (Path(__file__).resolve().parents[1] / relative).read_text(
+            encoding="utf-8")
+
+    def test_both_renderers_draw_the_countdown(self):
+        for path in ("templates/board.html", "static/scripts/board.js"):
+            body = self.source(path)
+            assert "due_in_seconds" in body, f"{path} never reads the countdown"
+            assert 'class="due' in body, f"{path} never draws the countdown"
+
+    def test_the_countdown_is_kept_out_of_the_live_region(self):
+        """It sits inside aria-live="polite" and changes on every repaint.
+        Announcing it would bury the state change it is counting toward."""
+        for path in ("templates/board.html", "static/scripts/board.js"):
+            body = self.source(path)
+            block = body[body.index('class="due'):]
+            assert 'aria-hidden="true"' in block[:400], (
+                f"{path}: ticking countdown is not hidden from screen readers")
+
+    def test_both_renderers_agree_on_the_late_class(self):
+        for path in ("templates/board.html", "static/scripts/board.js"):
+            assert "late" in self.source(path)
+
+    def test_the_board_does_not_use_the_unreadable_grey_for_text(self):
+        """#45475a on the row background is 1.92:1. a11y.css has been guarded
+        against this colour since it was caught on capability tags; board.css
+        never was, and was still using it for coordinates and for every
+        "not assigned" / "no position" state."""
+        css = self.source("static/styles/board.css")
+        for rule in (".idle{", ".contact .pos{"):
+            if rule in css:
+                block = css[css.index(rule):]
+                block = block[:block.index("}")]
+                assert "--overlay" not in block, (
+                    f"{rule} is back on the 1.92:1 grey")

@@ -140,7 +140,7 @@
             <div class="contact">
                 {% if r.due_in_seconds is not none %}
                 <span class="due {{ 'late' if r.due_in_seconds < 0 else '' }}"
-                      data-due-in="{{ r.due_in_seconds }}">
+                      data-due-in="{{ r.due_in_seconds }}" aria-hidden="true">
                     {%- if r.due_in_seconds < 0 -%}
                     {{ (-r.due_in_seconds) // 60 }} min past due
                     {%- else -%}

@@ -208,11 +208,11 @@ body{
     font-size:0.75rem;color:var(--peach);
 }
 
-.idle{color:var(--overlay);font-size:0.85rem;}
+.idle{color:var(--subtext);font-size:0.85rem;}
 
 .contact{text-align:right;font-size:0.8rem;color:var(--subtext);}
 .contact .ago{display:block;}
-.contact .pos{display:block;margin-top:3px;font-family:ui-monospace,monospace;font-size:0.72rem;color:var(--overlay);}
+.contact .pos{display:block;margin-top:3px;font-family:ui-monospace,monospace;font-size:0.72rem;color:var(--subtext);}
 
 .row.overdue .contact .ago{color:var(--red);font-weight:600;}
 

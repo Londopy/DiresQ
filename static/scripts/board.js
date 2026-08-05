@@ -39,6 +39,22 @@ function rowHtml(r) {
               : "")
         : `<span class="idle">not assigned</span>`;
 
+    // aria-hidden, and not by oversight. This whole list sits in an
+    // aria-live="polite" region and is replaced wholesale every three
+    // seconds. A number that changes on every repaint would queue an
+    // announcement faster than a screen reader can speak one, burying the
+    // change that actually matters -- the state badge going OVERDUE -- under
+    // a stream of countdowns. Sighted users get the ticking clock; screen
+    // reader users get the badge and "last contact N min ago", which carry
+    // the same information without the churn.
+    const due = r.due_in_seconds === null || r.due_in_seconds === undefined
+        ? ""
+        : `<span class="due${r.due_in_seconds < 0 ? " late" : ""}" aria-hidden="true">` +
+          (r.due_in_seconds < 0
+              ? `${Math.floor(-r.due_in_seconds / 60)} min past due`
+              : `due in ${Math.floor(r.due_in_seconds / 60)} min`) +
+          `</span>`;
+
     const ago = r.minutes_since_contact === null
         ? `<span class="ago idle">no contact yet</span>`
         : `<span class="ago">last contact ${r.minutes_since_contact} min ago</span>`;
@@ -59,7 +75,7 @@ function rowHtml(r) {
             <span class="badge ${r.state}">${label(r.state)}</span>
         </div>
         <div class="doing">${doing}</div>
-        <div class="contact">${ago}${pos}</div>
+        <div class="contact">${due}${ago}${pos}</div>
     </article>`;
 }
 
