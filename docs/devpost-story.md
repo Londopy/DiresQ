@@ -20,6 +20,8 @@ Then the part the whole thing exists for: **if nobody hears from you by your dea
 
 Stay quiet fifteen minutes past that and the server stops waiting to be noticed. It files a report *about you*, at your last known position. It joins the feed like any other job, so somebody can go and find you.
 
+**You can watch this happen rather than take our word for it.** The mechanism is the *absence* of an event over fifteen minutes, which is the hardest thing in software to show anybody. So the clock is injectable: with `DIRESQ_DEMO_SPEED=60` a minute of incident time passes every second, a responder goes overdue five seconds after the page loads, and the report about them arrives fifteen seconds after that. Nothing is staged for the camera — there is one `now()`, and every deadline, comparison and query downstream is the production code untouched. Only the rate at which time enters the system changes, and the page says so while it does, because a screen showing accelerated time has to admit it.
+
 Any number of responders can join the same report — there's no claim lock, deliberately. Once you're physically on scene you can signal how staffed the site is, and that reorders the feed, so the next person who opens the app goes where the help isn't.
 
 ## How we built it
@@ -71,7 +73,7 @@ Two different things get called AI here, and the paragraphs above are only about
 
 **In the shipped product — none.** No LLM, no API, no model file. The classifier is the naive Bayes described above, and that is the only machine learning DiresQ contains.
 
-**In building it — yes.** We used Claude. It was a working tool for fourteen hours, not a footnote.
+**In building it — yes.** We used AI for code, documentation including this page, and literature search. It was a working tool for fourteen hours, not a footnote.
 
 What that did and didn't cover. Every design decision reported here is ours, including the one we reversed — the claim lock came out because *we* read about Kathmandu and Mexico City and concluded it was wrong. Every number on this page was produced by running the code and reading the output, not by asking a model what it thought the answer was; the held-out 75%, the 0.30 threshold and the 0.157/0.409 margins are all measurements, and the test suite fails the build if any of them drift. The commit history is public if you want to see how it was actually built.
 
@@ -122,8 +124,6 @@ This turned out to be the project's actual theme. The dead man's switch started 
 **Measure the clever version before you keep it.** We learned this twice — once on equipment detection, where five binary classifiers confidently demanded a chainsaw for a downed power line, and once on priority, hidden behind a 100% accuracy figure measured on the training data.
 
 ## What's next for DiresQ
-
-**Watch it happen.** The mechanism is the *absence* of an event over fifteen minutes, which is the hardest thing in software to show anybody. So the clock is injectable: `DIRESQ_DEMO_SPEED=60` makes a minute of incident time pass every second, and a responder goes overdue five seconds after the page loads with the report about them arriving fifteen seconds later. None of it is staged — there is one `now()` and every deadline and comparison downstream is the production code untouched. Only the rate time enters the system changes, and the banner says so on the page, because a screen showing accelerated time has to admit it.
 
 **The radio.** A check-in already packs into 22 signed bytes — small enough for a LoRa payload — and there's a gateway script that forwards them to the API. What's missing is hardware. That's a purchase and a weekend, not a rewrite.
 
