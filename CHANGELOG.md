@@ -20,6 +20,9 @@ Disaster response tracker. Logs the volunteers going in, not just where the disa
 
 ### Changed
 
+- `docs/accessibility.md`, `docs/limits.md` and `docs/decisions.md` caught up with the demo clock. The accessibility page records the fourth pass and the three things it found, and its enforcement table now lists what the new tests actually check rather than what the old ones did — including the detail that the full-stylesheet contrast audit got its light/dark classification wrong on the first attempt and was caught by its own canary. `limits.md` records that screen reader users do not get the countdown at all, why the alternative was worse, and that the honest fix is not written. `decisions.md` records why time is injectable rather than the constants being shortened in demo mode, and what stays on the real clock.
+
+
 - The tests that read the project's own files stopped walking into `node_modules` before discarding it. They were the slowest thing in the suite and are now roughly thirty times faster.
 
 ### Fixed

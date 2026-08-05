@@ -233,6 +233,24 @@ around the defect you just found will keep passing when the same defect
 appears somewhere the test does not list.** Both are now written against the
 rule instead — every control on every page, every colour in every stylesheet.
 
+**Screen reader users do not get the countdown.** The board shows every
+responder's time to their next check-in, falling to zero and then going
+negative. That number is `aria-hidden`, so a screen reader never reads it.
+
+This is deliberate and it is still a loss. The responder list is a polite live
+region replaced wholesale every three seconds; a value that changes on every
+repaint queues announcements faster than they can be spoken, and the thing
+being buried would be the state badge changing to OVERDUE — the one event on
+the page worth interrupting for. We chose the badge over the countdown.
+
+What a screen reader user gets instead is the badge and *"last contact 47 min
+ago"*, which is the same information stated backwards: elapsed rather than
+remaining. That is not equivalent. Knowing somebody is due in four minutes is
+a different thing from knowing they were last heard from twenty-six minutes
+ago, and only one of them tells you to wait. The honest fix is a second,
+non-live element that states the deadline once and does not tick, and it is
+not written.
+
 What has **not** happened is a person using a screen reader on it. Automated
 checks catch roughly a third of real accessibility problems, and the third
 they catch is the easy third. The map in particular is a Leaflet canvas with

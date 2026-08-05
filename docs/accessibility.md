@@ -8,12 +8,13 @@ Nine issues, three of them critical. Then four more when reports learned to
 work offline and the form grew a status message somebody cannot afford to
 miss. Then six more on the last day, when the audit finally read the
 stylesheets instead of the palette and the report form instead of the pages
-that already had tests.
+that already had tests. Then three more after that, reviewing the countdown
+the board grew so the escalation could be filmed.
 
-Nineteen in total, six of them critical, all fixed, and all now held in place
-by tests that run in CI — because an audit nobody can repeat is a claim, not a
-result. The last six are the interesting ones: every one of them sat under a
-passing test whose job was to catch exactly that.
+Twenty-two in total, six of them critical, all fixed, and all now held in
+place by tests that run in CI — because an audit nobody can repeat is a claim,
+not a result. The last nine are the interesting ones: every one of them sat
+under a passing test whose job was to catch exactly that.
 
 ---
 
@@ -194,6 +195,42 @@ found, not the rule that was broken. A test that lists pages will not cover
 the page added next week, and a test that lists colours will not see the one
 you are about to use.
 
+### Found reviewing the demo clock, after submission
+
+The board grew a countdown — *due in 5 min*, falling to *20 min past due* —
+so the escalation could be filmed. Reviewing it turned up three things, and
+only one of them was an accessibility problem.
+
+**The countdown was drawn once and then erased.** It was added to
+`templates/board.html` and not to `board.js`, which replaces the whole list
+every three seconds. It rendered on load, and the first poll wiped it. No test
+saw it, because the tests read the template. Nobody would see it by hand
+unless they watched one row for three seconds. Not a WCAG issue at all — the
+audit found it because auditing means reading the thing rather than the notes
+about it.
+
+**A ticking number inside a live region.** `#responders` is
+`aria-live="polite"` and is replaced wholesale on every poll. A countdown
+changes on every repaint, and at `DIRESQ_DEMO_SPEED=60` that is every three
+seconds forever — announcements queued faster than they can be spoken, burying
+the one that matters, which is the badge changing to OVERDUE. The countdown is
+`aria-hidden="true"`. That is a real trade and it is written down in
+[limits.md](limits.md) rather than only here. *(4.1.3 Status Messages)*
+
+**Two more unreadable greys, on the board this time.** `--overlay` (`#45475a`)
+on the row background is **1.92:1**, and it was the colour of the coordinates
+and of every *"not assigned"*, *"no position"* and *"no contact yet"* state.
+The test that exists to prevent exactly this — the one named after not
+reintroducing the unreadable greys — only ever read `a11y.css`. Widening it to
+every stylesheet found six more files doing the same thing: the disclaimer
+footer, the legal links under three forms, the offline page's timestamp and
+footer, the triage footnote, and the stood-down vote on a report.
+*(1.4.3 Contrast (Minimum))*
+
+The pattern is the same one this page keeps recording. Each time, the test was
+written around the file where the bug was found instead of the rule that was
+broken.
+
 ## What was already right
 
 Worth recording, because it was mostly by accident of building the boring way:
@@ -223,6 +260,10 @@ Worth recording, because it was mostly by accident of building the boring way:
 | Board is polite, not assertive | A future "make it announce faster" |
 | Contrast of the palette pairs | Computes the ratio from the hex and fails below 4.5:1 |
 | No stylesheet sets text to an unreadable grey | Reads all fourteen stylesheets — the palette test could not see these |
+| **Every `color:` in every stylesheet is readable** | Resolves `var()` against each file's own palette and checks the result against the backgrounds it can actually sit on. Not a list of colours — the declarations themselves |
+| **The board's two renderers agree** | Every `r.<field>` in `board.js` appears in `board.html` and back, with an explicit exception list |
+| **Every fragment `rowHtml` builds is emitted** | Field parity alone stays green if the interpolation is deleted and the local left behind |
+| **The countdown is out of the live region** | A number that changes every repaint would talk over the state change it counts toward |
 | The status region is unhidden before it is written | A live region announcing nothing |
 | Only one thing announces a queued report | Two regions talking over each other |
 | The suggestion panel does not rewrite identical markup | A paragraph repeated at somebody every few seconds |
@@ -235,11 +276,24 @@ stylesheet. Any class using a colour that wasn't on the list was invisible to
 it, which is exactly how `.hint` sat at 1.38:1 for weeks under a test whose
 whole job was contrast, passing.
 
-There are two tests now. The original still checks the palette. A second one
+There are three tests now. The original still checks the palette. A second
 reads every stylesheet, finds the greys that are unreadable on anything we put
-behind them, and fails unless `a11y.css` demonstrably lifts that selector —
-so a fix cannot be quietly undone by a more specific rule, which is the other
-way this went wrong.
+behind them, and fails unless `a11y.css` demonstrably lifts that selector — so
+a fix cannot be quietly undone by a more specific rule, which is the other way
+this went wrong.
+
+The third stops listing anything. It reads every `color:` declaration in every
+stylesheet, resolves `var()` against that file's own palette, and checks the
+result against the backgrounds it can sit on — the page surfaces for ordinary
+text, the bright accent fills for the near-black text that goes on badges.
+
+Getting that split right took two attempts and the second attempt was caught
+by its own canary. The first version classified anything above 0.03 relative
+luminance as light text; `#45475a` sits at 0.065, so it was compared against
+yellow badges it never appears on, passed comfortably, and would have let
+through the exact colour the test was written for. There is now an assertion
+that the grey which caused all this is still classified as light text — a
+check whose only job is to fail if the check above it stops working.
 
 ## What has not been done
 

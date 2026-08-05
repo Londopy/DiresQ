@@ -149,11 +149,12 @@ packet carries an age rather than a timestamp, because a node running off a
 battery in a flood is the last clock you want to trust.
 [The threat model →](docs/security.md)
 
-**The accessibility audit found nineteen issues and we fixed all nineteen.**
-Six were critical. Nine came from the first pass; four from a second over the
-offline report form, where contrast passed everywhere and the announcing
-didn't. Six more on the last day — and those six are the ones worth reading
-about, because each sat under a passing test written to catch exactly that
+**The accessibility audit found twenty-two issues and we fixed all
+twenty-two.** Six were critical. Nine came from the first pass; four from a
+second over the offline report form, where contrast passed everywhere and the
+announcing didn't. Six more on the last day, and three from a fourth pass over
+the demo clock — and those last nine are the ones worth reading about, because
+each sat under a passing test written to catch exactly that
 kind of bug. The contrast test listed ten colour pairs by hand and never
 opened a stylesheet, so instructional text at 1.38:1 went unseen. The label
 test listed four pages, none of them the report form, so the form this whole
@@ -526,8 +527,8 @@ fork, offline, or if Pages is down.
   know is wrong
 - [Security](docs/security.md) — the threat model, packet signing, and the
   open redirect we shipped by accident
-- [Accessibility](docs/accessibility.md) — the WCAG 2.1 AA audit: nineteen
-  issues found across three passes, six critical, all fixed and held in place
+- [Accessibility](docs/accessibility.md) — the WCAG 2.1 AA audit: twenty-two
+  issues found across four passes, six critical, all fixed and held in place
   by tests
 - [Limits](docs/limits.md) — what this doesn't do
 - [Disclaimer](docs/disclaimer.md) — it does not call for help, and the triage
