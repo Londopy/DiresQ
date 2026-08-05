@@ -290,7 +290,7 @@ by report and by responder, check-ins by `(responder, created_at DESC)`.
 
 ## Testing
 
-583 test functions, which parametrisation expands into over six hundred
+591 test functions, which parametrisation expands into over seven hundred
 cases. Each gets a throwaway database
 via `tmp_path`, so order never matters and a failure can't poison the next
 test.

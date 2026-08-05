@@ -5687,3 +5687,118 @@ class TestTheLegendDistinguishesAPersonFromAPlace:
                 / "templates/map.html").read_text(encoding="utf-8")
         for name in re.findall(r'legend-marker (\w+)"', html):
             self.swatch(name)
+
+
+class TestTheClockCanBeScaled:
+    """The mechanism is the absence of an event over fifteen minutes, which is
+    correct and unwatchable. DIRESQ_DEMO_SPEED makes it filmable without
+    changing any of the logic underneath — these tests are what keeps that
+    second half true.
+    """
+
+    @pytest.fixture
+    def seeded(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(diresq, "DATABASE", str(tmp_path / "clock.db"))
+        diresq.init_db()
+        diresq.seed_data()
+        return diresq.app
+
+    @staticmethod
+    def scale(monkeypatch, speed, elapsed_real_seconds):
+        """Run the clock at `speed`, `elapsed` real seconds after boot.
+
+        Moves the epoch backwards rather than sleeping. A test that proves a
+        fifteen-minute escalation by waiting is a test nobody runs.
+        """
+        monkeypatch.setattr(diresq, "DEMO_SPEED", speed)
+        monkeypatch.setattr(diresq, "_CLOCK_EPOCH",
+                            datetime.now(timezone.utc)
+                            - timedelta(seconds=elapsed_real_seconds))
+
+    def test_the_default_clock_is_the_real_one(self):
+        assert diresq.DEMO_SPEED == 1
+        drift = abs((diresq.now() - datetime.now(timezone.utc)).total_seconds())
+        assert drift < 1, "unscaled now() must be the wall clock"
+
+    def test_a_bad_speed_does_not_take_the_app_down(self, monkeypatch):
+        monkeypatch.setenv("DIRESQ_DEMO_SPEED", "fast")
+        assert diresq._demo_speed() == 1
+        monkeypatch.setenv("DIRESQ_DEMO_SPEED", "0")
+        assert diresq._demo_speed() == 1, "zero would freeze time"
+
+    def test_time_moves_faster_when_asked(self, monkeypatch):
+        self.scale(monkeypatch, 60, 10)
+        ahead = (diresq.now() - datetime.now(timezone.utc)).total_seconds()
+        # Ten real seconds at 60x is ten minutes of incident time, of which
+        # ten seconds have actually passed.
+        assert 580 < ahead < 620, ahead
+
+    def test_a_scaled_clock_forces_the_banner_on(self, monkeypatch):
+        monkeypatch.setattr(diresq, "DEMO_SPEED", 120)
+        with diresq.app.test_request_context("/"):
+            context = diresq.inject_demo_mode()
+        assert context["demo_mode"] is True, (
+            "a page showing accelerated time has to say so")
+        assert context["demo_speed"] == 120
+
+    def test_the_board_says_how_long_until_each_deadline(self, seeded):
+        with seeded.app_context():
+            board = {r["username"]: r for r in diresq.fetch_responders()}
+        farrow = board["n.farrow"]
+        assert farrow["state"] == "en_route"
+        assert 0 < farrow["due_in_seconds"] <= 5 * 60, (
+            "the row the demo is built around must be counting down, not past")
+
+    def test_the_seeded_countdown_leads_the_whole_board(self, seeded):
+        """Whoever turns first is what the camera points at."""
+        with seeded.app_context():
+            pending = sorted(
+                (r["due_in_seconds"], r["username"])
+                for r in diresq.fetch_responders()
+                if r["due_in_seconds"] is not None and r["due_in_seconds"] > 0)
+        assert pending[0][1] == "n.farrow", (
+            f"n.farrow no longer goes red first; {pending[0][1]} does")
+        assert pending[1][0] - pending[0][0] >= 3 * 60, (
+            "not enough gap behind n.farrow to film a single transition")
+
+    def test_silence_escalates_into_a_real_report_under_a_scaled_clock(
+            self, seeded, monkeypatch):
+        """The whole point, end to end: nobody clicks anything and a report
+        about a person appears."""
+        with seeded.app_context():
+            before = {r["id"] for r in diresq.get_db().execute(
+                "SELECT id FROM reports").fetchall()}
+
+            # Twenty-one minutes of incident time: five to n.farrow's
+            # deadline, fifteen of silence past it, one to spare.
+            self.scale(monkeypatch, 60, 21 * 60 / 60)
+
+            board = {r["username"]: r for r in diresq.fetch_responders()}
+            assert board["n.farrow"]["state"] == "overdue"
+
+            diresq.sweep_silent_responders()
+            diresq.get_db().commit()
+
+            filed = diresq.get_db().execute("""
+                SELECT r.subject, r.lat, r.lng, r.priority, r.status
+                FROM reports r
+                JOIN accounts a ON a.id = r.auto_filed_for
+                WHERE a.username = 'n.farrow' AND r.id NOT IN (%s)
+            """ % ",".join("?" * len(before)), tuple(before)).fetchone()
+
+        assert filed is not None, "nobody filed a report about the silent responder"
+        assert "n.farrow" in filed["subject"]
+        assert filed["priority"] == "HIGH"
+        assert filed["status"] == "unassigned", "it has to compete for attention"
+        assert filed["lat"] is not None and filed["lng"] is not None, (
+            "a report about a missing person needs somewhere to send anyone")
+
+    def test_scaling_does_not_shorten_a_login_lockout(self, monkeypatch):
+        """Everything on the incident timeline scales. A security control is
+        not on the incident timeline."""
+        source = (Path(__file__).resolve().parents[1] / "app.py").read_text(
+            encoding="utf-8")
+        body = source[source.index("def login_locked"):]
+        body = body[:body.index("\ndef ")]
+        assert "datetime.now(timezone.utc)" in body
+        assert "now()" not in body.replace("datetime.now(", "")

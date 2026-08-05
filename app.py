@@ -211,8 +211,50 @@ def close_db(exc=None) -> None:
         db.close()
 
 
+# The clock.
+#
+# DiresQ's central mechanism is the absence of an event over time: a deadline
+# passes, nobody hears from a responder, and fifteen minutes later the server
+# files a report about them. That is correct and completely unwatchable. You
+# cannot show it to anyone in ninety seconds, and a mechanism nobody can see is
+# a mechanism nobody believes.
+#
+# So the clock is injectable. DIRESQ_DEMO_SPEED multiplies elapsed time since
+# process start: at 120, half a second of real waiting is a minute of incident
+# time, and the whole silence-to-escalation sequence plays out in about fifteen
+# seconds -- while every deadline, comparison and query downstream stays
+# literally the code that runs in production. Nothing about the mechanism is
+# faked for the camera; only the rate at which time passes into it.
+#
+# Two deliberate exclusions. Login lockout stays on the real clock, because
+# scaling it would quietly weaken a security control on a public instance. The
+# ICS-214 export filename stays real, because it names a file on somebody's
+# disk and that name should mean what it says.
+#
+# At speed 1 -- the default, and the only value a real deployment should ever
+# use -- now() is now() with no arithmetic at all.
+def _demo_speed() -> int:
+    try:
+        return max(1, int(os.environ.get("DIRESQ_DEMO_SPEED", "1")))
+    except ValueError:
+        # A typo in an env var must not take down an emergency board.
+        return 1
+
+
+DEMO_SPEED = _demo_speed()
+_CLOCK_EPOCH = datetime.now(timezone.utc)
+
+
+def now() -> datetime:
+    """The current time, as the incident sees it."""
+    real = datetime.now(timezone.utc)
+    if DEMO_SPEED == 1:
+        return real
+    return _CLOCK_EPOCH + (real - _CLOCK_EPOCH) * DEMO_SPEED
+
+
 def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return now().isoformat(timespec="seconds")
 
 
 def parse_iso(value: str | None) -> datetime | None:
@@ -313,7 +355,7 @@ def deadline_for(joined_at: str, eta: str | None,
 def is_overdue(joined_at: str, eta: str | None, last_checkin: str | None) -> bool:
     """Derived at read time so there's no cron job to forget to start."""
     deadline = deadline_for(joined_at, eta, last_checkin)
-    return deadline is not None and datetime.now(timezone.utc) > deadline
+    return deadline is not None and now() > deadline
 
 
 REPORT_COLUMNS = f"""
@@ -346,7 +388,7 @@ def age(item: dict) -> dict:
                                     item.get("received_at"))
     item["minutes_old"] = (
         None if written is None
-        else max(0, int((datetime.now(timezone.utc) - written).total_seconds() // 60))
+        else max(0, int((now() - written).total_seconds() // 60))
     )
     return item
 
@@ -524,7 +566,14 @@ def inject_demo_mode():
     anything filed here is thrown away, so nobody types a real address into a
     database that resets when the server sleeps.
     """
-    return {"demo_mode": os.environ.get("DIRESQ_DEMO") == "1"}
+    # A scaled clock forces the banner on. A page showing time passing sixty
+    # times faster than the wall clock has to say so on the page -- the same
+    # rule the sweep timestamp follows, applied to the clock itself. Otherwise
+    # the honest version of this feature is indistinguishable from a fake one.
+    return {
+        "demo_mode": os.environ.get("DIRESQ_DEMO") == "1" or DEMO_SPEED > 1,
+        "demo_speed": DEMO_SPEED,
+    }
 
 
 @app.context_processor
@@ -945,7 +994,7 @@ def create_report(*, subject: str, description: str, priority: str,
                     "synced_late": late_sync(seen["created_at"],
                                              seen["received_at"])}
 
-    received = datetime.now(timezone.utc)
+    received = now()
     try:
         cur = db.execute("""
             INSERT INTO reports
@@ -1261,7 +1310,7 @@ def fetch_responders() -> list[dict]:
         ORDER BY acc.username, asg.joined_at DESC
     """).fetchall()
 
-    now = datetime.now(timezone.utc)
+    moment = now()
     board, seen = [], set()
 
     for row in rows:
@@ -1272,11 +1321,25 @@ def fetch_responders() -> list[dict]:
 
         overdue = False
         minutes = None
+        due_in = None
         if row["assignment_id"] is not None:
             overdue = is_overdue(row["joined_at"], row["eta"], row["last_checkin"])
             contact = parse_iso(row["last_checkin"]) or parse_iso(row["joined_at"])
             if contact is not None:
-                minutes = int((now - contact).total_seconds() // 60)
+                minutes = int((moment - contact).total_seconds() // 60)
+
+            # Seconds until this responder is expected to answer. Negative once
+            # the deadline has passed, so the board can say how far past it is
+            # rather than only that it is.
+            #
+            # The board used to show only elapsed time, which states the past
+            # and leaves the future to be inferred. A number counting toward
+            # zero is the difference between a viewer working out that
+            # something is about to happen and a viewer watching it happen.
+            deadline = deadline_for(row["joined_at"], row["eta"],
+                                    row["last_checkin"])
+            if deadline is not None:
+                due_in = int((deadline - moment).total_seconds())
 
         if row["assignment_id"] is None:
             state = "available"
@@ -1292,6 +1355,7 @@ def fetch_responders() -> list[dict]:
             "state": state,
             "overdue": overdue,
             "minutes_since_contact": minutes,
+            "due_in_seconds": due_in,
             "assignment": None if row["assignment_id"] is None else {
                 "id": row["assignment_id"],
                 "report_id": row["report_id"],
@@ -1361,14 +1425,14 @@ def sweep_silent_responders() -> list[int]:
         WHERE asg.status != 'cleared'
     """).fetchall()
 
-    now = datetime.now(timezone.utc)
+    moment = now()
     filed = []
 
     for row in rows:
         deadline = deadline_for(row["joined_at"], row["eta"], row["last_checkin"])
         if deadline is None:
             continue
-        if now < deadline + timedelta(minutes=SILENT_ESCALATE_MINUTES):
+        if moment < deadline + timedelta(minutes=SILENT_ESCALATE_MINUTES):
             continue
 
         already = db.execute("""
@@ -1389,7 +1453,7 @@ def sweep_silent_responders() -> list[int]:
             lat, lng = row["report_lat"], row["report_lng"]
             where = "the scene they were heading to, no position ever received"
 
-        silent = int((now - (seen or parse_iso(row["joined_at"]) or now))
+        silent = int((moment - (seen or parse_iso(row["joined_at"]) or moment))
                      .total_seconds() // 60)
 
         db.execute("""
@@ -1597,7 +1661,7 @@ def last_swept() -> dict:
     if when is None:
         return {"at": None, "seconds": None, "stale": True}
 
-    seconds = int((datetime.now(timezone.utc) - when).total_seconds())
+    seconds = int((now() - when).total_seconds())
     return {
         "at": row["last_swept_at"],
         "seconds": max(seconds, 0),
@@ -1624,24 +1688,24 @@ def claimed_time(raw: str) -> tuple[datetime, str | None]:
     barely in the future is clock drift, far in the future or very old is
     either a broken device or someone playing games.
     """
-    now = datetime.now(timezone.utc)
+    moment = now()
     if not raw:
-        return now, None
+        return moment, None
 
     when = parse_iso(raw)
     if when is None:
-        return now, "Could not read that timestamp."
+        return moment, "Could not read that timestamp."
     if when.tzinfo is None:
         when = when.replace(tzinfo=timezone.utc)
 
-    if (when - now).total_seconds() > CLOCK_SKEW_SECONDS:
-        return now, "That check-in is dated in the future."
-    if (now - when).total_seconds() > MAX_BACKDATE_HOURS * 3600:
-        return now, f"Too old to accept, over {MAX_BACKDATE_HOURS} hours."
+    if (when - moment).total_seconds() > CLOCK_SKEW_SECONDS:
+        return moment, "That check-in is dated in the future."
+    if (moment - when).total_seconds() > MAX_BACKDATE_HOURS * 3600:
+        return moment, f"Too old to accept, over {MAX_BACKDATE_HOURS} hours."
 
     # Slightly ahead is a drifting clock, not a lie. Don't let it sit in the
     # future, but don't reject it either.
-    return min(when, now), None
+    return min(when, moment), None
 
 
 def position_looks_wrong(report_id: int, account_id: int) -> bool:
@@ -1997,7 +2061,7 @@ def ics214_rows() -> list[list[str]]:
     is most of the argument for logging responders at all.
     """
     db = get_db()
-    now = datetime.now(timezone.utc)
+    moment = now()
 
     responders = db.execute("""
         SELECT acc.username, acc.capabilities, MIN(asg.joined_at) AS first_seen
@@ -2067,7 +2131,7 @@ def ics214_rows() -> list[list[str]]:
         [],
         ["1. Incident Name", "DiresQ activation - Katy, TX"],
         ["2. Operational Period", "From", stamp(started),
-         "To", now.strftime("%m/%d/%Y %H:%M")],
+         "To", moment.strftime("%m/%d/%Y %H:%M")],
         ["3. Name", current_user()["username"],
          "ICS Position", "Resource Unit Leader",
          "Home Agency", "DiresQ (volunteer)"],
@@ -2088,7 +2152,7 @@ def ics214_rows() -> list[list[str]]:
         [],
         ["6. Prepared by", current_user()["username"],
          "Position", "Resource Unit Leader",
-         "Date/Time", now.strftime("%m/%d/%Y %H:%M")],
+         "Date/Time", moment.strftime("%m/%d/%Y %H:%M")],
         [],
         ["Generated by DiresQ from logged activity. Times are UTC. Report "
          "resolution and staffing changes are not separately timestamped and "
@@ -2260,7 +2324,7 @@ def stand_down_for(account_id: int) -> dict | None:
         "subject": row["subject"],
         "at": row["status_changed_at"],
         "minutes_ago": None if closed is None else max(
-            0, int((datetime.now(timezone.utc) - closed).total_seconds() // 60)),
+            0, int((now() - closed).total_seconds() // 60)),
     }
 
 
@@ -2339,7 +2403,7 @@ def record_checkin(responder_id: int, lat, lng, happened_at: datetime,
                                          seen["received_at"]),
             }
 
-    received = datetime.now(timezone.utc)
+    received = now()
     try:
         db.execute("""
             INSERT INTO checkins
@@ -2479,7 +2543,7 @@ def api_uplink():
 
     # The packet carries an age, not a timestamp — a node running off a
     # battery in a flood is the last clock you want to trust.
-    happened_at = (datetime.now(timezone.utc)
+    happened_at = (now()
                    - timedelta(minutes=checkin.age_minutes))
 
     result = record_checkin(checkin.responder_id, checkin.lat, checkin.lng,
@@ -2525,6 +2589,12 @@ SEED_ACCOUNTS = [
     # Two responders deliberately left unassigned. A board where everybody is
     # busy has nothing to say when a report needs a boat, and a real one
     # always has somebody between jobs.
+    # The one the camera is pointed at. Everybody else on this board is in a
+    # state that is already settled -- Sam is red, the Mayde Creek four are
+    # overstaffed, the rest are en route with time in hand. Farrow is the only
+    # one whose state is about to CHANGE while you watch, which is the whole
+    # point: the mechanism is a transition, and a transition needs a before.
+    ("n.farrow", "responder", "medical,generator"),
     ("r.castillo", "responder", "boat,swiftwater,medical"),
     ("t.oyelaran", "responder", "chainsaw,truck,generator"),
     # Two more with boats, who went to the *second* report of the flood on
@@ -2611,6 +2681,23 @@ SEED_ASSIGNMENTS = [
 
     # Oxygen: someone en route with a sensible ETA.
     (2, "a.whitlock", "en_route", None,        20, 30,   14),
+
+    # Oxygen, second responder: Farrow joined twenty minutes ago and gave an
+    # ETA that lands forty-five minutes from now. On a real clock that is a
+    # dull row on a board. With DIRESQ_DEMO_SPEED set it is a countdown, and
+    # then it is a red row, and then it is a report about a person -- which is
+    # the sequence the entire project exists to produce and the one thing we
+    # could never show anybody.
+    #
+    # They have checked in, so when the escalation fires it pins at a real
+    # last-known position rather than guessing from the scene.
+    #
+    # Five minutes, not forty-five. The first draft of this row put Farrow's
+    # deadline furthest out, which meant every other responder on the board
+    # went red first and the camera had nothing to point at. Farrow now leads
+    # the queue by four minutes, so the first row to turn and the first report
+    # to file itself are the same person.
+    (2, "n.farrow", "en_route", None,          20, 25,   6),
 
     # Roof: Sam went, and nobody has heard from him since.
     (4, "s.reyes",  "on_scene", None,          62, None, 47),
@@ -2713,10 +2800,10 @@ def seed_data() -> tuple[int, int]:
     Seeding an empty board makes the app look like a to-do list. Seeding it
     mid-incident shows what it's for.
     """
-    now = datetime.now(timezone.utc)
+    moment = now()
 
     def ago(minutes):
-        return (now - timedelta(minutes=minutes)).isoformat(timespec="seconds")
+        return (moment - timedelta(minutes=minutes)).isoformat(timespec="seconds")
 
     with app.app_context():
         db = get_db()
@@ -2764,7 +2851,7 @@ def seed_data() -> tuple[int, int]:
             report_id = report_ids[idx]
             eta = None
             if eta_mins is not None:
-                eta = (now - timedelta(minutes=joined)
+                eta = (moment - timedelta(minutes=joined)
                        + timedelta(minutes=eta_mins)).isoformat(timespec="seconds")
 
             # Someone still en route hasn't changed status since joining, so
