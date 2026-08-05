@@ -216,6 +216,17 @@ body{
 
 .row.overdue .contact .ago{color:var(--red);font-weight:600;}
 
+/* Time until this responder is expected to answer. The row above it states
+   the past — how long since we heard from them — and this one states the
+   future. Elapsed time has to be reasoned about; a number falling toward zero
+   does not. Tabular figures so it counts down in place instead of jittering. */
+.contact .due{
+    display:block;margin-bottom:3px;
+    font-variant-numeric:tabular-nums;
+    color:var(--green);font-weight:600;
+}
+.contact .due.late{color:var(--red);}
+
 .empty{color:var(--subtext);text-align:center;padding:40px 0;}
 
 @media (max-width:760px){

@@ -346,6 +346,7 @@ override the file, so your shell and CI always win.
 | `DIRESQ_DEV_USER` | Stay signed in as this user without logging in. **Development only — it is a full auth bypass.** Leave unset for the real login flow. |
 | `DIRESQ_DB` | Path to the SQLite file. Defaults to `diresq.db`. |
 | `DIRESQ_HTTPS_ONLY` | Set to `1` when the site is served over HTTPS, so session cookies are marked Secure. Leave unset on localhost or you will not stay signed in. |
+| `DIRESQ_DEMO_SPEED` | Multiplies the rate incident time passes, for filming. At `60` a check-in deadline and the fifteen-minute silence escalation play out in twenty seconds, using the production escalation code unchanged. Forces the demo banner on. **Leave unset anywhere real** — at any value above 1 every deadline and elapsed-time display in the app is wrong by that factor. See `docs/filming.md`. |
 | `DIRESQ_DEMO` | Set to `1` on a public instance. Puts a banner on every page saying it is a demo, the data resets, and not to type a real address into it. |
 
 ## API

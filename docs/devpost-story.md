@@ -103,7 +103,7 @@ The fix was a lexicon of the categories a triage protocol calls immediate, writt
 
 It still gets one report in four wrong. That's survivable because it lands in a dropdown you control, next to the words that caused it — and it would be unacceptable if it were deciding anything.
 
-**583 tests, 728 cases with parameters** — including a WCAG 2.1 AA audit, adversarial input tests, and a suite that reads our own documentation and fails the build when the numbers in it go stale. That last one caught us mid-project: it went red because we'd added the research write-up to the repo and the README's line count silently became a lie.
+**591 tests, 736 cases with parameters** — including a WCAG 2.1 AA audit, adversarial input tests, and a suite that reads our own documentation and fails the build when the numbers in it go stale. That last one caught us mid-project: it went red because we'd added the research write-up to the repo and the README's line count silently became a lie.
 
 **We wrote the paper.** Somewhere around hour forty we realised the interesting claim wasn't the app, it was the gap — so we went and read the literature to find out whether the gap was real. It mostly wasn't the way we'd assumed: convergence has been documented since 1957, and the field's answer is credentialing. But credentialing presupposes an authority who has *arrived*, and FEMA's own guidance answers the 2am boat owner by saying they should have affiliated months earlier. There's an eleven-page preprint on that interval, with a real bibliography, and it says plainly that DiresQ has no users, no deployment and no evaluation.
 
@@ -122,6 +122,8 @@ This turned out to be the project's actual theme. The dead man's switch started 
 **Measure the clever version before you keep it.** We learned this twice — once on equipment detection, where five binary classifiers confidently demanded a chainsaw for a downed power line, and once on priority, hidden behind a 100% accuracy figure measured on the training data.
 
 ## What's next for DiresQ
+
+**Watch it happen.** The mechanism is the *absence* of an event over fifteen minutes, which is the hardest thing in software to show anybody. So the clock is injectable: `DIRESQ_DEMO_SPEED=60` makes a minute of incident time pass every second, and a responder goes overdue five seconds after the page loads with the report about them arriving fifteen seconds later. None of it is staged — there is one `now()` and every deadline and comparison downstream is the production code untouched. Only the rate time enters the system changes, and the banner says so on the page, because a screen showing accelerated time has to admit it.
 
 **The radio.** A check-in already packs into 22 signed bytes — small enough for a LoRa payload — and there's a gateway script that forwards them to the API. What's missing is hardware. That's a purchase and a weekend, not a rewrite.
 

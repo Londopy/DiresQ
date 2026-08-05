@@ -243,6 +243,7 @@ nothing else would catch it.
   "state": "overdue",
   "overdue": true,
   "minutes_since_contact": 47,
+  "due_in_seconds": -900,
   "assignment": {
     "id": 3,
     "report_id": 1,
@@ -255,6 +256,8 @@ nothing else would catch it.
   "last_position": { "lat": 29.7858, "lng": -95.8244, "at": "..." }
 }
 ```
+
+`due_in_seconds` counts toward the responder's next expected check-in and goes negative once it has passed, so a client can show how far past due somebody is rather than only that they are. It is null when no deadline can be derived — nobody assigned, or an assignment with neither an ETA nor a check-in to count from.
 
 `state` is `overdue`, `on_scene`, `en_route` or `available`, and rows arrive
 already sorted in that order. Switch on that one field — don't recompute the
