@@ -2009,8 +2009,14 @@ class TestTheDocsAreNotOutOfDate:
     # the README claims it is the only place it stays written down.
     CODE_SUFFIXES = {".py", ".js", ".css", ".html", ".sql", ".mjs", ".astro",
                      ".sh", ".ps1"}
+    # research/ and paper/ are the write-up, not the software. The README's
+    # totals are a claim about DiresQ, and folding 1,900 lines of paper drafts
+    # into them would make that claim wrong in the direction that flatters us
+    # -- which is the same objection the padding test below encodes. Skipping
+    # them also stops an edit to a draft from breaking CI on a Flask app.
     SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv",
-                 "dist", ".astro", ".pytest_cache", ".ruff_cache", "site_out"}
+                 "dist", ".astro", ".pytest_cache", ".ruff_cache", "site_out",
+                 "research", "paper"}
 
     # Line counts are approximate by nature: they move with almost every
     # commit, so asserting them exactly would fail on the commit that fixed
