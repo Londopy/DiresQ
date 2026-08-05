@@ -97,7 +97,7 @@
 .vote.need_more{color:#f38ba8;}
 .vote.adequate{color:#a6e3a1;}
 .vote.overstaffed{color:#fab387;}
-.vote.stood_down{color:#6c7086;}
+.vote.stood_down{color:#a6adc8;}
 
 /* --- resolve --- */
 
@@ -159,7 +159,7 @@
 }
 
 .responder .vote-tag{font-size:0.78rem;color:#fab387;}
-.responder .caps{font-size:0.75rem;color:#45475a;margin-left:auto;}
+.responder .caps{font-size:0.75rem;color:#a6adc8;margin-left:auto;}
 
 @media (max-width:560px){
     .join-row{flex-direction:column;}
@@ -233,4 +233,34 @@
        after the base rule was fixed. Specificity is how a contrast fix gets
        quietly undone. */
     color:#a6adc8;
+}
+
+
+/* Somebody on this report who has stopped answering.
+   Peach rather than red: red on this page already means HIGH priority, and
+   a second red would read as another way of saying the same thing. This is a
+   different fact — the incident's severity has not changed, our contact with
+   a person has. */
+.overdue-warning{
+    margin:0 0 14px;
+    padding:10px 12px;
+    border-left:3px solid var(--peach, #fab387);
+    background:rgba(250,179,135,.10);
+    color:var(--peach, #fab387);
+    font-weight:600;
+    font-size:0.9rem;
+}
+
+.responder.is-overdue{
+    border-left-color:var(--peach, #fab387);
+}
+
+.overdue-tag{
+    font-size:0.7rem;
+    letter-spacing:0.08em;
+    font-weight:700;
+    color:var(--peach, #fab387);
+    border:1px solid var(--peach, #fab387);
+    border-radius:4px;
+    padding:2px 6px;
 }

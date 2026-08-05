@@ -25,6 +25,11 @@
     <code>londo</code> / <code>diresq</code>. Nothing here is real, and
     everything resets when the server sleeps &mdash; please don't type a real
     address into it.
+    {% if demo_speed > 1 %}<br>
+    <strong>The clock is running {{ demo_speed }}&times; real time</strong>, so
+    check-in deadlines and the fifteen-minute silence escalation play out in
+    seconds. The mechanism is the production one; only the rate is scaled.
+    {% endif %}
 </p>
 {% endif %}
 
@@ -284,10 +289,25 @@
             {% endif %}
         </h2>
 
+        {% if report.overdue_here %}
+        <!-- Status is what somebody last told us. This is whether they are
+             still answering. Without it the page counts a silent responder
+             as coverage, which is the mistake this whole project is about. -->
+        <p class="overdue-warning" role="status">
+            {{ report.overdue_here }}
+            {{ 'person has' if report.overdue_here == 1 else 'people have' }}
+            stopped answering. Do not count
+            {{ 'them' if report.overdue_here == 1 else 'them' }} as help here.
+        </p>
+        {% endif %}
+
         {% for r in report.responders %}
-        <div class="responder {{ r.status }}">
+        <div class="responder {{ r.status }}{% if r.overdue %} is-overdue{% endif %}">
             <span class="name">{{ r.username }}</span>
             <span class="status">{{ r.status.replace('_', ' ')|upper }}</span>
+            {% if r.overdue %}
+            <span class="overdue-tag">NO CONTACT</span>
+            {% endif %}
             {% if r.staffing_vote %}
             <span class="vote-tag">{{ r.staffing_vote.replace('_', ' ') }}</span>
             {% endif %}

@@ -29,6 +29,11 @@
     <code>londo</code> / <code>diresq</code>. Nothing here is real, and
     everything resets when the server sleeps &mdash; please don't type a real
     address into it.
+    {% if demo_speed > 1 %}<br>
+    <strong>The clock is running {{ demo_speed }}&times; real time</strong>, so
+    check-in deadlines and the fifteen-minute silence escalation play out in
+    seconds. The mechanism is the production one; only the rate is scaled.
+    {% endif %}
 </p>
 {% endif %}
 
@@ -195,6 +200,15 @@
         </div>
 
     </main>
+
+    <!-- Filing a report is the point of this app, and on a phone the sidebar
+         it normally lives in slides off-screen behind a button labelled
+         "Filter". Somebody standing in water is not going to look for it
+         there. This copy sits in the page on small screens; CSS shows exactly
+         one of the two, so a screen reader never hears it twice. -->
+    <a href="/report/new" class="create-btn create-btn-mobile">
+        + Create Report
+    </a>
 
     <aside id="sidebar">
 

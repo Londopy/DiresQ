@@ -193,6 +193,63 @@ function applyFilters(){
     });
 }
 
+// --- finding your way back -----------------------------------------------
+//
+// The map opens wherever it opens, and one stray scroll puts you over an
+// ocean with no way back except reloading. Reports are the only thing on
+// here worth looking at, so both buttons are about getting you to them:
+// one shows all of them, the other walks through them one at a time.
+
+const fitBtn = document.getElementById("fit-all");
+const nextBtn = document.getElementById("next-incident");
+let cursor = -1;
+
+function shown(){
+    return markers.filter(m => map.hasLayer(m));
+}
+
+function fitAll(){
+    const visible = shown();
+    if(!visible.length) return;
+
+    map.fitBounds(
+        L.latLngBounds(visible.map(m => m.getLatLng())),
+        { padding: [50, 50], maxZoom: 15 }
+    );
+    cursor = -1;
+    announce(`Showing all ${visible.length} reports.`);
+}
+
+function nextIncident(){
+    const visible = shown();
+    if(!visible.length) return;
+
+    cursor = (cursor + 1) % visible.length;
+    const marker = visible[cursor];
+
+    map.setView(marker.getLatLng(), 16);
+    marker.openPopup();
+    announce(`Report ${cursor + 1} of ${visible.length}.`);
+}
+
+// Moving the map is invisible to somebody using a screen reader, so say
+// where we went. Polite: it must not interrupt anything being read.
+function announce(message){
+    let region = document.getElementById("map-said");
+    if(!region){
+        region = document.createElement("p");
+        region.id = "map-said";
+        region.className = "visually-hidden";
+        region.setAttribute("role", "status");
+        region.setAttribute("aria-live", "polite");
+        document.body.appendChild(region);
+    }
+    region.textContent = message;
+}
+
+if(fitBtn) fitBtn.addEventListener("click", fitAll);
+if(nextBtn) nextBtn.addEventListener("click", nextIncident);
+
 document.getElementById("search")
 .addEventListener("input",e=>{
     search = e.target.value.toLowerCase();
@@ -284,7 +341,16 @@ function responderPopup(responder) {
 }
 
 fetch("/api/responders")
-    .then(res => res.json())
+    .then(res => {
+        // fetch only rejects on a network failure. A 500 or a redirect to the
+        // login page resolves normally, and .json() then throws a parse error
+        // on the HTML — same banner, but nothing anywhere says which of the
+        // three happened. Reading the status is the difference between "no
+        // signal" and "the server is broken", and only one of those is fixed
+        // by moving somewhere with bars.
+        if (!res.ok) throw new Error(`/api/responders returned ${res.status}`);
+        return res.json();
+    })
     .then(responders => {
 
         responders.forEach(responder => {
@@ -293,12 +359,18 @@ fetch("/api/responders")
 
             const { lat, lng } = responder.last_position;
 
+            // A hollow ring, because the legend says so and because colour
+            // is already spoken for. Red, blue and green on a teardrop mean
+            // whether anyone is coming to a place; the same three on a filled
+            // circle meant a person, and the two were indistinguishable at a
+            // glance. Shape carries person-or-place, colour carries state,
+            // and neither has to do both.
             const marker = L.circleMarker([lat, lng], {
-                radius: 8,
+                radius: 9,
                 color: getResponderColor(responder.state),
                 fillColor: getResponderColor(responder.state),
-                fillOpacity: 1,
-                weight: 2
+                fillOpacity: 0.15,
+                weight: 3
             }).addTo(map);
 
             marker.bindPopup(responderPopup(responder));
@@ -311,11 +383,23 @@ fetch("/api/responders")
     // when the network is bad — which is when somebody is most likely to
     // be staring at this screen. Failing quietly leaves a map that looks
     // complete and is missing every responder on it, so say so.
-    .catch(() => {
+    .catch(err => {
+        console.warn("responder positions unavailable:", err);
+
         const warning = document.createElement("div");
         warning.className = "map-warning";
         warning.setAttribute("role", "status");
         warning.textContent =
             "Could not load responder positions. Reports are still shown.";
-        document.body.appendChild(warning);
+
+        // Above the map, not at the end of the document. Appending to body put
+        // it below the statistics cards, off the bottom of a phone screen —
+        // the map looked complete, was missing every responder, and the notice
+        // saying so was somewhere you had to scroll to find.
+        const canvas = document.getElementById("map");
+        if (canvas && canvas.parentNode) {
+            canvas.parentNode.insertBefore(warning, canvas);
+        } else {
+            document.body.appendChild(warning);
+        }
     });

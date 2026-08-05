@@ -11,6 +11,11 @@ env/
 
 # Database
 *.db
+# WAL leaves two sidecar files beside the database. They are as much a local
+# artefact as the .db itself, and a committed -wal is a committed transaction
+# log from somebody else's machine.
+*.db-wal
+*.db-shm
 *.sqlite
 *.sqlite3
 
@@ -48,3 +53,6 @@ site/.astro/
 # Committing them would give every page two copies, and someone would edit
 # the wrong one.
 site/src/pages/*.md
+
+# Overleaf upload bundle is built from paper/ -- see paper/README.md
+diresq-overleaf.zip

@@ -73,6 +73,12 @@ of `get_db()`. Not for a demo.
 `DIRESQ_DEV_USER` is **not** set. That's the auth bypass — on a public
 instance it would sign every visitor in as the same person.
 
+`DIRESQ_DEMO_SPEED` is **not** set either, which leaves it at 1 and the clock
+real. It exists so the silence escalation can be filmed (`docs/filming.md`);
+set on a live instance it would make every deadline, countdown and elapsed
+time on every page wrong by that factor, while still looking entirely
+plausible. It is the one variable here whose misconfiguration is invisible.
+
 ## gunicorn, not the dev server
 
 `start.sh` runs gunicorn with two workers and four threads.

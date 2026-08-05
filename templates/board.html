@@ -28,6 +28,11 @@
     <code>londo</code> / <code>diresq</code>. Nothing here is real, and
     everything resets when the server sleeps &mdash; please don't type a real
     address into it.
+    {% if demo_speed > 1 %}<br>
+    <strong>The clock is running {{ demo_speed }}&times; real time</strong>, so
+    check-in deadlines and the fifteen-minute silence escalation play out in
+    seconds. The mechanism is the production one; only the rate is scaled.
+    {% endif %}
 </p>
 {% endif %}
 
@@ -133,6 +138,16 @@
             </div>
 
             <div class="contact">
+                {% if r.due_in_seconds is not none %}
+                <span class="due {{ 'late' if r.due_in_seconds < 0 else '' }}"
+                      data-due-in="{{ r.due_in_seconds }}" aria-hidden="true">
+                    {%- if r.due_in_seconds < 0 -%}
+                    {{ (-r.due_in_seconds) // 60 }} min past due
+                    {%- else -%}
+                    due in {{ r.due_in_seconds // 60 }} min
+                    {%- endif -%}
+                </span>
+                {% endif %}
                 {% if r.minutes_since_contact is not none %}
                 <span class="ago">last contact {{ r.minutes_since_contact }} min ago</span>
                 {% else %}

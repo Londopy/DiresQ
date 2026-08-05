@@ -154,6 +154,8 @@ gap:30px;
 
 }
 
+.create-btn-mobile{ display:none; }
+
 .create-btn{
 
 background:var(--blue);
@@ -251,6 +253,16 @@ gap:10px;
 }
 
 @media(max-width:768px){
+
+    /* Show the in-page button and hide the drawer's, so only one exists at
+       a time — display:none takes it out of the accessibility tree too. */
+    .create-btn-mobile{
+        display:block;
+        margin:0 16px 16px;
+    }
+
+    aside .create-btn{ display:none; }
+
 
     .container{
 
@@ -387,13 +399,13 @@ gap:10px;
 
     font-size:.78rem;
 
-    color:#6c7086;
+    color:#a6adc8;
 
 }
 
 .legal-link a{
 
-    color:#6c7086;
+    color:#a6adc8;
 
 }
 

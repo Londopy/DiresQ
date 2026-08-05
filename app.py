@@ -44,6 +44,8 @@ from __future__ import annotations
 import base64
 import binascii
 import csv
+import math
+import zlib
 import io
 import os
 import re
@@ -74,6 +76,13 @@ from eta import parse_eta
 load_dotenv(Path(__file__).with_name(".env"))
 
 DATABASE = os.environ.get("DIRESQ_DB", "diresq.db")
+
+# How long a statement waits for a lock before giving up. SQLite's own default
+# is zero — it returns "database is locked" on the first attempt — and Python's
+# driver default is five seconds. Named here because it is a real deadline: two
+# gunicorn workers of four threads each are eight things contending, and this
+# is how long the eighth is willing to queue.
+SQLITE_BUSY_SECONDS = 5.0
 
 # How long a responder has to check in when they didn't give an ETA.
 DEFAULT_CHECKIN_MINUTES = 30
@@ -165,8 +174,32 @@ def note_login_failure(username: str) -> None:
 
 def get_db() -> sqlite3.Connection:
     if "db" not in g:
-        g.db = sqlite3.connect(DATABASE, detect_types=sqlite3.PARSE_DECLTYPES)
+        g.db = sqlite3.connect(DATABASE, detect_types=sqlite3.PARSE_DECLTYPES,
+                               timeout=SQLITE_BUSY_SECONDS)
         g.db.row_factory = sqlite3.Row
+
+        # busy_timeout first, so the journal_mode switch below waits its turn
+        # rather than failing outright on a database somebody else is using.
+        g.db.execute(f"PRAGMA busy_timeout = {int(SQLITE_BUSY_SECONDS * 1000)}")
+
+        # WAL, because this app writes on reads. The board polls
+        # /api/responders every three seconds and that request runs the
+        # silence sweep and stamps the clock, so a read endpoint is also the
+        # busiest writer. In the default rollback journal a writer locks out
+        # every reader and a reader locks out the writer, so two people with
+        # the board open is enough to start returning "database is locked" —
+        # which Flask serves as a 500 on the exact endpoint the map needs.
+        #
+        # In WAL readers never block the writer and the writer never blocks
+        # readers, which is the shape of this workload. It is a property of
+        # the file, not the connection, so this is a no-op after the first.
+        g.db.execute("PRAGMA journal_mode = WAL")
+
+        # Don't fsync on every commit. The durability being traded away is
+        # "the last few commits survive an OS crash"; on an instance whose
+        # whole filesystem is discarded when it sleeps, that was never true.
+        g.db.execute("PRAGMA synchronous = NORMAL")
+
         g.db.execute("PRAGMA foreign_keys = ON")
     return g.db
 
@@ -178,8 +211,50 @@ def close_db(exc=None) -> None:
         db.close()
 
 
+# The clock.
+#
+# DiresQ's central mechanism is the absence of an event over time: a deadline
+# passes, nobody hears from a responder, and fifteen minutes later the server
+# files a report about them. That is correct and completely unwatchable. You
+# cannot show it to anyone in ninety seconds, and a mechanism nobody can see is
+# a mechanism nobody believes.
+#
+# So the clock is injectable. DIRESQ_DEMO_SPEED multiplies elapsed time since
+# process start: at 120, half a second of real waiting is a minute of incident
+# time, and the whole silence-to-escalation sequence plays out in about fifteen
+# seconds -- while every deadline, comparison and query downstream stays
+# literally the code that runs in production. Nothing about the mechanism is
+# faked for the camera; only the rate at which time passes into it.
+#
+# Two deliberate exclusions. Login lockout stays on the real clock, because
+# scaling it would quietly weaken a security control on a public instance. The
+# ICS-214 export filename stays real, because it names a file on somebody's
+# disk and that name should mean what it says.
+#
+# At speed 1 -- the default, and the only value a real deployment should ever
+# use -- now() is now() with no arithmetic at all.
+def _demo_speed() -> int:
+    try:
+        return max(1, int(os.environ.get("DIRESQ_DEMO_SPEED", "1")))
+    except ValueError:
+        # A typo in an env var must not take down an emergency board.
+        return 1
+
+
+DEMO_SPEED = _demo_speed()
+_CLOCK_EPOCH = datetime.now(timezone.utc)
+
+
+def now() -> datetime:
+    """The current time, as the incident sees it."""
+    real = datetime.now(timezone.utc)
+    if DEMO_SPEED == 1:
+        return real
+    return _CLOCK_EPOCH + (real - _CLOCK_EPOCH) * DEMO_SPEED
+
+
 def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return now().isoformat(timespec="seconds")
 
 
 def parse_iso(value: str | None) -> datetime | None:
@@ -280,7 +355,7 @@ def deadline_for(joined_at: str, eta: str | None,
 def is_overdue(joined_at: str, eta: str | None, last_checkin: str | None) -> bool:
     """Derived at read time so there's no cron job to forget to start."""
     deadline = deadline_for(joined_at, eta, last_checkin)
-    return deadline is not None and datetime.now(timezone.utc) > deadline
+    return deadline is not None and now() > deadline
 
 
 REPORT_COLUMNS = f"""
@@ -313,7 +388,7 @@ def age(item: dict) -> dict:
                                     item.get("received_at"))
     item["minutes_old"] = (
         None if written is None
-        else max(0, int((datetime.now(timezone.utc) - written).total_seconds() // 60))
+        else max(0, int((now() - written).total_seconds() // 60))
     )
     return item
 
@@ -491,7 +566,14 @@ def inject_demo_mode():
     anything filed here is thrown away, so nobody types a real address into a
     database that resets when the server sleeps.
     """
-    return {"demo_mode": os.environ.get("DIRESQ_DEMO") == "1"}
+    # A scaled clock forces the banner on. A page showing time passing sixty
+    # times faster than the wall clock has to say so on the page -- the same
+    # rule the sweep timestamp follows, applied to the clock itself. Otherwise
+    # the honest version of this feature is indistinguishable from a fake one.
+    return {
+        "demo_mode": os.environ.get("DIRESQ_DEMO") == "1" or DEMO_SPEED > 1,
+        "demo_speed": DEMO_SPEED,
+    }
 
 
 @app.context_processor
@@ -558,12 +640,34 @@ def fetch_report(report_id: int) -> dict | None:
     item["responders"] = [dict(x) for x in get_db().execute("""
         SELECT asg.id, asg.status, asg.eta, asg.staffing_vote, asg.joined_at,
                asg.position_mismatch,
-               acc.username, acc.capabilities, acc.id AS account_id
+               acc.username, acc.capabilities, acc.id AS account_id,
+               (SELECT MAX(created_at) FROM checkins c
+                 WHERE c.responder = asg.responder) AS last_checkin
         FROM assignments asg
         JOIN accounts acc ON acc.id = asg.responder
         WHERE asg.report_id = ?
         ORDER BY asg.joined_at
     """, (report_id,)).fetchall()]
+
+    # Whether each of them is still answering.
+    #
+    # This page listed status and nothing else, and status is what somebody
+    # last *told* us — not whether they are still there to tell us anything.
+    # So a responder could read "on scene" here while the board had them
+    # forty-five minutes overdue, and a coordinator deciding whether this
+    # address needs more help would count them as coverage.
+    #
+    # That is this project's own argument failing on its own page. The feed
+    # groups duplicates so that six people on one incident cannot read as two
+    # comfortable rows; the same honesty has to apply to one person who has
+    # stopped answering. An unresponsive responder is not coverage.
+    for responder in item["responders"]:
+        responder["overdue"] = (
+            responder["status"] != "cleared"
+            and is_overdue(responder["joined_at"], responder["eta"],
+                           responder["last_checkin"]))
+
+    item["overdue_here"] = sum(1 for r in item["responders"] if r["overdue"])
 
     # What the person looking at this page is allowed to press. Working it out
     # here keeps the permission rules in one place instead of scattered
@@ -890,7 +994,7 @@ def create_report(*, subject: str, description: str, priority: str,
                     "synced_late": late_sync(seen["created_at"],
                                              seen["received_at"])}
 
-    received = datetime.now(timezone.utc)
+    received = now()
     try:
         cur = db.execute("""
             INSERT INTO reports
@@ -1206,7 +1310,7 @@ def fetch_responders() -> list[dict]:
         ORDER BY acc.username, asg.joined_at DESC
     """).fetchall()
 
-    now = datetime.now(timezone.utc)
+    moment = now()
     board, seen = [], set()
 
     for row in rows:
@@ -1217,11 +1321,25 @@ def fetch_responders() -> list[dict]:
 
         overdue = False
         minutes = None
+        due_in = None
         if row["assignment_id"] is not None:
             overdue = is_overdue(row["joined_at"], row["eta"], row["last_checkin"])
             contact = parse_iso(row["last_checkin"]) or parse_iso(row["joined_at"])
             if contact is not None:
-                minutes = int((now - contact).total_seconds() // 60)
+                minutes = int((moment - contact).total_seconds() // 60)
+
+            # Seconds until this responder is expected to answer. Negative once
+            # the deadline has passed, so the board can say how far past it is
+            # rather than only that it is.
+            #
+            # The board used to show only elapsed time, which states the past
+            # and leaves the future to be inferred. A number counting toward
+            # zero is the difference between a viewer working out that
+            # something is about to happen and a viewer watching it happen.
+            deadline = deadline_for(row["joined_at"], row["eta"],
+                                    row["last_checkin"])
+            if deadline is not None:
+                due_in = int((deadline - moment).total_seconds())
 
         if row["assignment_id"] is None:
             state = "available"
@@ -1237,6 +1355,7 @@ def fetch_responders() -> list[dict]:
             "state": state,
             "overdue": overdue,
             "minutes_since_contact": minutes,
+            "due_in_seconds": due_in,
             "assignment": None if row["assignment_id"] is None else {
                 "id": row["assignment_id"],
                 "report_id": row["report_id"],
@@ -1306,14 +1425,14 @@ def sweep_silent_responders() -> list[int]:
         WHERE asg.status != 'cleared'
     """).fetchall()
 
-    now = datetime.now(timezone.utc)
+    moment = now()
     filed = []
 
     for row in rows:
         deadline = deadline_for(row["joined_at"], row["eta"], row["last_checkin"])
         if deadline is None:
             continue
-        if now < deadline + timedelta(minutes=SILENT_ESCALATE_MINUTES):
+        if moment < deadline + timedelta(minutes=SILENT_ESCALATE_MINUTES):
             continue
 
         already = db.execute("""
@@ -1334,7 +1453,7 @@ def sweep_silent_responders() -> list[int]:
             lat, lng = row["report_lat"], row["report_lng"]
             where = "the scene they were heading to, no position ever received"
 
-        silent = int((now - (seen or parse_iso(row["joined_at"]) or now))
+        silent = int((moment - (seen or parse_iso(row["joined_at"]) or moment))
                      .total_seconds() // 60)
 
         db.execute("""
@@ -1459,13 +1578,46 @@ def security_headers(response):
     return response
 
 
+# How often the sweep is actually worth running. The board polls
+# /api/responders every three seconds *per viewer*, and the sweep is a join
+# across every open assignment plus a write. Running it on each poll made the
+# cost of the alarm scale with the number of people watching it, which is
+# backwards: the sweep is about elapsed time, and elapsed time does not care
+# how many browsers are open.
+#
+# Thirty seconds is thirty times inside the fifteen-minute escalation it
+# guards, so nothing is ever noticed late, and it takes roughly nine writes
+# in ten off the hot path.
+SWEEP_EVERY_SECONDS = 30
+
+
 @app.before_request
 def escalate_silence():
-    if (request.method == "GET"
-            and request.endpoint in SWEEP_ON
-            and current_user() is not None):
+    if (request.method != "GET"
+            or request.endpoint not in SWEEP_ON
+            or current_user() is None):
+        return
+
+    since = last_swept()["seconds"]
+    if since is not None and since < SWEEP_EVERY_SECONDS:
+        return
+
+    try:
         sweep_silent_responders()
-        record_sweep()
+    except sqlite3.Error:
+        # Same reasoning as record_sweep below, and higher stakes. This runs in
+        # before_request, so an exception here does not fail the sweep — it
+        # fails the whole response, and the endpoints it is attached to are the
+        # board, the map and the feed. A lock contention blanking the three
+        # screens somebody uses during a flood is a far worse outcome than a
+        # sweep that runs thirty seconds later instead.
+        #
+        # Deliberately does not stamp: a sweep that did not finish must not
+        # claim it did, or the board shows green while nothing is checking.
+        get_db().rollback()
+        return
+
+    record_sweep()
 
 
 def record_sweep() -> None:
@@ -1509,7 +1661,7 @@ def last_swept() -> dict:
     if when is None:
         return {"at": None, "seconds": None, "stale": True}
 
-    seconds = int((datetime.now(timezone.utc) - when).total_seconds())
+    seconds = int((now() - when).total_seconds())
     return {
         "at": row["last_swept_at"],
         "seconds": max(seconds, 0),
@@ -1536,24 +1688,24 @@ def claimed_time(raw: str) -> tuple[datetime, str | None]:
     barely in the future is clock drift, far in the future or very old is
     either a broken device or someone playing games.
     """
-    now = datetime.now(timezone.utc)
+    moment = now()
     if not raw:
-        return now, None
+        return moment, None
 
     when = parse_iso(raw)
     if when is None:
-        return now, "Could not read that timestamp."
+        return moment, "Could not read that timestamp."
     if when.tzinfo is None:
         when = when.replace(tzinfo=timezone.utc)
 
-    if (when - now).total_seconds() > CLOCK_SKEW_SECONDS:
-        return now, "That check-in is dated in the future."
-    if (now - when).total_seconds() > MAX_BACKDATE_HOURS * 3600:
-        return now, f"Too old to accept, over {MAX_BACKDATE_HOURS} hours."
+    if (when - moment).total_seconds() > CLOCK_SKEW_SECONDS:
+        return moment, "That check-in is dated in the future."
+    if (moment - when).total_seconds() > MAX_BACKDATE_HOURS * 3600:
+        return moment, f"Too old to accept, over {MAX_BACKDATE_HOURS} hours."
 
     # Slightly ahead is a drifting clock, not a lie. Don't let it sit in the
     # future, but don't reject it either.
-    return min(when, now), None
+    return min(when, moment), None
 
 
 def position_looks_wrong(report_id: int, account_id: int) -> bool:
@@ -1909,7 +2061,7 @@ def ics214_rows() -> list[list[str]]:
     is most of the argument for logging responders at all.
     """
     db = get_db()
-    now = datetime.now(timezone.utc)
+    moment = now()
 
     responders = db.execute("""
         SELECT acc.username, acc.capabilities, MIN(asg.joined_at) AS first_seen
@@ -1979,7 +2131,7 @@ def ics214_rows() -> list[list[str]]:
         [],
         ["1. Incident Name", "DiresQ activation - Katy, TX"],
         ["2. Operational Period", "From", stamp(started),
-         "To", now.strftime("%m/%d/%Y %H:%M")],
+         "To", moment.strftime("%m/%d/%Y %H:%M")],
         ["3. Name", current_user()["username"],
          "ICS Position", "Resource Unit Leader",
          "Home Agency", "DiresQ (volunteer)"],
@@ -2000,7 +2152,7 @@ def ics214_rows() -> list[list[str]]:
         [],
         ["6. Prepared by", current_user()["username"],
          "Position", "Resource Unit Leader",
-         "Date/Time", now.strftime("%m/%d/%Y %H:%M")],
+         "Date/Time", moment.strftime("%m/%d/%Y %H:%M")],
         [],
         ["Generated by DiresQ from logged activity. Times are UTC. Report "
          "resolution and staffing changes are not separately timestamped and "
@@ -2172,7 +2324,7 @@ def stand_down_for(account_id: int) -> dict | None:
         "subject": row["subject"],
         "at": row["status_changed_at"],
         "minutes_ago": None if closed is None else max(
-            0, int((datetime.now(timezone.utc) - closed).total_seconds() // 60)),
+            0, int((now() - closed).total_seconds() // 60)),
     }
 
 
@@ -2251,7 +2403,7 @@ def record_checkin(responder_id: int, lat, lng, happened_at: datetime,
                                          seen["received_at"]),
             }
 
-    received = datetime.now(timezone.utc)
+    received = now()
     try:
         db.execute("""
             INSERT INTO checkins
@@ -2391,7 +2543,7 @@ def api_uplink():
 
     # The packet carries an age, not a timestamp — a node running off a
     # battery in a flood is the last clock you want to trust.
-    happened_at = (datetime.now(timezone.utc)
+    happened_at = (now()
                    - timedelta(minutes=checkin.age_minutes))
 
     result = record_checkin(checkin.responder_id, checkin.lat, checkin.lng,
@@ -2437,6 +2589,12 @@ SEED_ACCOUNTS = [
     # Two responders deliberately left unassigned. A board where everybody is
     # busy has nothing to say when a report needs a boat, and a real one
     # always has somebody between jobs.
+    # The one the camera is pointed at. Everybody else on this board is in a
+    # state that is already settled -- Sam is red, the Mayde Creek four are
+    # overstaffed, the rest are en route with time in hand. Farrow is the only
+    # one whose state is about to CHANGE while you watch, which is the whole
+    # point: the mechanism is a transition, and a transition needs a before.
+    ("n.farrow", "responder", "medical,generator"),
     ("r.castillo", "responder", "boat,swiftwater,medical"),
     ("t.oyelaran", "responder", "chainsaw,truck,generator"),
     # Two more with boats, who went to the *second* report of the flood on
@@ -2524,6 +2682,23 @@ SEED_ASSIGNMENTS = [
     # Oxygen: someone en route with a sensible ETA.
     (2, "a.whitlock", "en_route", None,        20, 30,   14),
 
+    # Oxygen, second responder: Farrow joined twenty minutes ago and gave an
+    # ETA that lands forty-five minutes from now. On a real clock that is a
+    # dull row on a board. With DIRESQ_DEMO_SPEED set it is a countdown, and
+    # then it is a red row, and then it is a report about a person -- which is
+    # the sequence the entire project exists to produce and the one thing we
+    # could never show anybody.
+    #
+    # They have checked in, so when the escalation fires it pins at a real
+    # last-known position rather than guessing from the scene.
+    #
+    # Five minutes, not forty-five. The first draft of this row put Farrow's
+    # deadline furthest out, which meant every other responder on the board
+    # went red first and the camera had nothing to point at. Farrow now leads
+    # the queue by four minutes, so the first row to turn and the first report
+    # to file itself are the same person.
+    (2, "n.farrow", "en_route", None,          20, 25,   6),
+
     # Roof: Sam went, and nobody has heard from him since.
     (4, "s.reyes",  "on_scene", None,          62, None, 47),
 
@@ -2589,16 +2764,46 @@ def seed_minimal() -> tuple[int, int]:
     return len(accounts), len(reports)
 
 
+def responder_position(username: str, lat: float,
+                       lng: float) -> tuple[float, float]:
+    """Where to put a seeded responder relative to the report they joined.
+
+    Two bugs lived in the one line this replaces.
+
+    It used `hash(username)`, and Python salts string hashing per process —
+    so the demo moved every time the server booted. A seed whose whole point
+    is that every visitor arrives at the same incident cannot be built on a
+    number that changes at import. crc32 is stable across runs and versions.
+
+    And it offset by at most ninety metres, which put the responder under the
+    report. Leaflet draws markers in a pane above circles, so the responder
+    was not missing from the map — it was painted underneath the teardrop and
+    invisible at any useful zoom. Standing them off on a ring is what makes
+    "six people on one street" a thing you can see rather than infer.
+    """
+    n = zlib.crc32(username.encode())
+
+    bearing = math.radians(n % 360)
+    metres = 150 + (n // 360) % 120
+
+    # Degrees per metre. Longitude narrows with latitude, so the correction
+    # keeps the ring circular rather than an ellipse.
+    d_lat = metres * math.cos(bearing) / 111_320
+    d_lng = metres * math.sin(bearing) / (111_320 * math.cos(math.radians(lat)))
+
+    return round(lat + d_lat, 6), round(lng + d_lng, 6)
+
+
 def seed_data() -> tuple[int, int]:
     """Load a disaster already in progress.
 
     Seeding an empty board makes the app look like a to-do list. Seeding it
     mid-incident shows what it's for.
     """
-    now = datetime.now(timezone.utc)
+    moment = now()
 
     def ago(minutes):
-        return (now - timedelta(minutes=minutes)).isoformat(timespec="seconds")
+        return (moment - timedelta(minutes=minutes)).isoformat(timespec="seconds")
 
     with app.app_context():
         db = get_db()
@@ -2646,7 +2851,7 @@ def seed_data() -> tuple[int, int]:
             report_id = report_ids[idx]
             eta = None
             if eta_mins is not None:
-                eta = (now - timedelta(minutes=joined)
+                eta = (moment - timedelta(minutes=joined)
                        + timedelta(minutes=eta_mins)).isoformat(timespec="seconds")
 
             # Someone still en route hasn't changed status since joining, so
@@ -2667,17 +2872,16 @@ def seed_data() -> tuple[int, int]:
                 "AND status = 'unassigned'", (report_id,))
 
             if checkin is not None:
-                # Scatter positions near the report so the map has something.
                 report = db.execute(
                     "SELECT lat, lng FROM reports WHERE id = ?", (report_id,)
                 ).fetchone()
-                jitter = (hash(username) % 9 - 4) / 5000
+                lat, lng = responder_position(username, report["lat"],
+                                              report["lng"])
                 db.execute("""
                     INSERT INTO checkins
                         (responder, lat, lng, created_at, received_at)
                     VALUES (?, ?, ?, ?, ?)
-                """, (who[username], report["lat"] + jitter,
-                      report["lng"] - jitter, ago(checkin), ago(checkin)))
+                """, (who[username], lat, lng, ago(checkin), ago(checkin)))
 
         db.commit()
     return len(SEED_ACCOUNTS), len(SEED_REPORTS)

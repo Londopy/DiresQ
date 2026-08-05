@@ -2009,8 +2009,14 @@ class TestTheDocsAreNotOutOfDate:
     # the README claims it is the only place it stays written down.
     CODE_SUFFIXES = {".py", ".js", ".css", ".html", ".sql", ".mjs", ".astro",
                      ".sh", ".ps1"}
+    # research/ and paper/ are the write-up, not the software. The README's
+    # totals are a claim about DiresQ, and folding 1,900 lines of paper drafts
+    # into them would make that claim wrong in the direction that flatters us
+    # -- which is the same objection the padding test below encodes. Skipping
+    # them also stops an edit to a draft from breaking CI on a Flask app.
     SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv",
-                 "dist", ".astro", ".pytest_cache", ".ruff_cache", "site_out"}
+                 "dist", ".astro", ".pytest_cache", ".ruff_cache", "site_out",
+                 "research", "paper"}
 
     # Line counts are approximate by nature: they move with almost every
     # commit, so asserting them exactly would fail on the commit that fixed
@@ -5288,3 +5294,718 @@ class TestTheClassifierSaysWhenItCannotRead:
     def test_the_browser_copy_gets_the_threshold(self):
         model = json.loads(diresq.MODEL_FILE.read_text(encoding="utf-8"))
         assert model["min_known_share"] == classify.MIN_KNOWN_SHARE
+
+
+class TestTheBoardSurvivesADatabaseUnderLoad:
+    """The board polls /api/responders every three seconds, per viewer, and
+    that request writes. Everything here is about the same failure: a write
+    that cannot get the lock must not take down the screens the writing exists
+    to make trustworthy.
+    """
+
+    def test_the_database_is_in_wal_mode(self, client):
+        # The default rollback journal has a writer lock out every reader.
+        # This app writes on its busiest read, so that mode makes contention
+        # between two viewers, which is not a load level worth failing at.
+        with diresq.app.app_context():
+            mode = diresq.get_db().execute(
+                "PRAGMA journal_mode").fetchone()[0]
+        assert mode.lower() == "wal", f"journal_mode is {mode!r}, not WAL"
+
+    def test_a_locked_database_does_not_take_down_the_board(
+            self, client, monkeypatch):
+        import sqlite3
+
+        def jammed():
+            raise sqlite3.OperationalError("database is locked")
+
+        monkeypatch.setattr(diresq, "sweep_silent_responders", jammed)
+
+        # Every page the sweep hook is attached to. A 500 on any of these is
+        # the alarm's plumbing breaking the thing it was protecting.
+        for path in ("/", "/board", "/map", "/api/reports", "/api/responders"):
+            assert client.get(path).status_code == 200, path
+
+    def test_a_sweep_that_failed_does_not_claim_it_ran(
+            self, client, monkeypatch):
+        import sqlite3
+
+        with diresq.app.app_context():
+            diresq.get_db().execute("UPDATE system SET last_swept_at = NULL")
+            diresq.get_db().commit()
+
+        monkeypatch.setattr(diresq, "sweep_silent_responders",
+                            lambda: (_ for _ in ()).throw(
+                                sqlite3.OperationalError("database is locked")))
+
+        client.get("/board")
+
+        with diresq.app.app_context():
+            stamp = diresq.get_db().execute(
+                "SELECT last_swept_at FROM system").fetchone()[0]
+        assert stamp is None, (
+            "the stamp was written for a sweep that never finished — the board "
+            "would show green while nothing was checking")
+
+    def test_the_sweep_does_not_run_on_every_poll(self, client, monkeypatch):
+        runs = []
+        real = diresq.sweep_silent_responders
+        monkeypatch.setattr(diresq, "sweep_silent_responders",
+                            lambda: (runs.append(1), real())[1])
+
+        for _ in range(10):
+            client.get("/api/responders")
+
+        # Ten polls is about thirty seconds of one viewer watching the board.
+        # Before the throttle this was ten sweeps and ten writes.
+        assert len(runs) == 1, (
+            f"{len(runs)} sweeps for 10 polls; the cost of the alarm is "
+            "scaling with the number of people watching it")
+
+    def test_the_throttle_is_well_inside_the_escalation_it_guards(self):
+        assert diresq.SWEEP_EVERY_SECONDS * 4 < \
+            diresq.SILENT_ESCALATE_MINUTES * 60, (
+            "the sweep runs too rarely to notice silence on time")
+
+
+class TestAReportPageSaysWhoStoppedAnswering:
+    """The report page listed status and called it coverage.
+
+    Status is what a responder last *told* us. Whether they are still there
+    to tell us anything is a different fact, and the board knew it while this
+    page did not — so somebody could read "on scene" here for a person the
+    board had forty-five minutes overdue, and decide the address was covered.
+
+    That is the project's own argument failing on its own page. The feed
+    groups duplicates so six people on one incident cannot read as two
+    comfortable rows. One person who has gone silent is the same error.
+
+    Asserted through the rendered page rather than the dict, because what
+    matters is whether the coordinator is told.
+    """
+
+    @staticmethod
+    def join(username, *, quiet_for=None, status="on_scene", report_id=1):
+        """Put somebody on a report. `quiet_for` minutes since any check-in."""
+        with diresq.app.app_context():
+            db = diresq.get_db()
+            who = db.execute("SELECT id FROM accounts WHERE username = ?",
+                             (username,)).fetchone()["id"]
+            now = datetime.now(timezone.utc)
+            joined = (now - timedelta(minutes=quiet_for or 5)).isoformat()
+            db.execute("""
+                INSERT INTO assignments (report_id, responder, status,
+                                         joined_at, status_changed_at)
+                VALUES (?, ?, ?, ?, ?)
+            """, (report_id, who, status, joined, joined))
+            db.execute("DELETE FROM checkins WHERE responder = ?", (who,))
+            if quiet_for is None:
+                db.execute("""
+                    INSERT INTO checkins (responder, lat, lng,
+                                          created_at, received_at)
+                    VALUES (?, 29.78, -95.83, ?, ?)
+                """, (who, now.isoformat(), now.isoformat()))
+            db.commit()
+
+    def test_a_silent_responder_is_flagged(self, client):
+        self.join("skythe", quiet_for=90)
+        body = client.get("/report/1").get_data(as_text=True)
+        assert "NO CONTACT" in body
+
+    def test_the_page_says_so_out_loud(self, client):
+        self.join("skythe", quiet_for=90)
+        body = client.get("/report/1").get_data(as_text=True)
+        assert "stopped answering" in body
+
+    def test_it_says_not_to_count_them(self, client):
+        # The number matters less than the instruction. Somebody deciding
+        # whether to send help needs to be told the count is wrong.
+        self.join("skythe", quiet_for=90)
+        assert "Do not count" in client.get("/report/1").get_data(as_text=True)
+
+    def test_somebody_answering_is_not_flagged(self, client):
+        # A false alarm here would teach people to ignore the real one.
+        self.join("skythe")
+        body = client.get("/report/1").get_data(as_text=True)
+        assert "NO CONTACT" not in body
+        assert "stopped answering" not in body
+
+    def test_somebody_who_cleared_is_not_chased(self, client):
+        # Cleared means they went home. Silence after that is expected.
+        self.join("skythe", quiet_for=300, status="cleared")
+        body = client.get("/report/1").get_data(as_text=True)
+        assert "NO CONTACT" not in body
+
+    def test_a_report_with_nobody_on_it_says_nothing(self, client):
+        assert "stopped answering" not in client.get(
+            "/report/1").get_data(as_text=True)
+
+
+class TestTheMapDrawsWhatTheLegendPromises:
+    """The legend was fixed and the map was not.
+
+    The legend key for a responder became a hollow ring, because colour was
+    already carrying whether anyone is coming to a place. But `map.js` kept
+    drawing responders as solid circles in those same three colours — so the
+    symbol somebody was told to look for did not exist, and the ones that did
+    exist looked like reports. Fixing the label without fixing the thing it
+    labels is worse than leaving both wrong, because now the page lies twice.
+    """
+
+    @staticmethod
+    def script():
+        return (diresq.SCHEMA.parent / "static" / "scripts" / "map.js"
+                ).read_text(encoding="utf-8")
+
+    def test_a_responder_is_drawn_hollow(self):
+        block = self.script().split("L.circleMarker(")[1].split("}")[0]
+        assert "fillOpacity: 0.15" in block, (
+            "responders are solid again — the legend says they are rings")
+
+    def test_the_legend_and_the_map_agree_on_the_shape(self):
+        css = (diresq.SCHEMA.parent / "static" / "styles" / "map.css"
+               ).read_text(encoding="utf-8")
+        swatch = css.split(".legend-marker.responder{")[1].split("}")[0]
+        assert "background:transparent" in swatch
+        # And the map must not be filling them in.
+        block = self.script().split("L.circleMarker(")[1].split("}")[0]
+        assert "fillOpacity: 1" not in block
+
+
+class TestTheMapCanFindItsWayBack:
+    """One stray scroll puts you over an ocean with no way home but reload."""
+
+    @staticmethod
+    def script():
+        return (diresq.SCHEMA.parent / "static" / "scripts" / "map.js"
+                ).read_text(encoding="utf-8")
+
+    def test_both_buttons_are_on_the_page(self, client):
+        body = client.get("/map").get_data(as_text=True)
+        assert 'id="fit-all"' in body
+        assert 'id="next-incident"' in body
+
+    def test_they_are_real_buttons(self, client):
+        # Not links, not divs. They act on the page rather than navigating.
+        body = client.get("/map").get_data(as_text=True)
+        for name in ("fit-all", "next-incident"):
+            tag = body.split(f'id="{name}"')[0].split("<")[-1]
+            assert tag.startswith("button"), f"{name} is a <{tag.split()[0]}>"
+
+    def test_fitting_only_counts_what_is_on_screen(self):
+        # With the gaps filter on, "fit all" must frame what is left rather
+        # than the reports it just hid.
+        source = self.script()
+        assert "map.hasLayer(m)" in source
+
+    def test_moving_the_map_is_announced(self):
+        # A pan is invisible to a screen reader. Politely, so it does not
+        # interrupt whatever is being read.
+        source = self.script()
+        assert 'aria-live", "polite"' in source
+        assert "Report ${cursor + 1} of" in source
+
+    def test_the_buttons_are_a_touch_target(self):
+        css = (diresq.SCHEMA.parent / "static" / "styles" / "map.css"
+               ).read_text(encoding="utf-8")
+        block = css.split(".map-nav{")[1].split("}")[0]
+        assert "min-height:44px" in block
+
+    def test_an_empty_map_does_not_crash(self):
+        # fitBounds on nothing throws. Both paths return early.
+        source = self.script()
+        for fn in ("function fitAll(){", "function nextIncident(){"):
+            body = source.split(fn)[1].split("\n}")[0]
+            assert "if(!visible.length) return;" in body
+
+
+class TestFilingAReportIsReachableOnAPhone:
+    """The one action this app exists for, on the device it is for.
+
+    The Create Report link lived inside the sidebar, which slides off-screen
+    below 768px behind a button labelled "Filter". Somebody standing in water
+    is not going to look for it there.
+    """
+
+    @staticmethod
+    def css():
+        return (diresq.SCHEMA.parent / "static" / "styles" / "homepage.css"
+                ).read_text(encoding="utf-8")
+
+    def test_the_page_carries_a_button_outside_the_drawer(self, client):
+        body = client.get("/").get_data(as_text=True)
+        before_aside = body.split("<aside")[0]
+        assert 'href="/report/new"' in before_aside, (
+            "the only way to file a report is inside the off-canvas drawer")
+
+    def test_exactly_one_of_the_two_is_shown(self):
+        # Both in the tree at once would read the link twice to a screen
+        # reader. display:none removes it, which is why it is used here.
+        css = self.css()
+        assert ".create-btn-mobile{ display:none; }" in css
+        assert "aside .create-btn{ display:none; }" in css
+
+    def test_the_phone_copy_is_shown_on_a_phone(self):
+        css = self.css()
+        mobile = css.split("@media(max-width:768px){")[1]
+        assert ".create-btn-mobile{" in mobile
+        assert "display:block" in mobile.split(".create-btn-mobile{")[1][:120]
+
+
+class TestASeededResponderCanActuallyBeSeen:
+    """The demo seeds responder positions. Two things stopped them showing.
+
+    The offset was at most ninety metres, and Leaflet draws markers in a pane
+    above circles — so the responder circle sat under the report teardrop and
+    was invisible. Nothing was missing from the data, which is why it looked
+    like nothing was wrong with the data.
+
+    And the offset came from `hash(username)`, which Python salts per process,
+    so the positions moved on every boot of a seed built to be identical for
+    every visitor.
+    """
+
+    REPORT = (29.7834, -95.8321)
+
+    @staticmethod
+    def metres(a, b):
+        import math
+        d_lat = (a[0] - b[0]) * 111_320
+        d_lng = (a[1] - b[1]) * 111_320 * math.cos(math.radians(a[0]))
+        return math.hypot(d_lat, d_lng)
+
+    def test_the_same_name_always_lands_in_the_same_place(self):
+        # `hash()` on a str is salted per process. A demo that claims every
+        # visitor sees the same incident cannot be built on it.
+        first = diresq.responder_position("londo", *self.REPORT)
+        assert first == diresq.responder_position("londo", *self.REPORT)
+        assert first == (29.784012, -95.830353), (
+            "the seeded position moved — is this still crc32?")
+
+    def test_the_source_does_not_use_pythons_salted_hash(self):
+        # Strip comments first. The docstring above the fix names the old
+        # call to explain it, and a check that matches its own explanation
+        # is the bug it is trying to prevent, one level up.
+        source = (diresq.SCHEMA.parent / "app.py").read_text(encoding="utf-8")
+        code = "\n".join(line for line in source.split("\n")
+                         if not line.lstrip().startswith("#"))
+        assert "= hash(" not in code
+        assert "hash(username) %" not in code
+
+    def test_a_responder_stands_clear_of_the_report(self):
+        # Under about a hundred metres it disappears beneath the teardrop.
+        for name in ("londo", "s.reyes", "j.okafor", "m.torres", "d.nguyen"):
+            away = self.metres(
+                diresq.responder_position(name, *self.REPORT), self.REPORT)
+            assert 120 <= away <= 300, f"{name} is {away:.0f} m from the report"
+
+    def test_two_responders_on_one_report_do_not_stack(self):
+        names = ("londo", "s.reyes", "j.okafor", "m.torres", "d.nguyen")
+        spots = [diresq.responder_position(n, *self.REPORT) for n in names]
+        for i in range(len(spots)):
+            for j in range(i + 1, len(spots)):
+                apart = self.metres(spots[i], spots[j])
+                assert apart > 40, (
+                    f"{names[i]} and {names[j]} are {apart:.0f} m apart")
+
+    def test_the_ring_is_round_rather_than_an_ellipse(self):
+        # Longitude degrees narrow with latitude. Without the correction the
+        # ring stretches east-west and the spacing stops being what it says.
+        near = self.metres(
+            diresq.responder_position("londo", 0.0, 0.0), (0.0, 0.0))
+        far = self.metres(
+            diresq.responder_position("londo", 60.0, 0.0), (60.0, 0.0))
+        assert abs(near - far) < 5, "the offset changes with latitude"
+
+    def test_the_seed_gives_somebody_a_position_to_show(self, client):
+        with diresq.app.app_context():
+            diresq.seed_data()
+            placed = [r for r in diresq.fetch_responders()
+                      if r.get("last_position")]
+        assert len(placed) >= 3, "the map has no responder circles to draw"
+
+
+class TestTheLegendDistinguishesAPersonFromAPlace:
+    """A responder marker is coloured by *their* status, out of the same
+    red/blue/green the report pins use. So colour cannot separate the two, and
+    a legend that tries reads as two identical swatches.
+    """
+
+    CSS = Path(__file__).resolve().parents[1] / "static/styles/map.css"
+
+    def swatch(self, name):
+        """Every declaration that lands on .legend-marker.<name>.
+
+        Rules are collected across grouped selectors, not just the one that
+        names the state on its own — the shape is set for all three report
+        states in a single rule, and a helper that only read the individual
+        ones would report a teardrop as a circle.
+        """
+        css = re.sub(r"/\*.*?\*/", "", self.CSS.read_text(encoding="utf-8"),
+                     flags=re.S)
+        # `[^{}]` on both sides keeps the match inside one rule, so an @media
+        # wrapper cannot swallow the block after it.
+        blocks = re.findall(
+            r"([^{}]*\.legend-marker\.%s\b[^{}]*)\{([^{}]*)\}" % name, css)
+        assert blocks, f"no rule targets .legend-marker.{name}"
+        return " ".join(body for _, body in blocks)
+
+    def colour(self, name):
+        """The colour a swatch actually paints, normalised.
+
+        `var(--red)` and `var(--red, #f38ba8)` are the same colour written two
+        ways, and comparing the raw text would call them different — which is
+        exactly how two identical red dots shipped.
+        """
+        decls = self.swatch(name)
+        tokens = re.findall(r"var\(\s*(--[\w-]+)|#[0-9a-fA-F]{3,8}", decls)
+        return {t for t in tokens if t} or set(
+            re.findall(r"#[0-9a-fA-F]{3,8}", decls))
+
+    def test_nobody_going_and_responder_are_not_the_same_swatch(self):
+        assert self.colour("nobody") != self.colour("responder"), (
+            "'Nobody going' and 'Responder' paint the same colour — on the "
+            "map they are a report nobody is going to and an overdue person")
+
+    def test_the_responder_swatch_is_not_one_of_the_report_colours(self):
+        responder = self.swatch("responder")
+        for state, colour in (("nobody", "--red"), ("coming", "--blue"),
+                              ("there", "--green")):
+            assert colour not in responder, (
+                f"the responder swatch reuses {colour}, which already means "
+                f"{state!r} on a report pin")
+
+    def test_reports_are_teardrops_and_responders_are_circles(self):
+        # The shape is what carries it, here and on the map itself.
+        for state in ("nobody", "coming", "there"):
+            assert "50% 50% 50% 0" in self.swatch(state), (
+                f"the {state!r} swatch is not the teardrop the pin is")
+        assert "50% 50% 50% 0" not in self.swatch("responder")
+
+    def test_every_legend_item_in_the_template_has_a_rule(self):
+        html = (Path(__file__).resolve().parents[1]
+                / "templates/map.html").read_text(encoding="utf-8")
+        for name in re.findall(r'legend-marker (\w+)"', html):
+            self.swatch(name)
+
+
+class TestTheClockCanBeScaled:
+    """The mechanism is the absence of an event over fifteen minutes, which is
+    correct and unwatchable. DIRESQ_DEMO_SPEED makes it filmable without
+    changing any of the logic underneath — these tests are what keeps that
+    second half true.
+    """
+
+    @pytest.fixture
+    def seeded(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(diresq, "DATABASE", str(tmp_path / "clock.db"))
+        diresq.init_db()
+        diresq.seed_data()
+        return diresq.app
+
+    @staticmethod
+    def scale(monkeypatch, speed, elapsed_real_seconds):
+        """Run the clock at `speed`, `elapsed` real seconds after boot.
+
+        Moves the epoch backwards rather than sleeping. A test that proves a
+        fifteen-minute escalation by waiting is a test nobody runs.
+        """
+        monkeypatch.setattr(diresq, "DEMO_SPEED", speed)
+        monkeypatch.setattr(diresq, "_CLOCK_EPOCH",
+                            datetime.now(timezone.utc)
+                            - timedelta(seconds=elapsed_real_seconds))
+
+    def test_the_default_clock_is_the_real_one(self):
+        assert diresq.DEMO_SPEED == 1
+        drift = abs((diresq.now() - datetime.now(timezone.utc)).total_seconds())
+        assert drift < 1, "unscaled now() must be the wall clock"
+
+    def test_a_bad_speed_does_not_take_the_app_down(self, monkeypatch):
+        monkeypatch.setenv("DIRESQ_DEMO_SPEED", "fast")
+        assert diresq._demo_speed() == 1
+        monkeypatch.setenv("DIRESQ_DEMO_SPEED", "0")
+        assert diresq._demo_speed() == 1, "zero would freeze time"
+
+    def test_time_moves_faster_when_asked(self, monkeypatch):
+        self.scale(monkeypatch, 60, 10)
+        ahead = (diresq.now() - datetime.now(timezone.utc)).total_seconds()
+        # Ten real seconds at 60x is ten minutes of incident time, of which
+        # ten seconds have actually passed.
+        assert 580 < ahead < 620, ahead
+
+    def test_a_scaled_clock_forces_the_banner_on(self, monkeypatch):
+        monkeypatch.setattr(diresq, "DEMO_SPEED", 120)
+        with diresq.app.test_request_context("/"):
+            context = diresq.inject_demo_mode()
+        assert context["demo_mode"] is True, (
+            "a page showing accelerated time has to say so")
+        assert context["demo_speed"] == 120
+
+    def test_the_board_says_how_long_until_each_deadline(self, seeded):
+        with seeded.app_context():
+            board = {r["username"]: r for r in diresq.fetch_responders()}
+        farrow = board["n.farrow"]
+        assert farrow["state"] == "en_route"
+        assert 0 < farrow["due_in_seconds"] <= 5 * 60, (
+            "the row the demo is built around must be counting down, not past")
+
+    def test_the_seeded_countdown_leads_the_whole_board(self, seeded):
+        """Whoever turns first is what the camera points at."""
+        with seeded.app_context():
+            pending = sorted(
+                (r["due_in_seconds"], r["username"])
+                for r in diresq.fetch_responders()
+                if r["due_in_seconds"] is not None and r["due_in_seconds"] > 0)
+        assert pending[0][1] == "n.farrow", (
+            f"n.farrow no longer goes red first; {pending[0][1]} does")
+        assert pending[1][0] - pending[0][0] >= 3 * 60, (
+            "not enough gap behind n.farrow to film a single transition")
+
+    def test_silence_escalates_into_a_real_report_under_a_scaled_clock(
+            self, seeded, monkeypatch):
+        """The whole point, end to end: nobody clicks anything and a report
+        about a person appears."""
+        with seeded.app_context():
+            before = {r["id"] for r in diresq.get_db().execute(
+                "SELECT id FROM reports").fetchall()}
+
+            # Twenty-one minutes of incident time: five to n.farrow's
+            # deadline, fifteen of silence past it, one to spare.
+            self.scale(monkeypatch, 60, 21 * 60 / 60)
+
+            board = {r["username"]: r for r in diresq.fetch_responders()}
+            assert board["n.farrow"]["state"] == "overdue"
+
+            diresq.sweep_silent_responders()
+            diresq.get_db().commit()
+
+            filed = diresq.get_db().execute("""
+                SELECT r.subject, r.lat, r.lng, r.priority, r.status
+                FROM reports r
+                JOIN accounts a ON a.id = r.auto_filed_for
+                WHERE a.username = 'n.farrow' AND r.id NOT IN (%s)
+            """ % ",".join("?" * len(before)), tuple(before)).fetchone()
+
+        assert filed is not None, "nobody filed a report about the silent responder"
+        assert "n.farrow" in filed["subject"]
+        assert filed["priority"] == "HIGH"
+        assert filed["status"] == "unassigned", "it has to compete for attention"
+        assert filed["lat"] is not None and filed["lng"] is not None, (
+            "a report about a missing person needs somewhere to send anyone")
+
+    def test_scaling_does_not_shorten_a_login_lockout(self, monkeypatch):
+        """Everything on the incident timeline scales. A security control is
+        not on the incident timeline."""
+        source = (Path(__file__).resolve().parents[1] / "app.py").read_text(
+            encoding="utf-8")
+        body = source[source.index("def login_locked"):]
+        body = body[:body.index("\ndef ")]
+        assert "datetime.now(timezone.utc)" in body
+        assert "now()" not in body.replace("datetime.now(", "")
+
+
+class TestTheCountdownSurvivesTheRepaint:
+    """The board is server-rendered and then replaced by JavaScript every
+    three seconds. A field added to only one of those exists for exactly one
+    render, which looks like a flicker and is nearly impossible to spot by
+    hand — the countdown shipped that way for one commit.
+    """
+
+    @staticmethod
+    def source(relative):
+        return (Path(__file__).resolve().parents[1] / relative).read_text(
+            encoding="utf-8")
+
+    def test_both_renderers_draw_the_countdown(self):
+        for path in ("templates/board.html", "static/scripts/board.js"):
+            body = self.source(path)
+            assert "due_in_seconds" in body, f"{path} never reads the countdown"
+            assert 'class="due' in body, f"{path} never draws the countdown"
+
+    def test_the_countdown_is_kept_out_of_the_live_region(self):
+        """It sits inside aria-live="polite" and changes on every repaint.
+        Announcing it would bury the state change it is counting toward."""
+        for path in ("templates/board.html", "static/scripts/board.js"):
+            body = self.source(path)
+            block = body[body.index('class="due'):]
+            assert 'aria-hidden="true"' in block[:400], (
+                f"{path}: ticking countdown is not hidden from screen readers")
+
+    def test_both_renderers_agree_on_the_late_class(self):
+        for path in ("templates/board.html", "static/scripts/board.js"):
+            assert "late" in self.source(path)
+
+    def test_the_board_does_not_use_the_unreadable_grey_for_text(self):
+        """#45475a on the row background is 1.92:1. a11y.css has been guarded
+        against this colour since it was caught on capability tags; board.css
+        never was, and was still using it for coordinates and for every
+        "not assigned" / "no position" state."""
+        css = self.source("static/styles/board.css")
+        for rule in (".idle{", ".contact .pos{"):
+            if rule in css:
+                block = css[css.index(rule):]
+                block = block[:block.index("}")]
+                assert "--overlay" not in block, (
+                    f"{rule} is back on the 1.92:1 grey")
+
+
+class TestTheTwoBoardRenderersStayInStep:
+    """The board is rendered twice: once by Jinja on the way out, and again by
+    `board.js` every three seconds. A field added to one and not the other
+    exists for exactly one paint, which no test reads and nobody sees by hand.
+    The countdown shipped that way. This checks the pattern, not that one bug.
+    """
+
+    ROOT = Path(__file__).resolve().parents[1]
+
+    # Legitimate asymmetries, each with the reason it is one. Anything not on
+    # this list has to appear in both renderers.
+    ONLY_IN_JS = {
+        # Used to compare against the previous poll and flash a row that just
+        # changed state. The server has no previous poll to compare against.
+        "id",
+    }
+    ONLY_IN_TEMPLATE = set()
+
+    @classmethod
+    def template_fields(cls):
+        html = (cls.ROOT / "templates/board.html").read_text(encoding="utf-8")
+        opener = "{% for r in responders %}"
+        i = html.index(opener) + len(opener)
+        depth = 1
+        for m in re.finditer(r"{%-?\s*(for|endfor)\b", html[i:]):
+            depth += 1 if m.group(1) == "for" else -1
+            if depth == 0:
+                return cls.names(html[i:i + m.start()])
+        raise AssertionError("the responders loop in board.html is unbalanced")
+
+    @classmethod
+    def js_fields(cls):
+        js = (cls.ROOT / "static/scripts/board.js").read_text(encoding="utf-8")
+        start = js.index("function rowHtml")
+        return cls.names(js[start:js.index("\nfunction render", start)])
+
+    @staticmethod
+    def names(text):
+        found = set(re.findall(r"\br\.([a-z_]+(?:\.[a-z_]+)?)", text))
+        # `r.state.replace(...)` in Jinja is a method call on a field, not a
+        # field of its own.
+        methods = {"replace", "format", "lower", "upper", "strip"}
+        return {f for f in found if f.split(".")[-1] not in methods}
+
+    def test_neither_renderer_reads_a_field_the_other_ignores(self):
+        js, html = self.js_fields(), self.template_fields()
+        assert js - html == self.ONLY_IN_JS, (
+            f"board.js reads {sorted(js - html - self.ONLY_IN_JS)} which "
+            f"board.html never draws — it will vanish on the first repaint")
+        assert html - js == self.ONLY_IN_TEMPLATE, (
+            f"board.html draws {sorted(html - js - self.ONLY_IN_TEMPLATE)} "
+            f"which board.js drops — it will vanish on the first repaint")
+
+    def test_every_fragment_the_javascript_builds_is_actually_emitted(self):
+        """Field parity is not enough on its own.
+
+        `rowHtml` builds each cell into a local — `const due = ...` — and then
+        interpolates them into one template literal. Deleting the
+        interpolation while leaving the local behind still reads the field, so
+        the check above stays green while the cell silently stops rendering.
+        This reads the returned literal and insists every fragment it built
+        gets used.
+        """
+        js = (self.ROOT / "static/scripts/board.js").read_text(encoding="utf-8")
+        body = js[js.index("function rowHtml"):js.index("\nfunction render")]
+        returned = body[body.index("return `"):]
+
+        built = {name for name, value in
+                 re.findall(r"const (\w+)\s*=\s*(.*?);\n", body, re.S)
+                 if "<span" in value or "<a " in value or "<div" in value}
+        assert built, "no HTML fragments found in rowHtml — has it been rewritten?"
+
+        for name in sorted(built):
+            assert "${" + name + "}" in returned, (
+                f"rowHtml builds `{name}` and never puts it in the row — "
+                f"the cell will be blank after the first repaint")
+
+    def test_the_api_actually_sends_what_the_javascript_reads(self, client):
+        """The parity above is between two renderers. This one is between the
+        renderer and the payload, so a field can't be drawn from nothing."""
+        payload = client.get("/api/responders").get_json()
+        assert payload, "the board API returned nothing to check against"
+        sent = set(payload[0])
+        for field in {f.split(".")[0] for f in self.js_fields()}:
+            assert field in sent, (
+                f"board.js reads r.{field}, /api/responders does not send it")
+
+
+class TestNoTextIsUnreadableAnywhere:
+    """Replaces a hand-listed set of colour pairs. That list only checked the
+    ten pairs somebody remembered to add, so a colour used in a stylesheet
+    nobody thought about was never looked at — which is how #45475a stayed on
+    the board's coordinates at 1.92:1 while a test named
+    `does_not_reintroduce_the_unreadable_greys` passed.
+    """
+
+    # Backgrounds text can actually sit on. Light text sits on a page or card;
+    # dark text only ever sits on a bright accent fill (a badge, a button).
+    SURFACES = ["#1e1e2e", "#181825", "#313244", "#11111b"]
+    FILLS = ["#89b4fa", "#a6e3a1", "#f38ba8", "#f9e2af", "#fab387", "#cba6f7"]
+
+    # Only genuinely near-black counts as "text meant for a bright fill".
+    # The first attempt used 0.18, which swept the mid-greys in with it —
+    # #45475a has a luminance of 0.065, so it was being checked against yellow
+    # badges it never sits on and passing. That is the exact colour this class
+    # exists because of, so the threshold sits below it: everything lighter
+    # than a card background has to survive the page it is actually on.
+    DARK_TEXT_CEILING = 0.03
+
+    @staticmethod
+    def luminance(colour):
+        colour = colour.lstrip("#")
+        if len(colour) == 3:
+            colour = "".join(c * 2 for c in colour)
+        channels = [int(colour[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+        adjusted = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+                    for c in channels]
+        return (0.2126 * adjusted[0] + 0.7152 * adjusted[1]
+                + 0.0722 * adjusted[2])
+
+    @classmethod
+    def ratio(cls, fg, bg):
+        light, dark = sorted([cls.luminance(fg), cls.luminance(bg)], reverse=True)
+        return (light + 0.05) / (dark + 0.05)
+
+    def declared_text_colours(self):
+        """Every `color:` in every stylesheet, with var() resolved."""
+        styles = diresq.SCHEMA.parent / "static" / "styles"
+        for sheet in sorted(styles.glob("*.css")):
+            css = re.sub(r"/\*.*?\*/", "", sheet.read_text(encoding="utf-8"),
+                         flags=re.S)
+            palette = dict(re.findall(r"(--[\w-]+)\s*:\s*(#[0-9a-fA-F]{3,8})",
+                                      css))
+            for raw in re.findall(r"(?<![-\w])color\s*:\s*([^;}]+)", css):
+                resolved = re.sub(r"var\((--[\w-]+)\)",
+                                  lambda m: palette.get(m.group(1), ""), raw)
+                found = re.search(r"#[0-9a-fA-F]{3,8}\b", resolved)
+                if found and len(found.group(0)) in (4, 7):
+                    yield sheet.name, found.group(0)
+
+    def test_every_colour_we_set_text_in_is_readable(self):
+        failures = []
+        for sheet, colour in self.declared_text_colours():
+            against = (self.FILLS
+                       if self.luminance(colour) <= self.DARK_TEXT_CEILING
+                       else self.SURFACES)
+            worst = min(self.ratio(colour, bg) for bg in against)
+            if worst < 4.5:
+                where = "page surfaces" if against is self.SURFACES else "fills"
+                failures.append(f"{sheet}: {colour} is {worst:.2f}:1 on {where}")
+        assert not failures, "\n".join(sorted(set(failures)))
+
+    def test_the_audit_would_notice_if_a_bad_colour_came_back(self):
+        """A check that cannot fail is not a check."""
+        assert self.ratio("#45475a", "#181825") < 4.5
+        assert self.luminance("#45475a") > self.DARK_TEXT_CEILING, (
+            "the grey that caused this must be classified as light text, or "
+            "the audit above compares it against bright badges it never sits "
+            "on and lets it through")
+        assert min(self.ratio("#45475a", bg) for bg in self.SURFACES) < 4.5

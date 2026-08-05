@@ -130,6 +130,43 @@ is nobody else to attribute it to. One `auto_filed_for` column stops it
 filing a second: while an open report points at someone, the alarm has
 already been raised.
 
+## Time is injectable, and only ever for the camera
+
+The thing this project is about is an absence: a deadline passes, nobody hears
+from a responder, and fifteen minutes later the server files a report about
+them. Correct, and impossible to show anybody. You cannot demonstrate the
+non-occurrence of an event in ninety seconds, and a mechanism nobody can watch
+is a mechanism nobody believes.
+
+The options were to fake it — a scripted walkthrough, a video with a cut in the
+middle, a "simulate escalation" button — or to make time itself the parameter.
+We took the second. `DIRESQ_DEMO_SPEED` multiplies elapsed time since process
+start, so at 60 a minute of incident time passes every second and the whole
+sequence plays out in twenty. There is one `now()`; every deadline, comparison
+and query downstream is the production code, untouched. Nothing about the
+mechanism is special-cased for being watched.
+
+The alternative we rejected was shortening the constants in demo mode —
+`SILENT_ESCALATE_MINUTES = 1` and so on. It is simpler and it is a lie of a
+different shape: the page would then say "1 minute" where the real system says
+fifteen, and every displayed duration would have to be reasoned about
+separately. Scaling the clock keeps the numbers on screen the numbers the
+system actually uses.
+
+Two things stay on the real clock. **Login lockout**, because scaling it
+weakens a security control, and a demo instance is a public one. **The ICS-214
+export filename**, because it names a file on somebody's disk and that name
+should mean what it says.
+
+The cost is that a misconfigured `DIRESQ_DEMO_SPEED` is invisible. Every other
+environment variable here fails loudly or obviously; this one leaves an app
+that looks completely plausible while every deadline, countdown and elapsed
+time is wrong by a constant factor. It defaults to 1, an unparseable value
+falls back to 1, 0 is refused because it would stop time, and any value above
+1 forces the demo banner on and makes it state the multiplier — a page showing
+accelerated time has to say so, for the same reason the board shows when the
+sweep last ran.
+
 ## The sweep rides on reads, not a scheduler
 
 There's no cron job and no background thread. The check for silence runs when

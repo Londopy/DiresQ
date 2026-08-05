@@ -9,7 +9,7 @@ DiresQ tracks the people going into it.**
 
 [![CI](https://github.com/Skythe7/DiresQ/actions/workflows/ci.yml/badge.svg)](https://github.com/Skythe7/DiresQ/actions/workflows/ci.yml)
 [![Security](https://github.com/Skythe7/DiresQ/actions/workflows/security.yml/badge.svg)](https://github.com/Skythe7/DiresQ/actions/workflows/security.yml)
-[![Tests](https://img.shields.io/badge/tests-551%20passing-brightgreen)](tests/test_app.py)
+[![Tests](https://img.shields.io/badge/tests-600%20passing-brightgreen)](tests/test_app.py)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 [![Limitations](https://img.shields.io/badge/limitations-written_down-f38ba8)](docs/limits.md)
@@ -67,8 +67,8 @@ board turns red; the report on the right filed itself.</sub>
 <!-- /frozen -->
 
 That table is the night itself and does not move. It has kept growing since:
-**25,151 lines written** — **19,033 lines of code** and 6,118 of
-documentation — across **551 test functions**, 696 cases after
+**27,324 lines written** — **19,750 lines of code** and 6,130 of
+documentation — across **600 test functions**, 745 cases after
 parametrisation.
 
 Every one of those is checked by a test, so unlike the snapshot they cannot
@@ -149,11 +149,12 @@ packet carries an age rather than a timestamp, because a node running off a
 battery in a flood is the last clock you want to trust.
 [The threat model →](docs/security.md)
 
-**The accessibility audit found nineteen issues and we fixed all nineteen.**
-Six were critical. Nine came from the first pass; four from a second over the
-offline report form, where contrast passed everywhere and the announcing
-didn't. Six more on the last day — and those six are the ones worth reading
-about, because each sat under a passing test written to catch exactly that
+**The accessibility audit found twenty-two issues and we fixed all
+twenty-two.** Six were critical. Nine came from the first pass; four from a
+second over the offline report form, where contrast passed everywhere and the
+announcing didn't. Six more on the last day, and three from a fourth pass over
+the demo clock — and those last nine are the ones worth reading about, because
+each sat under a passing test written to catch exactly that
 kind of bug. The contrast test listed ten colour pairs by hand and never
 opened a stylesheet, so instructional text at 1.38:1 went unseen. The label
 test listed four pages, none of them the report form, so the form this whole
@@ -346,6 +347,7 @@ override the file, so your shell and CI always win.
 | `DIRESQ_DEV_USER` | Stay signed in as this user without logging in. **Development only — it is a full auth bypass.** Leave unset for the real login flow. |
 | `DIRESQ_DB` | Path to the SQLite file. Defaults to `diresq.db`. |
 | `DIRESQ_HTTPS_ONLY` | Set to `1` when the site is served over HTTPS, so session cookies are marked Secure. Leave unset on localhost or you will not stay signed in. |
+| `DIRESQ_DEMO_SPEED` | Multiplies the rate incident time passes, for filming. At `60` a check-in deadline and the fifteen-minute silence escalation play out in twenty seconds, using the production escalation code unchanged. Forces the demo banner on. **Leave unset anywhere real** — at any value above 1 every deadline and elapsed-time display in the app is wrong by that factor. See `docs/filming.md`. |
 | `DIRESQ_DEMO` | Set to `1` on a public instance. Puts a banner on every page saying it is a demo, the data resets, and not to type a real address into it. |
 
 ## API
@@ -396,7 +398,7 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
-551 test functions, which parametrisation expands into 696 cases, covering
+600 test functions, which parametrisation expands into 745 cases, covering
 every route, the permission rules, feed ordering, staffing resolution, ETA
 parsing, overdue calculation, packet signing, the offline queues for both
 check-ins and reports, arrival-time duplicate detection, the auth guardrails
@@ -525,8 +527,8 @@ fork, offline, or if Pages is down.
   know is wrong
 - [Security](docs/security.md) — the threat model, packet signing, and the
   open redirect we shipped by accident
-- [Accessibility](docs/accessibility.md) — the WCAG 2.1 AA audit: nineteen
-  issues found across three passes, six critical, all fixed and held in place
+- [Accessibility](docs/accessibility.md) — the WCAG 2.1 AA audit: twenty-two
+  issues found across four passes, six critical, all fixed and held in place
   by tests
 - [Limits](docs/limits.md) — what this doesn't do
 - [Disclaimer](docs/disclaimer.md) — it does not call for help, and the triage
