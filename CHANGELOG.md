@@ -24,6 +24,9 @@ Disaster response tracker. Logs the volunteers going in, not just where the disa
 
 ### Fixed
 
+- Six stylesheets were setting real text in `#6c7086` or `#45475a`, which are 1.4:1 to 1.9:1 against the surfaces they sit on where WCAG asks for 4.5:1 — the disclaimer's footer, the legal links under the login, signup and homepage forms, the offline page's "as of" stamp and footer, the triage footnote, and the stood-down vote and capability tags on a report. The test that was supposed to prevent this checked ten hand-listed colour pairs, so a colour used in a file nobody had thought to add to the list was never looked at. It now reads every `color:` declaration in every stylesheet, resolves `var()` against each file's own palette, and checks it against the backgrounds it can actually sit on.
+
+
 - The countdown on the accountability board survived exactly one render. It was added to the server-rendered template and not to the JavaScript that replaces the list every three seconds, so it appeared on load and was wiped by the first poll — invisible in the test suite, which reads the template, and invisible by hand unless you happened to watch the same row for three seconds. A test now asserts both renderers draw it. The board's coordinates and its "not assigned" / "no position" / "no contact yet" states were using `--overlay` on the row background, which is 1.92:1 against WCAG's 4.5:1. That grey has been banned from `a11y.css` by a test since it was caught on capability tags; `board.css` was never covered by it and now is.
 
 

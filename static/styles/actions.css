@@ -97,7 +97,7 @@
 .vote.need_more{color:#f38ba8;}
 .vote.adequate{color:#a6e3a1;}
 .vote.overstaffed{color:#fab387;}
-.vote.stood_down{color:#6c7086;}
+.vote.stood_down{color:#a6adc8;}
 
 /* --- resolve --- */
 
@@ -159,7 +159,7 @@
 }
 
 .responder .vote-tag{font-size:0.78rem;color:#fab387;}
-.responder .caps{font-size:0.75rem;color:#45475a;margin-left:auto;}
+.responder .caps{font-size:0.75rem;color:#a6adc8;margin-left:auto;}
 
 @media (max-width:560px){
     .join-row{flex-direction:column;}

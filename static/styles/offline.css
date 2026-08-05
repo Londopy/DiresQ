@@ -107,7 +107,7 @@ h2 {
 
 .asof {
     font-variant-numeric: tabular-nums;
-    color: var(--overlay);
+    color:var(--subtext);
 }
 
 .notcached {
@@ -143,7 +143,7 @@ h2 {
 .foot {
     margin: 32px 0 0;
     font-size: 0.75rem;
-    color: var(--overlay);
+    color:var(--subtext);
 }
 
 .foot a { color: var(--subtext); }

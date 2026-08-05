@@ -5847,3 +5847,165 @@ class TestTheCountdownSurvivesTheRepaint:
                 block = block[:block.index("}")]
                 assert "--overlay" not in block, (
                     f"{rule} is back on the 1.92:1 grey")
+
+
+class TestTheTwoBoardRenderersStayInStep:
+    """The board is rendered twice: once by Jinja on the way out, and again by
+    `board.js` every three seconds. A field added to one and not the other
+    exists for exactly one paint, which no test reads and nobody sees by hand.
+    The countdown shipped that way. This checks the pattern, not that one bug.
+    """
+
+    ROOT = Path(__file__).resolve().parents[1]
+
+    # Legitimate asymmetries, each with the reason it is one. Anything not on
+    # this list has to appear in both renderers.
+    ONLY_IN_JS = {
+        # Used to compare against the previous poll and flash a row that just
+        # changed state. The server has no previous poll to compare against.
+        "id",
+    }
+    ONLY_IN_TEMPLATE = set()
+
+    @classmethod
+    def template_fields(cls):
+        html = (cls.ROOT / "templates/board.html").read_text(encoding="utf-8")
+        opener = "{% for r in responders %}"
+        i = html.index(opener) + len(opener)
+        depth = 1
+        for m in re.finditer(r"{%-?\s*(for|endfor)\b", html[i:]):
+            depth += 1 if m.group(1) == "for" else -1
+            if depth == 0:
+                return cls.names(html[i:i + m.start()])
+        raise AssertionError("the responders loop in board.html is unbalanced")
+
+    @classmethod
+    def js_fields(cls):
+        js = (cls.ROOT / "static/scripts/board.js").read_text(encoding="utf-8")
+        start = js.index("function rowHtml")
+        return cls.names(js[start:js.index("\nfunction render", start)])
+
+    @staticmethod
+    def names(text):
+        found = set(re.findall(r"\br\.([a-z_]+(?:\.[a-z_]+)?)", text))
+        # `r.state.replace(...)` in Jinja is a method call on a field, not a
+        # field of its own.
+        methods = {"replace", "format", "lower", "upper", "strip"}
+        return {f for f in found if f.split(".")[-1] not in methods}
+
+    def test_neither_renderer_reads_a_field_the_other_ignores(self):
+        js, html = self.js_fields(), self.template_fields()
+        assert js - html == self.ONLY_IN_JS, (
+            f"board.js reads {sorted(js - html - self.ONLY_IN_JS)} which "
+            f"board.html never draws — it will vanish on the first repaint")
+        assert html - js == self.ONLY_IN_TEMPLATE, (
+            f"board.html draws {sorted(html - js - self.ONLY_IN_TEMPLATE)} "
+            f"which board.js drops — it will vanish on the first repaint")
+
+    def test_every_fragment_the_javascript_builds_is_actually_emitted(self):
+        """Field parity is not enough on its own.
+
+        `rowHtml` builds each cell into a local — `const due = ...` — and then
+        interpolates them into one template literal. Deleting the
+        interpolation while leaving the local behind still reads the field, so
+        the check above stays green while the cell silently stops rendering.
+        This reads the returned literal and insists every fragment it built
+        gets used.
+        """
+        js = (self.ROOT / "static/scripts/board.js").read_text(encoding="utf-8")
+        body = js[js.index("function rowHtml"):js.index("\nfunction render")]
+        returned = body[body.index("return `"):]
+
+        built = {name for name, value in
+                 re.findall(r"const (\w+)\s*=\s*(.*?);\n", body, re.S)
+                 if "<span" in value or "<a " in value or "<div" in value}
+        assert built, "no HTML fragments found in rowHtml — has it been rewritten?"
+
+        for name in sorted(built):
+            assert "${" + name + "}" in returned, (
+                f"rowHtml builds `{name}` and never puts it in the row — "
+                f"the cell will be blank after the first repaint")
+
+    def test_the_api_actually_sends_what_the_javascript_reads(self, client):
+        """The parity above is between two renderers. This one is between the
+        renderer and the payload, so a field can't be drawn from nothing."""
+        payload = client.get("/api/responders").get_json()
+        assert payload, "the board API returned nothing to check against"
+        sent = set(payload[0])
+        for field in {f.split(".")[0] for f in self.js_fields()}:
+            assert field in sent, (
+                f"board.js reads r.{field}, /api/responders does not send it")
+
+
+class TestNoTextIsUnreadableAnywhere:
+    """Replaces a hand-listed set of colour pairs. That list only checked the
+    ten pairs somebody remembered to add, so a colour used in a stylesheet
+    nobody thought about was never looked at — which is how #45475a stayed on
+    the board's coordinates at 1.92:1 while a test named
+    `does_not_reintroduce_the_unreadable_greys` passed.
+    """
+
+    # Backgrounds text can actually sit on. Light text sits on a page or card;
+    # dark text only ever sits on a bright accent fill (a badge, a button).
+    SURFACES = ["#1e1e2e", "#181825", "#313244", "#11111b"]
+    FILLS = ["#89b4fa", "#a6e3a1", "#f38ba8", "#f9e2af", "#fab387", "#cba6f7"]
+
+    # Only genuinely near-black counts as "text meant for a bright fill".
+    # The first attempt used 0.18, which swept the mid-greys in with it —
+    # #45475a has a luminance of 0.065, so it was being checked against yellow
+    # badges it never sits on and passing. That is the exact colour this class
+    # exists because of, so the threshold sits below it: everything lighter
+    # than a card background has to survive the page it is actually on.
+    DARK_TEXT_CEILING = 0.03
+
+    @staticmethod
+    def luminance(colour):
+        colour = colour.lstrip("#")
+        if len(colour) == 3:
+            colour = "".join(c * 2 for c in colour)
+        channels = [int(colour[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+        adjusted = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+                    for c in channels]
+        return (0.2126 * adjusted[0] + 0.7152 * adjusted[1]
+                + 0.0722 * adjusted[2])
+
+    @classmethod
+    def ratio(cls, fg, bg):
+        light, dark = sorted([cls.luminance(fg), cls.luminance(bg)], reverse=True)
+        return (light + 0.05) / (dark + 0.05)
+
+    def declared_text_colours(self):
+        """Every `color:` in every stylesheet, with var() resolved."""
+        styles = diresq.SCHEMA.parent / "static" / "styles"
+        for sheet in sorted(styles.glob("*.css")):
+            css = re.sub(r"/\*.*?\*/", "", sheet.read_text(encoding="utf-8"),
+                         flags=re.S)
+            palette = dict(re.findall(r"(--[\w-]+)\s*:\s*(#[0-9a-fA-F]{3,8})",
+                                      css))
+            for raw in re.findall(r"(?<![-\w])color\s*:\s*([^;}]+)", css):
+                resolved = re.sub(r"var\((--[\w-]+)\)",
+                                  lambda m: palette.get(m.group(1), ""), raw)
+                found = re.search(r"#[0-9a-fA-F]{3,8}\b", resolved)
+                if found and len(found.group(0)) in (4, 7):
+                    yield sheet.name, found.group(0)
+
+    def test_every_colour_we_set_text_in_is_readable(self):
+        failures = []
+        for sheet, colour in self.declared_text_colours():
+            against = (self.FILLS
+                       if self.luminance(colour) <= self.DARK_TEXT_CEILING
+                       else self.SURFACES)
+            worst = min(self.ratio(colour, bg) for bg in against)
+            if worst < 4.5:
+                where = "page surfaces" if against is self.SURFACES else "fills"
+                failures.append(f"{sheet}: {colour} is {worst:.2f}:1 on {where}")
+        assert not failures, "\n".join(sorted(set(failures)))
+
+    def test_the_audit_would_notice_if_a_bad_colour_came_back(self):
+        """A check that cannot fail is not a check."""
+        assert self.ratio("#45475a", "#181825") < 4.5
+        assert self.luminance("#45475a") > self.DARK_TEXT_CEILING, (
+            "the grey that caused this must be classified as light text, or "
+            "the audit above compares it against bright badges it never sits "
+            "on and lets it through")
+        assert min(self.ratio("#45475a", bg) for bg in self.SURFACES) < 4.5
