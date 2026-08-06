@@ -13,7 +13,7 @@ something in the code, or take it apart.
 
 Flask, SQLite through the `sqlite3` module, Jinja templates rendered on the
 server, and a small amount of JavaScript that layers on top. Roughly 4,250
-lines of Python across six modules, 34 routes, six tables, 603 test
+lines of Python across six modules, 34 routes, six tables, 606 test
 functions.
 
 ```
@@ -290,7 +290,7 @@ by report and by responder, check-ins by `(responder, created_at DESC)`.
 
 ## Testing
 
-603 test functions, which parametrisation expands into over seven hundred
+606 test functions, which parametrisation expands into over seven hundred
 cases. Each gets a throwaway database
 via `tmp_path`, so order never matters and a failure can't poison the next
 test.

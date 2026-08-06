@@ -10,5 +10,10 @@ coverage==7.15.3
 # Changelog parsing and CI validation.
 patchnotes==2.4.0
 
+# Parses render.yaml so the deploy tests can check each service rather than
+# grepping the file. Both services must carry the security settings, and a
+# substring search cannot tell you which one it found.
+PyYAML==6.0.2
+
 # Errors only. Style nits are not worth a red X at hour 28.
 ruff==0.8.4

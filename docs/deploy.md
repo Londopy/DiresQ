@@ -73,11 +73,36 @@ of `get_db()`. Not for a demo.
 `DIRESQ_DEV_USER` is **not** set. That's the auth bypass — on a public
 instance it would sign every visitor in as the same person.
 
-`DIRESQ_DEMO_SPEED` is **not** set either, which leaves it at 1 and the clock
-real. It exists so the silence escalation can be filmed (`docs/filming.md`);
-set on a live instance it would make every deadline, countdown and elapsed
-time on every page wrong by that factor, while still looking entirely
-plausible. It is the one variable here whose misconfiguration is invisible.
+`DIRESQ_DEMO_SPEED` is **not** set on this service, which leaves the clock
+real. It is set to `60` on a second one.
+
+## Two services, one difference
+
+| Service | Clock | For |
+| --- | --- | --- |
+| `diresq` | real | browsing the app; coherent for as long as anyone wants |
+| `diresq-fast` | 60x | watching the escalation happen, in about twenty seconds |
+
+The mechanism this project is built around is the *absence* of an event over
+fifteen minutes. On a real clock a visitor cannot see it — they would have to
+leave the tab open for three quarters of an hour — so for its whole life the
+hosted demo could not demonstrate the one thing it exists to do.
+
+A per-visitor clock cannot fix that. The silence sweep **writes**, and it runs
+on whoever loads the board, so one visitor on a fast clock would file
+auto-reports about responders everyone else can see are fine. Two databases is
+the only coherent version, and two services is how you get two databases.
+
+`diresq-fast` ages out: fifteen minutes of traffic is fifteen hours of incident
+time, and the board ends up entirely red until it sleeps and reseeds. That is
+the price of making the mechanism visible, and it is why the real-time one
+exists to link alongside it.
+
+Set `DIRESQ_DEMO_SPEED` on an instance anybody relies on and every deadline,
+countdown and elapsed time is wrong by that factor while the app looks
+entirely plausible. It is the one variable here whose misconfiguration is
+invisible — which is why a value above 1 forces the demo banner on and makes
+it state the multiplier.
 
 ## gunicorn, not the dev server
 

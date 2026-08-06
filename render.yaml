@@ -7,6 +7,28 @@
 # Free tier: 512 MB, 750 instance-hours a month, no card. It sleeps after 15
 # minutes with no traffic and takes about a minute to wake, which is fine for
 # a demo as long as the link says so.
+#
+# Two services, same code, one difference.
+#
+#   diresq       real time. Coherent for as long as anyone wants to browse.
+#   diresq-fast  DIRESQ_DEMO_SPEED=60. The escalation happens in twenty
+#                seconds instead of forty-five minutes.
+#
+# The mechanism this project exists for is the absence of an event over
+# fifteen minutes. On a real clock a visitor cannot see it — they would have
+# to leave the tab open for three quarters of an hour — so the hosted demo
+# was, for its whole life, unable to demonstrate the one thing it is about.
+#
+# A per-user clock cannot fix that: the silence sweep WRITES, and it runs on
+# whoever loads the board, so one visitor on a fast clock would file
+# auto-reports about responders everybody else can see are fine. Two
+# databases is the only version that is coherent, and two services is how you
+# get two databases.
+#
+# The fast one ages out — fifteen minutes of traffic is fifteen hours of
+# incident time, and the board ends up entirely red until it sleeps and
+# reseeds. That is the trade for making the mechanism visible at all, and it
+# is why the slow one exists to link alongside it.
 
 services:
   - type: web
@@ -39,6 +61,45 @@ services:
       # Turns on the banner saying this is a public demo and the data resets.
       - key: DIRESQ_DEMO
         value: "1"
+
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+
+  # Same image, same boot, same seed. One environment variable apart.
+  - type: web
+    name: diresq-fast
+    runtime: python
+    plan: free
+    region: oregon
+    branch: main
+
+    buildCommand: pip install -r requirements.txt -r requirements-deploy.txt
+    startCommand: ./start.sh
+    healthCheckPath: /disclaimer
+
+    envVars:
+      - key: DIRESQ_SECRET_KEY
+        generateValue: true
+
+      - key: DIRESQ_HTTPS_ONLY
+        value: "1"
+
+      - key: DIRESQ_DEMO
+        value: "1"
+
+      # The whole reason this service exists. One second of real time is a
+      # minute of incident time: a responder goes overdue five seconds after
+      # the page loads and the report about them files itself fifteen seconds
+      # later. Nothing is simulated — the escalation code is the same code,
+      # only the rate time enters it changes, and the banner says so on the
+      # page because a screen showing accelerated time has to admit it.
+      #
+      # Never set this on an instance anybody relies on. It is the one
+      # variable here whose misconfiguration is invisible: every deadline and
+      # elapsed time is wrong by this factor while the app looks entirely
+      # plausible.
+      - key: DIRESQ_DEMO_SPEED
+        value: "60"
 
       - key: PYTHON_VERSION
         value: "3.12.7"

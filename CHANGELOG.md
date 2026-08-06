@@ -10,8 +10,14 @@ Disaster response tracker. Logs the volunteers going in, not just where the disa
 
 ### Fixed
 
+- The deploy checks searched `render.yaml` for a string. That was right with one service and silently wrong with two — a second service missing `DIRESQ_HTTPS_ONLY` would have found the first one's copy and passed. They parse the blueprint now and assert per service, with new checks that an accelerated service always carries the demo banner and that exactly one service is accelerated, because if both were fast there would be no coherent instance left to link.
+
 - Three flex rows could not wrap and would have run off the side of a phone. The worst was the board's own button row — Reports, Map and ICS-214, each with `white-space: nowrap`, roughly 280px of content before gaps on the page somebody is most likely to have open in portrait. `board.css` already had a breakpoint; it handled the totals grid and the responder rows and missed the row above them, which is the failure mode where having a breakpoint reads as having thought about it. Also wrapped the join row, which is the ETA field and the button that puts somebody on a report, and the coverage banner.
 - The rule is now tested, and the rule is about the mechanism rather than a count. The first version of this check counted `@media` blocks per stylesheet, which is wrong twice: a `max-width` prose column reflows perfectly with no breakpoint at all, and a stylesheet with one can still leave a row overflowing. Every flex row that lays out content must now wrap, stack at a breakpoint, or appear on an exception list with a reason — and a second test asserts the two stylesheets excused as "stacks at a breakpoint" actually do.
+
+### Added
+
+- A second hosted service, identical to the first apart from `DIRESQ_DEMO_SPEED=60`. The mechanism this project is built around is the absence of an event over fifteen minutes, which on a real clock a visitor cannot see — they would have to leave the tab open for three quarters of an hour. For its whole life the hosted demo could not demonstrate the one thing it exists to do. `diresq` stays on a real clock and is coherent for as long as anyone wants to browse; `diresq-fast` shows a responder going overdue five seconds after the page loads and the report about them filing itself fifteen seconds later. A per-visitor clock was the obvious idea and does not work: the silence sweep writes, and runs on whoever loads the board, so one visitor on a fast clock would file auto-reports about responders everyone else can see are fine. Two databases is the only coherent version and two services is how you get two.
 
 ### Changed
 

@@ -2789,14 +2789,35 @@ class TestDemoMode:
         # Nothing on a developer's machine or in CI should show it.
         assert "demo-banner" not in client.get("/").get_data(as_text=True)
 
-    def test_the_deploy_config_does_not_bypass_auth(self):
+    @staticmethod
+    def services():
+        """Every service in the blueprint, parsed rather than grepped.
+
+        These checks used to search the whole file for a string. That was
+        right while there was one service and silently wrong the moment there
+        were two: a second service missing DIRESQ_HTTPS_ONLY would still find
+        the first one's copy and pass.
+        """
+        import yaml
+        spec = yaml.safe_load(
+            (diresq.SCHEMA.parent / "render.yaml").read_text(encoding="utf-8"))
+        found = spec["services"]
+        assert found, "the blueprint declares no services"
+        return [(s["name"], {e["key"]: e.get("value") for e in s["envVars"]})
+                for s in found]
+
+    def test_no_service_bypasses_auth(self):
         # DIRESQ_DEV_USER on a public instance signs every visitor in as the
         # same person. It must never appear in the hosting config.
+        for name, env in self.services():
+            assert "DIRESQ_DEV_USER" not in env, f"{name} bypasses login"
+            assert env.get("DIRESQ_HTTPS_ONLY") == "1", f"{name} allows plain http"
+
+    def test_every_service_generates_its_own_secret(self):
         blueprint = (diresq.SCHEMA.parent / "render.yaml").read_text(
             encoding="utf-8")
-        assert "DIRESQ_DEV_USER" not in blueprint
-        assert "DIRESQ_HTTPS_ONLY" in blueprint
-        assert "generateValue: true" in blueprint, "secret key must be generated"
+        assert blueprint.count("generateValue: true") == len(self.services()), (
+            "a service is sharing or hardcoding its secret key")
 
     def test_the_deploy_config_has_no_hardcoded_secret(self):
         blueprint = (diresq.SCHEMA.parent / "render.yaml").read_text(
@@ -2805,6 +2826,25 @@ class TestDemoMode:
             if "DIRESQ_SECRET_KEY" in line:
                 continue
             assert "secret" not in line.lower() or "generateValue" in line
+
+    def test_an_accelerated_service_says_it_is_one(self):
+        """A scaled clock is only honest if the page admits it. The banner is
+        forced on in code; this checks the blueprint cannot ship a fast
+        instance that looks like a normal one."""
+        for name, env in self.services():
+            speed = env.get("DIRESQ_DEMO_SPEED")
+            if speed is None or speed == "1":
+                continue
+            assert env.get("DIRESQ_DEMO") == "1", (
+                f"{name} runs a scaled clock without the demo banner")
+
+    def test_only_one_service_is_accelerated(self):
+        """If both were fast there would be no coherent instance to link, and
+        the reason for two services would be gone."""
+        fast = [n for n, e in self.services()
+                if e.get("DIRESQ_DEMO_SPEED") not in (None, "1")]
+        assert len(fast) == 1, (
+            f"expected exactly one accelerated service, found {fast}")
 
     def test_the_health_check_needs_no_login(self, anon):
         # Render polls it unauthenticated. If it ever needs a session the
