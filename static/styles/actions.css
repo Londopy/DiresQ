@@ -44,7 +44,10 @@
     margin-bottom:7px;
 }
 
-.join-row{display:flex;gap:8px;}
+/* Wraps: this is the ETA field and the button that puts somebody on a
+   report, which is the primary action on a phone. The input is flex:1 so it
+   shrinks first, but below about 320px the button starts losing its label. */
+.join-row{display:flex;gap:8px;flex-wrap:wrap;}
 
 .join-row input{
     flex:1;

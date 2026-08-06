@@ -3,6 +3,8 @@
 
 .gap-banner {
     display: flex;
+    /* The count and the sentence sit side by side until they can't. */
+    flex-wrap: wrap;
     align-items: center;
     gap: 12px;
     margin: 0 0 18px;

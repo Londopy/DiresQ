@@ -48,7 +48,13 @@ body{
     font-size:0.9rem;
 }
 
+/* Wraps. Three buttons at ~90px each with nowrap labels is 280px of
+   content before gaps, which overflows a 360px phone in portrait — and the
+   board is the page somebody is most likely to have open on one. The
+   breakpoint below handles the totals and the rows; this row was missed
+   because it looks short in a desktop window. */
 .topbar-right{
+    flex-wrap:wrap;
     display:flex;
     align-items:center;
     gap:10px;

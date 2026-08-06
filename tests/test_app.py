@@ -5974,3 +5974,71 @@ class TestTheBoardHasOneRenderer:
         block = partial[partial.index('class="due'):]
         assert 'aria-hidden="true"' in block[:400], (
             "the ticking countdown is announcing itself again")
+
+
+class TestNothingOverflowsAPhone:
+    """A flex row that cannot wrap is how a page overflows sideways on a
+    phone, and this app's whole claim is that somebody uses it one-handed in
+    bad weather.
+
+    Counting breakpoints per stylesheet was the first version of this check
+    and it was the wrong rule twice over: a `max-width` prose column reflows
+    perfectly with no breakpoint at all, and a stylesheet with a breakpoint
+    can still leave a row overflowing — `board.css` had one that handled the
+    totals and the rows and missed the button row above them.
+
+    So the rule is about the mechanism instead. Every flex row that lays out
+    content either wraps, stacks at a breakpoint, or is on the list below with
+    a reason.
+    """
+
+    # Short pills and single controls: an icon and a word or two. These cannot
+    # be wide enough to overflow, and wrapping them would break the pill.
+    SHORT_PILLS = {".badge", ".board-btn", ".legend-item", ".mobile-filter"}
+
+    # Laid out as columns on a phone by an explicit breakpoint, which is a
+    # better answer than wrapping for a two-panel page.
+    STACKED_AT_BREAKPOINT = {".container", ".left-panel", ".right-panel"}
+
+    def flex_rows(self):
+        styles = diresq.SCHEMA.parent / "static" / "styles"
+        for sheet in sorted(styles.glob("*.css")):
+            css = re.sub(r"/\*.*?\*/", "", sheet.read_text(encoding="utf-8"),
+                         flags=re.S)
+            for block in re.finditer(r"([^{}]+)\{([^}]*)\}", css):
+                selector = block.group(1).strip().split("\n")[-1].strip()
+                body = block.group(2)
+                if not re.search(r"display\s*:\s*flex", body):
+                    continue
+                if re.search(r"flex-direction\s*:\s*column", body):
+                    continue          # a column cannot overflow sideways
+                if re.search(r"flex-wrap\s*:\s*wrap", body):
+                    continue
+                yield sheet.name, selector
+
+    def test_every_flex_row_wraps_or_is_excused(self):
+        unexcused = [
+            f"{sheet}: {selector}"
+            for sheet, selector in self.flex_rows()
+            if selector not in self.SHORT_PILLS | self.STACKED_AT_BREAKPOINT
+        ]
+        assert not unexcused, (
+            "flex rows that cannot wrap and are not on the exception list:\n"
+            + "\n".join(unexcused))
+
+    def test_the_stacked_ones_really_do_stack(self):
+        """An exception is only honest if the reason given for it is true."""
+        for name in ("login.css", "signup.css"):
+            css = (diresq.SCHEMA.parent / "static" / "styles" / name
+                   ).read_text(encoding="utf-8")
+            after = css[css.index("@media"):]
+            assert re.search(r"\.container\s*\{[^}]*flex-direction\s*:\s*column",
+                             after, re.S), (
+                f"{name} excuses .container as stacking at a breakpoint, and "
+                f"it does not")
+
+    def test_the_check_would_notice_a_new_unwrapped_row(self):
+        rows = list(self.flex_rows())
+        assert rows, (
+            "no unwrapped flex rows found at all — the parser has stopped "
+            "matching and this check is now decoration")
