@@ -1,0 +1,71 @@
+{# One row of the accountability board.
+
+   The single source of the row markup. It used to exist twice — here in Jinja
+   for first paint, and again as a template literal in board.js for every poll
+   after that — and the two drifted the first time somebody added a field to
+   one of them. The countdown was added here and not there, so it rendered
+   once and the first repaint erased it. No test saw it, because the tests
+   read the template.
+
+   board.js now asks the server for this markup instead of rebuilding it, so
+   there is nothing left to drift. #}
+<article class="row {{ r.state }}"
+         data-id="{{ r.id }}" data-state="{{ r.state }}">
+
+            <div class="who">
+                <h2>{{ r.username }}</h2>
+                <div class="caps">
+                    {% for cap in r.capabilities %}
+                    <span class="cap">{{ cap }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="state">
+                <span class="badge {{ r.state }}">
+                    {{ r.state.replace('_', ' ')|upper }}
+                </span>
+            </div>
+
+            <div class="doing">
+                {% if r.assignment %}
+                <a href="/report/{{ r.assignment.report_id }}">
+                    {{ r.assignment.report_subject }}
+                </a>
+                {% if r.assignment.staffing_vote %}
+                <span class="vote">
+                    said {{ r.assignment.staffing_vote.replace('_', ' ') }}
+                </span>
+                {% endif %}
+                {% else %}
+                <span class="idle">not assigned</span>
+                {% endif %}
+            </div>
+
+            <div class="contact">
+                {% if r.due_in_seconds is not none %}
+                <span class="due {{ 'late' if r.due_in_seconds < 0 else '' }}"
+                      data-due-in="{{ r.due_in_seconds }}" aria-hidden="true">
+                    {%- if r.due_in_seconds < 0 -%}
+                    {{ (-r.due_in_seconds) // 60 }} min past due
+                    {%- else -%}
+                    due in {{ r.due_in_seconds // 60 }} min
+                    {%- endif -%}
+                </span>
+                {% endif %}
+                {% if r.minutes_since_contact is not none %}
+                <span class="ago">last contact {{ r.minutes_since_contact }} min ago</span>
+                {% else %}
+                <span class="ago idle">no contact yet</span>
+                {% endif %}
+                {% if r.last_position %}
+                <span class="pos">
+                    {{ '%.4f'|format(r.last_position.lat) }},
+                    {{ '%.4f'|format(r.last_position.lng) }}
+                </span>
+                {% else %}
+                <span class="pos idle">no position</span>
+                {% endif %}
+            </div>
+
+        </article>

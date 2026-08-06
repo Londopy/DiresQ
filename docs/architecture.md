@@ -13,7 +13,7 @@ something in the code, or take it apart.
 
 Flask, SQLite through the `sqlite3` module, Jinja templates rendered on the
 server, and a small amount of JavaScript that layers on top. Roughly 4,250
-lines of Python across six modules, 33 routes, six tables, 583 test
+lines of Python across six modules, 34 routes, six tables, 600 test
 functions.
 
 ```
@@ -344,7 +344,7 @@ stop being true. That is the cheap half of the fix for a long file; the
 expensive half is below.
 
 `app.py` is one file on purpose. Blueprints buy separation of concerns at the
-cost of indirection, and at 2,600 lines with 33 routes the concerns aren't
+cost of indirection, and at 2,600 lines with 34 routes the concerns aren't
 separable in a way that would help anyone reading it. The point at which to
 split it is when two people need to edit different parts of it at once, and
 that hasn't happened.

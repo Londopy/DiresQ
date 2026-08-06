@@ -60,9 +60,11 @@ from pathlib import Path
 
 import click
 from dotenv import load_dotenv
+from collections import Counter
+
 from flask import (
-    Flask, Response, flash, g, jsonify, redirect, render_template, request,
-    send_from_directory, session, url_for
+    Flask, Response, flash, g, jsonify, make_response, redirect,
+    render_template, request, send_from_directory, session, url_for
 )
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -752,9 +754,37 @@ def robots():
 @login_required
 def board():
     # Rendered server-side so the page works without JS; board.js then polls
-    # /api/responders and re-renders on its own.
+    # /board/rows and swaps the markup this same template produced.
     return render_template("board.html", responders=fetch_responders(),
                            swept=last_swept())
+
+
+@app.get("/board/rows")
+@login_required
+def board_rows():
+    """The responder rows, as HTML, for the poll to swap in.
+
+    The row markup used to exist twice: once in Jinja for first paint and once
+    as a template literal in `board.js` for every repaint after. They drifted
+    the first time a field was added to one and not the other — the countdown
+    rendered once and the first poll erased it, which no test caught because
+    the tests read the template.
+
+    Serving the same partial the page was built from removes the second copy
+    rather than testing that the two agree. The JSON at `/api/responders` is
+    unchanged and still the documented interface; this exists for the board's
+    own poll, which wants markup and was building it by hand.
+
+    The counts ride along in data attributes because the poll needs them and a
+    second request to compute four integers would be silly.
+    """
+    responders = fetch_responders()
+    counts = Counter(r["state"] for r in responders)
+    body = render_template("_board_rows.html", responders=responders,
+                           counts=counts)
+    response = make_response(body)
+    response.headers["X-Last-Swept"] = last_swept()["at"] or "never"
+    return response
 
 
 # --------------------------------------------------------------------------

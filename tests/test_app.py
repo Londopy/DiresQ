@@ -3060,10 +3060,29 @@ class TestTouchTargets:
 
     def test_it_is_loaded_everywhere(self):
         # The rule only helps on pages that link the stylesheet.
+        #
+        # Templates starting with an underscore are partials — fragments
+        # included by a page or served to a poll. They have no <head> to put a
+        # stylesheet in, and the page that includes them already has one.
         root = diresq.SCHEMA.parent / "templates"
-        for page in root.glob("*.html"):
+        pages = [p for p in root.glob("*.html") if not p.name.startswith("_")]
+        assert pages, "no full pages found — has the naming convention changed?"
+        for page in pages:
             assert "a11y.css" in page.read_text(encoding="utf-8"), (
                 f"{page.name} does not load the accessibility stylesheet")
+
+    def test_every_partial_is_reachable_from_a_page(self):
+        """The underscore convention above is only safe if a partial really
+        is always rendered inside a page. A partial nothing includes and
+        nothing serves is a page with no stylesheet."""
+        root = diresq.SCHEMA.parent / "templates"
+        served = (diresq.SCHEMA.parent / "app.py").read_text(encoding="utf-8")
+        for partial in root.glob("_*.html"):
+            included = any(partial.name in other.read_text(encoding="utf-8")
+                           for other in root.glob("*.html")
+                           if other != partial)
+            assert included or partial.name in served, (
+                f"{partial.name} is included by nothing and served by nothing")
 
 
 class TestTheMapShowsCoverage:
@@ -5804,139 +5823,6 @@ class TestTheClockCanBeScaled:
         assert "now()" not in body.replace("datetime.now(", "")
 
 
-class TestTheCountdownSurvivesTheRepaint:
-    """The board is server-rendered and then replaced by JavaScript every
-    three seconds. A field added to only one of those exists for exactly one
-    render, which looks like a flicker and is nearly impossible to spot by
-    hand — the countdown shipped that way for one commit.
-    """
-
-    @staticmethod
-    def source(relative):
-        return (Path(__file__).resolve().parents[1] / relative).read_text(
-            encoding="utf-8")
-
-    def test_both_renderers_draw_the_countdown(self):
-        for path in ("templates/board.html", "static/scripts/board.js"):
-            body = self.source(path)
-            assert "due_in_seconds" in body, f"{path} never reads the countdown"
-            assert 'class="due' in body, f"{path} never draws the countdown"
-
-    def test_the_countdown_is_kept_out_of_the_live_region(self):
-        """It sits inside aria-live="polite" and changes on every repaint.
-        Announcing it would bury the state change it is counting toward."""
-        for path in ("templates/board.html", "static/scripts/board.js"):
-            body = self.source(path)
-            block = body[body.index('class="due'):]
-            assert 'aria-hidden="true"' in block[:400], (
-                f"{path}: ticking countdown is not hidden from screen readers")
-
-    def test_both_renderers_agree_on_the_late_class(self):
-        for path in ("templates/board.html", "static/scripts/board.js"):
-            assert "late" in self.source(path)
-
-    def test_the_board_does_not_use_the_unreadable_grey_for_text(self):
-        """#45475a on the row background is 1.92:1. a11y.css has been guarded
-        against this colour since it was caught on capability tags; board.css
-        never was, and was still using it for coordinates and for every
-        "not assigned" / "no position" state."""
-        css = self.source("static/styles/board.css")
-        for rule in (".idle{", ".contact .pos{"):
-            if rule in css:
-                block = css[css.index(rule):]
-                block = block[:block.index("}")]
-                assert "--overlay" not in block, (
-                    f"{rule} is back on the 1.92:1 grey")
-
-
-class TestTheTwoBoardRenderersStayInStep:
-    """The board is rendered twice: once by Jinja on the way out, and again by
-    `board.js` every three seconds. A field added to one and not the other
-    exists for exactly one paint, which no test reads and nobody sees by hand.
-    The countdown shipped that way. This checks the pattern, not that one bug.
-    """
-
-    ROOT = Path(__file__).resolve().parents[1]
-
-    # Legitimate asymmetries, each with the reason it is one. Anything not on
-    # this list has to appear in both renderers.
-    ONLY_IN_JS = {
-        # Used to compare against the previous poll and flash a row that just
-        # changed state. The server has no previous poll to compare against.
-        "id",
-    }
-    ONLY_IN_TEMPLATE = set()
-
-    @classmethod
-    def template_fields(cls):
-        html = (cls.ROOT / "templates/board.html").read_text(encoding="utf-8")
-        opener = "{% for r in responders %}"
-        i = html.index(opener) + len(opener)
-        depth = 1
-        for m in re.finditer(r"{%-?\s*(for|endfor)\b", html[i:]):
-            depth += 1 if m.group(1) == "for" else -1
-            if depth == 0:
-                return cls.names(html[i:i + m.start()])
-        raise AssertionError("the responders loop in board.html is unbalanced")
-
-    @classmethod
-    def js_fields(cls):
-        js = (cls.ROOT / "static/scripts/board.js").read_text(encoding="utf-8")
-        start = js.index("function rowHtml")
-        return cls.names(js[start:js.index("\nfunction render", start)])
-
-    @staticmethod
-    def names(text):
-        found = set(re.findall(r"\br\.([a-z_]+(?:\.[a-z_]+)?)", text))
-        # `r.state.replace(...)` in Jinja is a method call on a field, not a
-        # field of its own.
-        methods = {"replace", "format", "lower", "upper", "strip"}
-        return {f for f in found if f.split(".")[-1] not in methods}
-
-    def test_neither_renderer_reads_a_field_the_other_ignores(self):
-        js, html = self.js_fields(), self.template_fields()
-        assert js - html == self.ONLY_IN_JS, (
-            f"board.js reads {sorted(js - html - self.ONLY_IN_JS)} which "
-            f"board.html never draws — it will vanish on the first repaint")
-        assert html - js == self.ONLY_IN_TEMPLATE, (
-            f"board.html draws {sorted(html - js - self.ONLY_IN_TEMPLATE)} "
-            f"which board.js drops — it will vanish on the first repaint")
-
-    def test_every_fragment_the_javascript_builds_is_actually_emitted(self):
-        """Field parity is not enough on its own.
-
-        `rowHtml` builds each cell into a local — `const due = ...` — and then
-        interpolates them into one template literal. Deleting the
-        interpolation while leaving the local behind still reads the field, so
-        the check above stays green while the cell silently stops rendering.
-        This reads the returned literal and insists every fragment it built
-        gets used.
-        """
-        js = (self.ROOT / "static/scripts/board.js").read_text(encoding="utf-8")
-        body = js[js.index("function rowHtml"):js.index("\nfunction render")]
-        returned = body[body.index("return `"):]
-
-        built = {name for name, value in
-                 re.findall(r"const (\w+)\s*=\s*(.*?);\n", body, re.S)
-                 if "<span" in value or "<a " in value or "<div" in value}
-        assert built, "no HTML fragments found in rowHtml — has it been rewritten?"
-
-        for name in sorted(built):
-            assert "${" + name + "}" in returned, (
-                f"rowHtml builds `{name}` and never puts it in the row — "
-                f"the cell will be blank after the first repaint")
-
-    def test_the_api_actually_sends_what_the_javascript_reads(self, client):
-        """The parity above is between two renderers. This one is between the
-        renderer and the payload, so a field can't be drawn from nothing."""
-        payload = client.get("/api/responders").get_json()
-        assert payload, "the board API returned nothing to check against"
-        sent = set(payload[0])
-        for field in {f.split(".")[0] for f in self.js_fields()}:
-            assert field in sent, (
-                f"board.js reads r.{field}, /api/responders does not send it")
-
-
 class TestNoTextIsUnreadableAnywhere:
     """Replaces a hand-listed set of colour pairs. That list only checked the
     ten pairs somebody remembered to add, so a colour used in a stylesheet
@@ -6009,3 +5895,82 @@ class TestNoTextIsUnreadableAnywhere:
             "the audit above compares it against bright badges it never sits "
             "on and lets it through")
         assert min(self.ratio("#45475a", bg) for bg in self.SURFACES) < 4.5
+
+
+class TestTheBoardHasOneRenderer:
+    """The row markup lived in two places — Jinja for first paint, a template
+    literal in `board.js` for every poll after. They drifted the first time a
+    field was added to one and not the other: the countdown rendered once and
+    the first repaint erased it, under a test suite that read the template and
+    saw nothing wrong.
+
+    Three tests were written to hold the two copies in step. This class
+    replaces them, because the second copy is gone — `board.js` asks the
+    server for the same partial the page was built from. These tests exist to
+    stop it coming back.
+    """
+
+    ROOT = Path(__file__).resolve().parents[1]
+
+    def js(self):
+        return (self.ROOT / "static/scripts/board.js").read_text(encoding="utf-8")
+
+    def code(self):
+        """The script with comments stripped.
+
+        The comment explaining why the row markup is gone necessarily talks
+        about row markup, and the first version of this test failed on its
+        own explanation.
+        """
+        js = re.sub(r"/\*.*?\*/", "", self.js(), flags=re.S)
+        return "\n".join(re.sub(r"//.*$", "", line) for line in js.split("\n"))
+
+    def test_the_javascript_builds_no_rows_of_its_own(self):
+        code = self.code()
+        for smell in ("<article", "<span", "rowHtml", "innerHTML ="):
+            assert smell not in code, (
+                f"board.js contains {smell!r} — row markup is growing back")
+
+    def test_the_poll_asks_for_markup_not_json(self):
+        assert "/board/rows" in self.js()
+        assert "/api/responders" not in self.js(), (
+            "the poll is back on the JSON endpoint and rebuilding rows")
+
+    def test_both_paints_come_from_the_same_partial(self, client):
+        """The real guarantee: what the page renders and what the poll serves
+        are byte-identical for the same data."""
+        page = client.get("/board").get_data(as_text=True)
+        rows = client.get("/board/rows").get_data(as_text=True)
+
+        def articles(html):
+            return re.findall(r"<article class=\"row.*?</article>", html, re.S)
+
+        first, polled = articles(page), articles(rows)
+        assert first, "the board rendered no rows to compare"
+        assert len(first) == len(polled)
+        for a, b in zip(first, polled):
+            assert " ".join(a.split()) == " ".join(b.split()), (
+                "first paint and the poll disagree — they are meant to be the "
+                "same template")
+
+    def test_the_poll_carries_what_the_page_chrome_needs(self, client):
+        res = client.get("/board/rows")
+        assert res.headers.get("X-Last-Swept"), (
+            "the sweep stamp is gone; the board would stop showing liveness")
+        body = res.get_data(as_text=True)
+        for attr in ("data-overdue", "data-on-scene", "data-en-route",
+                     "data-available", "data-count"):
+            assert attr in body, f"the counts lost {attr}"
+
+    def test_a_row_carries_what_the_flash_needs(self, client):
+        """The one thing the client legitimately knows that the server does
+        not: what this browser was showing a moment ago."""
+        body = client.get("/board/rows").get_data(as_text=True)
+        assert 'data-id="' in body and 'data-state="' in body
+
+    def test_the_countdown_is_kept_out_of_the_live_region(self):
+        partial = (self.ROOT / "templates/_responder_row.html").read_text(
+            encoding="utf-8")
+        block = partial[partial.index('class="due'):]
+        assert 'aria-hidden="true"' in block[:400], (
+            "the ticking countdown is announcing itself again")

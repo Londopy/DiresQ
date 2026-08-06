@@ -2,6 +2,11 @@
 
 pytest==8.3.4
 
+# Line coverage, with a floor in CI. Added late: the suite was already at 97%
+# and nobody knew, which is its own kind of untested claim in a project whose
+# whole argument is that you measure the thing instead of assuming it.
+coverage==7.15.3
+
 # Changelog parsing and CI validation.
 patchnotes==2.4.0
 

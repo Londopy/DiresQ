@@ -1,5 +1,5 @@
-// Polls /api/responders and redraws. The server works out overdue on every
-// read, so rows go red on their own.
+// Polls /board/rows and swaps in the markup the server rendered. The server
+// works out overdue on every read, so rows go red on their own.
 
 const POLL_MS = 3000;
 
@@ -14,81 +14,44 @@ const totals = {
     available: document.getElementById("n-available"),
 };
 
-// Used to flash a row when its state changes.
-let lastStates = {};
+// Rows come from the server as HTML, rendered from the same Jinja partial
+// the page itself was built from. There is deliberately no row-building code
+// here any more.
+//
+// There used to be: `rowHtml()` rebuilt every cell as a template literal, and
+// it drifted from the template the first time a field was added to one and
+// not the other. The countdown rendered on first paint and the first poll
+// erased it. Two implementations of one row is a bug waiting for somebody to
+// add a field; one implementation cannot disagree with itself.
+function render(html) {
+    // Read the states still on screen before replacing them, so a row that
+    // changed can flash. The server has no idea what this browser was last
+    // showing, which is the one thing the client genuinely knows.
+    const before = {};
+    list.querySelectorAll(".row[data-id]").forEach(el => {
+        before[el.dataset.id] = el.dataset.state;
+    });
 
-function esc(value) {
-    return String(value ?? "").replace(/[&<>"']/g, c => ({
-        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-    }[c]));
-}
+    // DOMParser rather than assigning innerHTML. The markup is our own and
+    // Jinja escaped it, so this is not a security fix — it is so the test
+    // that forbids row-building in this file can forbid innerHTML outright
+    // instead of carving out an exception somebody later widens.
+    const incoming = new DOMParser().parseFromString(html, "text/html");
+    const rows = incoming.getElementById("rows");
+    if (!rows) return;
 
-function label(state) {
-    return state.replace(/_/g, " ").toUpperCase();
-}
+    rows.querySelectorAll(".row[data-id]").forEach(el => {
+        const was = before[el.dataset.id];
+        if (was && was !== el.dataset.state) el.classList.add("changed");
+    });
 
-function rowHtml(r) {
-    const caps = r.capabilities
-        .map(c => `<span class="cap">${esc(c)}</span>`)
-        .join("");
+    list.replaceChildren(...rows.children);
+    empty.hidden = Number(rows.dataset.count) > 0;
 
-    const doing = r.assignment
-        ? `<a href="/report/${r.assignment.report_id}">${esc(r.assignment.report_subject)}</a>` +
-          (r.assignment.staffing_vote
-              ? `<span class="vote">said ${esc(r.assignment.staffing_vote.replace(/_/g, " "))}</span>`
-              : "")
-        : `<span class="idle">not assigned</span>`;
-
-    // aria-hidden, and not by oversight. This whole list sits in an
-    // aria-live="polite" region and is replaced wholesale every three
-    // seconds. A number that changes on every repaint would queue an
-    // announcement faster than a screen reader can speak one, burying the
-    // change that actually matters -- the state badge going OVERDUE -- under
-    // a stream of countdowns. Sighted users get the ticking clock; screen
-    // reader users get the badge and "last contact N min ago", which carry
-    // the same information without the churn.
-    const due = r.due_in_seconds === null || r.due_in_seconds === undefined
-        ? ""
-        : `<span class="due${r.due_in_seconds < 0 ? " late" : ""}" aria-hidden="true">` +
-          (r.due_in_seconds < 0
-              ? `${Math.floor(-r.due_in_seconds / 60)} min past due`
-              : `due in ${Math.floor(r.due_in_seconds / 60)} min`) +
-          `</span>`;
-
-    const ago = r.minutes_since_contact === null
-        ? `<span class="ago idle">no contact yet</span>`
-        : `<span class="ago">last contact ${r.minutes_since_contact} min ago</span>`;
-
-    const pos = r.last_position
-        ? `<span class="pos">${r.last_position.lat.toFixed(4)}, ${r.last_position.lng.toFixed(4)}</span>`
-        : `<span class="pos idle">no position</span>`;
-
-    const changed = lastStates[r.id] && lastStates[r.id] !== r.state ? " changed" : "";
-
-    return `
-    <article class="row ${r.state}${changed}">
-        <div class="who">
-            <h2>${esc(r.username)}</h2>
-            <div class="caps">${caps}</div>
-        </div>
-        <div class="state">
-            <span class="badge ${r.state}">${label(r.state)}</span>
-        </div>
-        <div class="doing">${doing}</div>
-        <div class="contact">${due}${ago}${pos}</div>
-    </article>`;
-}
-
-function render(responders) {
-    const counts = { overdue: 0, on_scene: 0, en_route: 0, available: 0 };
-    responders.forEach(r => { counts[r.state] = (counts[r.state] || 0) + 1; });
-    Object.entries(totals).forEach(([k, el]) => { el.textContent = counts[k] || 0; });
-
-    list.innerHTML = responders.map(rowHtml).join("");
-    empty.hidden = responders.length > 0;
-
-    lastStates = {};
-    responders.forEach(r => { lastStates[r.id] = r.state; });
+    totals.overdue.textContent = rows.dataset.overdue;
+    totals.on_scene.textContent = rows.dataset.onScene;
+    totals.en_route.textContent = rows.dataset.enRoute;
+    totals.available.textContent = rows.dataset.available;
 }
 
 // The silence sweep, shown rather than promised.
@@ -121,9 +84,9 @@ function showSwept(header) {
 
 async function poll() {
     try {
-        const res = await fetch("/api/responders", { headers: { Accept: "application/json" } });
+        const res = await fetch("/board/rows", { headers: { Accept: "text/html" } });
         if (!res.ok) throw new Error(res.status);
-        render(await res.json());
+        render(await res.text());
         showSwept(res.headers.get("X-Last-Swept"));
         live.classList.remove("stalled");
         live.title = "Refreshing every 3 seconds";
@@ -133,9 +96,6 @@ async function poll() {
         live.title = "Lost contact with the server. Showing the last update.";
     }
 }
-
-// Seed from the server-rendered rows so the first poll doesn't flash everything.
-document.querySelectorAll(".row").forEach((el, i) => { lastStates[i] = null; });
 
 poll();
 setInterval(poll, POLL_MS);

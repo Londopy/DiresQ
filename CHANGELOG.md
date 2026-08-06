@@ -4,6 +4,16 @@ Disaster response tracker. Logs the volunteers going in, not just where the disa
 
 ## [Unreleased]
 
+### Added
+
+- Line coverage, measured and enforced. The suite was already at **97%** across `app.py`, `classify.py`, `transport.py`, `eta.py` and `triage.py` — and nobody knew, which in a project whose whole argument is that you measure the thing rather than assume it was its own kind of untested claim. CI now runs the suite under `coverage` (the same run, not a second pass) and fails below 95, which is low enough that one hard-to-reach branch does not turn main red and high enough that deleting a test class does.
+
+### Changed
+
+- **The accountability board has one renderer instead of two.** The row markup existed twice: in Jinja for first paint, and again as a template literal in `board.js` for every three-second poll after it. They drifted the first time a field was added to one and not the other — the countdown rendered once and the first repaint erased it, invisible to a test suite that read the template. The row is now a partial, `templates/_responder_row.html`, and `board.js` fetches `/board/rows` and swaps in markup the server rendered from that same file. Seventy-four lines of row-building JavaScript are gone, along with the `esc()` helper that existed only to re-do what Jinja already does. Three tests written to hold the two copies in step have been replaced by tests that assert there is only one copy, including one that renders both the page and the poll and compares them article by article. `/api/responders` is unchanged and still the documented JSON interface.
+- Templates beginning with an underscore are partials by convention. The touch-target test walked every file in `templates/` and asserted each one loaded the accessibility stylesheet, which a fragment with no `<head>` correctly does not; it now skips partials, and a second test asserts every partial is actually included by a page or served by a route, so the exemption cannot hide a real page with no stylesheet.
+
+
 ## [1.1.0] - 2026-08-05
 
 ### Added

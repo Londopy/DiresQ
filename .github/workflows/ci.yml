@@ -52,8 +52,19 @@ jobs:
         run: ruff check --select=E9,F --output-format=github .
 
       # Blocks, unlike the rest. main must always run.
+      #
+      # Under coverage rather than bare pytest, so the number is a by-product
+      # of the run that already has to happen rather than a second full pass.
       - name: Tests
-        run: pytest -q
+        run: coverage run --source=app,classify,transport,eta,triage -m pytest -q
+
+      # 95, against 97 measured. Low enough that a legitimately hard-to-reach
+      # branch does not turn main red, high enough that deleting a test class
+      # does. A floor nobody can trip is decoration.
+      - name: Coverage
+        run: |
+          coverage report --fail-under=95
+          coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
 
       # The test client skips the WSGI server and the static handler, so
       # everything below is checked against a real one.

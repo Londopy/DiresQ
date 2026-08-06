@@ -1,0 +1,13 @@
+{# The poll's payload: every responder row, plus the four counts as data
+   attributes so one request answers the whole refresh.
+
+   Rendered from the same partial as the page itself, which is the point —
+   there is no second implementation of a row to keep in step. #}
+<div id="rows"
+     data-overdue="{{ counts['overdue'] or 0 }}"
+     data-on-scene="{{ counts['on_scene'] or 0 }}"
+     data-en-route="{{ counts['en_route'] or 0 }}"
+     data-available="{{ counts['available'] or 0 }}"
+     data-count="{{ responders|length }}">
+{% for r in responders %}{% include "_responder_row.html" %}{% endfor %}
+</div>
